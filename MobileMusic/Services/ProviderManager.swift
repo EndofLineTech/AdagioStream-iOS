@@ -12,7 +12,12 @@ final class ProviderManager: ObservableObject {
     private let persistence = PersistenceService.shared
 
     init() {
-        Task { await loadProviders() }
+        Task {
+            await loadProviders()
+            if !providers.isEmpty {
+                await loadChannels()
+            }
+        }
     }
 
     func loadProviders() async {
