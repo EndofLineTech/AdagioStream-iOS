@@ -134,40 +134,42 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
     // MARK: - State Sync
 
     private func syncState() {
-        let state = mediaPlayer.state
         let playing = mediaPlayer.isPlaying
 
-        switch state {
-        case .playing:
+        // isPlaying is the most reliable indicator — VLC reports
+        // .buffering state continuously during live streams even
+        // while audio is actively playing
+        if playing {
             isPlaying = true
             isBuffering = false
             error = nil
-        case .paused:
-            isPlaying = false
-            isBuffering = false
-        case .buffering, .opening:
-            isBuffering = true
-        case .stopped:
-            if currentChannel != nil {
-                // Only clear if we didn't initiate the stop
+        } else {
+            let state = mediaPlayer.state
+            switch state {
+            case .playing:
+                isPlaying = true
+                isBuffering = false
+                error = nil
+            case .paused:
                 isPlaying = false
                 isBuffering = false
+            case .buffering, .opening:
+                isBuffering = true
+            case .stopped:
+                if currentChannel != nil {
+                    isPlaying = false
+                    isBuffering = false
+                }
+            case .error:
+                isPlaying = false
+                isBuffering = false
+                error = "Stream playback error"
+            case .ended:
+                isPlaying = false
+                isBuffering = false
+            @unknown default:
+                break
             }
-        case .error:
-            isPlaying = false
-            isBuffering = false
-            error = "Stream playback error"
-        case .ended:
-            isPlaying = false
-            isBuffering = false
-        @unknown default:
-            break
-        }
-
-        // Trust VLC's isPlaying as ground truth
-        if playing && !isPlaying {
-            isPlaying = true
-            isBuffering = false
         }
 
         // Update stream stats
