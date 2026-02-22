@@ -17,12 +17,26 @@ targets:
     platform: iOS
     sources:
       - MobileMusic
+    info:
+      path: MobileMusic/Info.plist
+      properties:
+        UIBackgroundModes: [audio]
+        CFBundleDisplayName: MobileMusic
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneConfigurationName: CarPlay Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     settings:
       base:
-        INFOPLIST_FILE: MobileMusic/Info.plist
         CODE_SIGN_ENTITLEMENTS: MobileMusic/MobileMusic.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.mobilemusic.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: true
     entitlements:
       path: MobileMusic/MobileMusic.entitlements
       properties:
