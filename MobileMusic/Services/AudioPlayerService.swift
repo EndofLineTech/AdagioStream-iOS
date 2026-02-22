@@ -53,6 +53,8 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
         isBuffering = true
         isPlaying = false
         error = nil
+        streamBitrateKbps = 0
+        statusText = ""
 
         let media = VLCMedia(url: channel.streamURL)
         media.addOptions([
@@ -188,14 +190,17 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
 
         if let media = mediaPlayer.media {
             let stats = media.statistics
-            let bitrate = Double(stats.inputBitrate)
-            if bitrate > 0 {
-                // inputBitrate is in kb/s
-                streamBitrateKbps = bitrate * 1000
-            } else {
-                let demux = Double(stats.demuxBitrate)
-                if demux > 0 {
-                    streamBitrateKbps = demux * 1000
+            // demuxBitrate reflects the actual media bitrate being decoded,
+            // while inputBitrate fluctuates as the network buffer fills/drains
+            let demux = Double(stats.demuxBitrate)
+            let input = Double(stats.inputBitrate)
+            let currentKbps = max(demux, input) * 1000
+
+            if currentKbps > 1 {
+                // Keep the highest observed bitrate as the stable value
+                // since instantaneous rates dip when buffers are full
+                if currentKbps > streamBitrateKbps {
+                    streamBitrateKbps = currentKbps
                 }
             }
         }
