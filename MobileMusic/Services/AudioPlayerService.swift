@@ -16,6 +16,8 @@ final class AudioPlayerService: ObservableObject {
     private var playerItem: AVPlayerItem?
     private var statusObserver: NSKeyValueObservation?
     private var timeControlObserver: NSKeyValueObservation?
+    private var errorObserver: NSKeyValueObservation?
+    private var failureObserver: Any?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -30,7 +32,7 @@ final class AudioPlayerService: ObservableObject {
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default)
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
             try session.setActive(true)
         } catch {
             self.error = "Failed to configure audio session: \(error.localizedDescription)"
@@ -40,17 +42,37 @@ final class AudioPlayerService: ObservableObject {
     // MARK: - Playback
 
     func play(channel: Channel) {
-        stop()
+        // Tear down previous playback without clearing currentChannel yet
+        tearDownPlayer()
+
+        // Re-activate audio session
+        try? AVAudioSession.sharedInstance().setActive(true)
 
         currentChannel = channel
         isBuffering = true
+        isPlaying = false
         error = nil
 
-        let item = AVPlayerItem(url: channel.streamURL)
+        // Use AVURLAsset for more control over network behavior
+        let asset = AVURLAsset(url: channel.streamURL, options: [
+            "AVURLAssetHTTPHeaderFieldsKey": [
+                "User-Agent": "MobileMusic/1.0"
+            ]
+        ])
+
+        let item = AVPlayerItem(asset: asset)
         item.preferredForwardBufferDuration = bufferDuration
+
+        // Allow the item to keep playing even if buffer runs low
+        if #available(iOS 16.0, *) {
+            item.automaticallyHandlesInterstitialEvents = true
+        }
+
         playerItem = item
 
         let avPlayer = AVPlayer(playerItem: item)
+        avPlayer.automaticallyWaitsToMinimizeStalling = false
+        avPlayer.allowsExternalPlayback = false
         player = avPlayer
 
         observePlayer(avPlayer, item: item)
@@ -79,16 +101,28 @@ final class AudioPlayerService: ObservableObject {
     }
 
     func stop() {
-        statusObserver?.invalidate()
-        timeControlObserver?.invalidate()
-        player?.pause()
-        player?.replaceCurrentItem(with: nil)
-        player = nil
-        playerItem = nil
+        tearDownPlayer()
         currentChannel = nil
         isPlaying = false
         isBuffering = false
         clearNowPlayingInfo()
+    }
+
+    private func tearDownPlayer() {
+        statusObserver?.invalidate()
+        statusObserver = nil
+        timeControlObserver?.invalidate()
+        timeControlObserver = nil
+        errorObserver?.invalidate()
+        errorObserver = nil
+        if let failureObserver {
+            NotificationCenter.default.removeObserver(failureObserver)
+        }
+        failureObserver = nil
+        player?.pause()
+        player?.replaceCurrentItem(with: nil)
+        player = nil
+        playerItem = nil
     }
 
     func playNext() {
@@ -113,7 +147,7 @@ final class AudioPlayerService: ObservableObject {
     // MARK: - KVO
 
     private func observePlayer(_ avPlayer: AVPlayer, item: AVPlayerItem) {
-        statusObserver = item.observe(\.status, options: [.new]) { [weak self] item, _ in
+        statusObserver = item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
             Task { @MainActor in
                 guard let self else { return }
                 switch item.status {
@@ -144,6 +178,19 @@ final class AudioPlayerService: ObservableObject {
                 @unknown default:
                     break
                 }
+            }
+        }
+
+        // Observe playback failure notification
+        failureObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                guard let self else { return }
+                let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+                self.error = err?.localizedDescription ?? "Stream playback failed"
             }
         }
     }
