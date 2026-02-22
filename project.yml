@@ -22,6 +22,7 @@ targets:
       properties:
         UIBackgroundModes: [audio]
         CFBundleDisplayName: MobileMusic
+        UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations:
