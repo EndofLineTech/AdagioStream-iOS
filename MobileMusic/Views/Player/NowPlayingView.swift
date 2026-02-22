@@ -64,9 +64,22 @@ struct NowPlayingView: View {
                 }
                 .foregroundStyle(.primary)
 
-                if audioPlayer.isBuffering {
-                    ProgressView()
-                        .padding(.top, 8)
+                // Status info
+                if !audioPlayer.statusText.isEmpty {
+                    HStack(spacing: 6) {
+                        if audioPlayer.isBuffering {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 8, height: 8)
+                        }
+                        Text(audioPlayer.statusText)
+                            .font(.caption)
+                            .foregroundStyle(audioPlayer.isBuffering ? .orange : .secondary)
+                    }
+                    .padding(.top, 8)
                 }
 
                 if let error = audioPlayer.error {

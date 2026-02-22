@@ -32,10 +32,10 @@ struct MiniPlayerView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                    if audioPlayer.isBuffering {
-                        Text("Buffering...")
+                    if !audioPlayer.statusText.isEmpty {
+                        Text(audioPlayer.statusText)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(audioPlayer.isBuffering ? .orange : .secondary)
                     }
                 }
 

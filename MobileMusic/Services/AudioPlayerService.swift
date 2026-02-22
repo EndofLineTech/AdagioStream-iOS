@@ -12,6 +12,8 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
     @Published var isPlaying = false
     @Published var isBuffering = false
     @Published var error: String?
+    @Published var streamBitrateKbps: Double = 0
+    @Published var statusText: String = ""
 
     private let mediaPlayer = VLCMediaPlayer()
     private var stateTimer: Timer?
@@ -168,7 +170,48 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
             isBuffering = false
         }
 
+        // Update stream stats
+        updateStreamStats()
         updateNowPlayingInfo()
+    }
+
+    // MARK: - Stream Stats
+
+    private func updateStreamStats() {
+        guard currentChannel != nil else {
+            statusText = ""
+            streamBitrateKbps = 0
+            return
+        }
+
+        if let media = mediaPlayer.media {
+            let stats = media.statistics
+            let bitrate = Double(stats.inputBitrate)
+            if bitrate > 0 {
+                // inputBitrate is in kb/s
+                streamBitrateKbps = bitrate * 1000
+            } else {
+                let demux = Double(stats.demuxBitrate)
+                if demux > 0 {
+                    streamBitrateKbps = demux * 1000
+                }
+            }
+        }
+
+        if isBuffering {
+            statusText = "Buffering... (cache: \(Int(bufferDuration))s)"
+        } else if isPlaying {
+            if streamBitrateKbps > 1 {
+                let formatted = streamBitrateKbps >= 1000
+                    ? String(format: "%.1f Mbps", streamBitrateKbps / 1000)
+                    : "\(Int(streamBitrateKbps)) kbps"
+                statusText = "Live \u{00B7} \(formatted)"
+            } else {
+                statusText = "Live"
+            }
+        } else {
+            statusText = ""
+        }
     }
 
     // MARK: - Now Playing Info
