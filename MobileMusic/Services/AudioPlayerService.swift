@@ -71,7 +71,7 @@ final class AudioPlayerService: ObservableObject {
         playerItem = item
 
         let avPlayer = AVPlayer(playerItem: item)
-        avPlayer.automaticallyWaitsToMinimizeStalling = false
+        avPlayer.automaticallyWaitsToMinimizeStalling = true
         avPlayer.allowsExternalPlayback = false
         player = avPlayer
 

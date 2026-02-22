@@ -23,6 +23,8 @@ targets:
         UIBackgroundModes: [audio]
         CFBundleDisplayName: MobileMusic
         UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations:
