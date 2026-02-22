@@ -32,5 +32,6 @@ struct ContentView: View {
                     .padding(.bottom, 49) // TabBar height offset
             }
         }
+        .glassContainer()
     }
 }

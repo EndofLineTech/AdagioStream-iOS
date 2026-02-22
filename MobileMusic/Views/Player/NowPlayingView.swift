@@ -51,18 +51,22 @@ struct NowPlayingView: View {
                         Image(systemName: "backward.fill")
                             .font(.title)
                     }
+                    .buttonStyle(InteractiveGlassButtonStyle())
 
                     Button { audioPlayer.togglePlayPause() } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 64))
                     }
+                    .buttonStyle(InteractiveGlassButtonStyle())
 
                     Button { audioPlayer.playNext() } label: {
                         Image(systemName: "forward.fill")
                             .font(.title)
                     }
+                    .buttonStyle(InteractiveGlassButtonStyle())
                 }
                 .foregroundStyle(.primary)
+                .glassContainer()
 
                 // Status info
                 if !audioPlayer.statusText.isEmpty {
@@ -83,10 +87,22 @@ struct NowPlayingView: View {
                 }
 
                 if let error = audioPlayer.error {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.top, 8)
+                    VStack(spacing: 8) {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        if let channel = audioPlayer.currentChannel {
+                            Button {
+                                audioPlayer.play(channel: channel)
+                            } label: {
+                                Label("Retry", systemImage: "arrow.clockwise")
+                                    .font(.caption)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                    .padding(.top, 8)
                 }
 
                 Spacer()

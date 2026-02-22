@@ -10,21 +10,31 @@ struct MiniPlayerView: View {
         } label: {
             HStack(spacing: 12) {
                 // Channel logo
-                if let logoURL = audioPlayer.currentChannel?.logoURL {
-                    AsyncImage(url: logoURL) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
+                ZStack {
+                    if let logoURL = audioPlayer.currentChannel?.logoURL {
+                        AsyncImage(url: logoURL) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                        } placeholder: {
+                            Image(systemName: "radio")
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(width: 36, height: 36)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else {
                         Image(systemName: "radio")
+                            .frame(width: 36, height: 36)
                             .foregroundStyle(.secondary)
                     }
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                } else {
-                    Image(systemName: "radio")
-                        .frame(width: 36, height: 36)
-                        .foregroundStyle(.secondary)
+
+                    if audioPlayer.isBuffering {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 36, height: 36)
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -48,7 +58,7 @@ struct MiniPlayerView: View {
                     Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title3)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(InteractiveGlassButtonStyle())
 
                 // Stop button
                 Button {
@@ -58,13 +68,14 @@ struct MiniPlayerView: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(InteractiveGlassButtonStyle())
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(.ultraThinMaterial)
+            .glassBackground()
         }
         .buttonStyle(.plain)
+        .glassContainer()
         .sheet(isPresented: $showNowPlaying) {
             NowPlayingView()
         }
