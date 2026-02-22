@@ -5,6 +5,7 @@ struct ChannelListView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @State private var searchText = ""
     @State private var collapsedGroups: Set<String> = []
+    @State private var hasInitializedGroups = false
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,12 @@ struct ChannelListView: View {
             .task {
                 if providerManager.channels.isEmpty && !providerManager.providers.isEmpty {
                     await providerManager.loadChannels()
+                }
+            }
+            .onChange(of: providerManager.channels) { _ in
+                if !hasInitializedGroups && !providerManager.channels.isEmpty {
+                    collapsedGroups = Set(providerManager.channels.map(\.group))
+                    hasInitializedGroups = true
                 }
             }
         }
