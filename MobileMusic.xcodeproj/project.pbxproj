@@ -37,6 +37,7 @@
 		E0AD04187034CDE9FCDB4C4C /* ChannelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 494290151F8A39A644248952 /* ChannelGroup.swift */; };
 		E231DD6A49AB8D2928BB8195 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A84CBEEA7102ADE14C97D0FD /* EPGParser.swift */; };
 		E67CD8AB0717FA4AFAD55686 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6D0B12A83957AF0C97A0E1F /* SettingsView.swift */; };
+		ECAE6F0ECDB3F84F430F1E18 /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 16FB296AB694686024E5EBCD /* VLCKitSPM */; };
 		FBE76CD2D33D9FE1974C6C32 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF846FF68C4DFE1A06ECE31 /* Constants.swift */; };
 		FD9E1F0EE2220B91E160E053 /* CarPlayTemplateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5A1C12D4882674AF27A83C2 /* CarPlayTemplateManager.swift */; };
 /* End PBXBuildFile section */
@@ -78,6 +79,17 @@
 		F454AB30C55C6D4BA13D317C /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		F4D8C04CC29449BB473B8FE9 /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B9DFDA6EFF7EBD7E85E974D9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ECAE6F0ECDB3F84F430F1E18 /* VLCKitSPM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		0CF398F1960C0CDE1D098E74 /* Utilities */ = {
@@ -241,6 +253,7 @@
 			buildConfigurationList = 60AB0D4121FA4ABE1DAED1D4 /* Build configuration list for PBXNativeTarget "MobileMusic" */;
 			buildPhases = (
 				33A1D89D6D6C844A86EF2DF6 /* Sources */,
+				B9DFDA6EFF7EBD7E85E974D9 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -248,6 +261,7 @@
 			);
 			name = MobileMusic;
 			packageProductDependencies = (
+				16FB296AB694686024E5EBCD /* VLCKitSPM */,
 			);
 			productName = MobileMusic;
 			productReference = 79B258AB3FBF2B603E48EE29 /* MobileMusic.app */;
@@ -272,6 +286,9 @@
 			);
 			mainGroup = 31EB8650947CB81B14014755;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				04791A5EAF42D540183E74EE /* XCRemoteSwiftPackageReference "vlckit-spm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
@@ -503,6 +520,25 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		04791A5EAF42D540183E74EE /* XCRemoteSwiftPackageReference "vlckit-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tylerjonesio/vlckit-spm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		16FB296AB694686024E5EBCD /* VLCKitSPM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 04791A5EAF42D540183E74EE /* XCRemoteSwiftPackageReference "vlckit-spm" */;
+			productName = VLCKitSPM;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D44C10039EA43FAA4E988C9E /* Project object */;
 }

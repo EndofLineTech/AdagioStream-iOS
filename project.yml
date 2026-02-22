@@ -11,12 +11,19 @@ settings:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1,2"
 
+packages:
+  VLCKitSPM:
+    url: https://github.com/tylerjonesio/vlckit-spm
+    from: "3.5.1"
+
 targets:
   MobileMusic:
     type: application
     platform: iOS
     sources:
       - MobileMusic
+    dependencies:
+      - package: VLCKitSPM
     info:
       path: MobileMusic/Info.plist
       properties:

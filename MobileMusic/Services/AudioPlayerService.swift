@@ -2,9 +2,10 @@ import AVFoundation
 import Combine
 import MediaPlayer
 import SwiftUI
+import VLCKitSPM
 
 @MainActor
-final class AudioPlayerService: ObservableObject {
+final class AudioPlayerService: NSObject, ObservableObject {
     static let shared = AudioPlayerService()
 
     @Published var currentChannel: Channel?
@@ -12,19 +13,17 @@ final class AudioPlayerService: ObservableObject {
     @Published var isBuffering = false
     @Published var error: String?
 
-    private var player: AVPlayer?
-    private var playerItem: AVPlayerItem?
-    private var statusObserver: NSKeyValueObservation?
-    private var timeControlObserver: NSKeyValueObservation?
-    private var errorObserver: NSKeyValueObservation?
-    private var failureObserver: Any?
+    private let mediaPlayer = VLCMediaPlayer()
+    private var stateObserver: Any?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
 
-    private init() {
+    private override init() {
+        super.init()
         configureAudioSession()
         configureRemoteCommands()
+        observePlayerState()
     }
 
     // MARK: - Audio Session
@@ -42,8 +41,7 @@ final class AudioPlayerService: ObservableObject {
     // MARK: - Playback
 
     func play(channel: Channel) {
-        // Tear down previous playback without clearing currentChannel yet
-        tearDownPlayer()
+        mediaPlayer.stop()
 
         // Re-activate audio session
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -53,41 +51,27 @@ final class AudioPlayerService: ObservableObject {
         isPlaying = false
         error = nil
 
-        // Use AVURLAsset for more control over network behavior
-        let asset = AVURLAsset(url: channel.streamURL, options: [
-            "AVURLAssetHTTPHeaderFieldsKey": [
-                "User-Agent": "MobileMusic/1.0"
-            ]
+        let media = VLCMedia(url: channel.streamURL)
+        media.addOptions([
+            "network-caching": Int(bufferDuration * 1000),
+            "live-caching": Int(bufferDuration * 1000),
+            "http-user-agent": "MobileMusic/1.0",
         ])
 
-        let item = AVPlayerItem(asset: asset)
-        item.preferredForwardBufferDuration = bufferDuration
-
-        // Allow the item to keep playing even if buffer runs low
-        if #available(iOS 16.0, *) {
-            item.automaticallyHandlesInterstitialEvents = true
-        }
-
-        playerItem = item
-
-        let avPlayer = AVPlayer(playerItem: item)
-        avPlayer.automaticallyWaitsToMinimizeStalling = true
-        avPlayer.allowsExternalPlayback = false
-        player = avPlayer
-
-        observePlayer(avPlayer, item: item)
-        avPlayer.play()
+        mediaPlayer.media = media
+        mediaPlayer.audio?.volume = 100
+        mediaPlayer.play()
         updateNowPlayingInfo()
     }
 
     func pause() {
-        player?.pause()
+        mediaPlayer.pause()
         isPlaying = false
         updateNowPlayingInfo()
     }
 
     func resume() {
-        player?.play()
+        mediaPlayer.play()
         isPlaying = true
         updateNowPlayingInfo()
     }
@@ -101,28 +85,11 @@ final class AudioPlayerService: ObservableObject {
     }
 
     func stop() {
-        tearDownPlayer()
+        mediaPlayer.stop()
         currentChannel = nil
         isPlaying = false
         isBuffering = false
         clearNowPlayingInfo()
-    }
-
-    private func tearDownPlayer() {
-        statusObserver?.invalidate()
-        statusObserver = nil
-        timeControlObserver?.invalidate()
-        timeControlObserver = nil
-        errorObserver?.invalidate()
-        errorObserver = nil
-        if let failureObserver {
-            NotificationCenter.default.removeObserver(failureObserver)
-        }
-        failureObserver = nil
-        player?.pause()
-        player?.replaceCurrentItem(with: nil)
-        player = nil
-        playerItem = nil
     }
 
     func playNext() {
@@ -141,58 +108,52 @@ final class AudioPlayerService: ObservableObject {
 
     func updateBufferDuration(_ duration: TimeInterval) {
         bufferDuration = duration
-        playerItem?.preferredForwardBufferDuration = duration
     }
 
-    // MARK: - KVO
+    // MARK: - State Observation
 
-    private func observePlayer(_ avPlayer: AVPlayer, item: AVPlayerItem) {
-        statusObserver = item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
-            Task { @MainActor in
-                guard let self else { return }
-                switch item.status {
-                case .readyToPlay:
-                    self.isBuffering = false
-                    self.isPlaying = true
-                case .failed:
-                    self.error = item.error?.localizedDescription ?? "Playback failed"
-                    self.isBuffering = false
-                    self.isPlaying = false
-                default:
-                    break
-                }
-            }
-        }
-
-        timeControlObserver = avPlayer.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
-            Task { @MainActor in
-                guard let self else { return }
-                switch player.timeControlStatus {
-                case .playing:
-                    self.isPlaying = true
-                    self.isBuffering = false
-                case .paused:
-                    self.isPlaying = false
-                case .waitingToPlayAtSpecifiedRate:
-                    self.isBuffering = true
-                @unknown default:
-                    break
-                }
-            }
-        }
-
-        // Observe playback failure notification
-        failureObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemFailedToPlayToEndTime,
-            object: item,
+    private func observePlayerState() {
+        stateObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name(rawValue: "VLCMediaPlayerStateChanged"),
+            object: mediaPlayer,
             queue: .main
-        ) { [weak self] notification in
+        ) { [weak self] _ in
             Task { @MainActor in
-                guard let self else { return }
-                let err = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
-                self.error = err?.localizedDescription ?? "Stream playback failed"
+                self?.handleStateChange()
             }
         }
+    }
+
+    private func handleStateChange() {
+        let state = mediaPlayer.state
+
+        switch state {
+        case .playing:
+            isPlaying = true
+            isBuffering = false
+            error = nil
+        case .paused:
+            isPlaying = false
+            isBuffering = false
+        case .buffering:
+            isBuffering = true
+        case .stopped:
+            isPlaying = false
+            isBuffering = false
+        case .error:
+            isPlaying = false
+            isBuffering = false
+            error = "Stream playback error"
+        case .opening:
+            isBuffering = true
+        case .ended:
+            isPlaying = false
+            isBuffering = false
+        @unknown default:
+            break
+        }
+
+        updateNowPlayingInfo()
     }
 
     // MARK: - Now Playing Info
