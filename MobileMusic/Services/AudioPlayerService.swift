@@ -5,7 +5,7 @@ import SwiftUI
 import VLCKitSPM
 
 @MainActor
-final class AudioPlayerService: NSObject, ObservableObject {
+final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCMediaPlayerDelegate {
     static let shared = AudioPlayerService()
 
     @Published var currentChannel: Channel?
@@ -14,16 +14,16 @@ final class AudioPlayerService: NSObject, ObservableObject {
     @Published var error: String?
 
     private let mediaPlayer = VLCMediaPlayer()
-    private var stateObserver: Any?
+    private var stateTimer: Timer?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
 
     private override init() {
         super.init()
+        mediaPlayer.delegate = self
         configureAudioSession()
         configureRemoteCommands()
-        observePlayerState()
     }
 
     // MARK: - Audio Session
@@ -42,6 +42,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
 
     func play(channel: Channel) {
         mediaPlayer.stop()
+        stateTimer?.invalidate()
 
         // Re-activate audio session
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -62,17 +63,25 @@ final class AudioPlayerService: NSObject, ObservableObject {
         mediaPlayer.audio?.volume = 100
         mediaPlayer.play()
         updateNowPlayingInfo()
+
+        // Poll state as a reliable fallback since VLC delegate
+        // fires on a background thread that can miss MainActor updates
+        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncState()
+            }
+        }
     }
 
     func pause() {
         mediaPlayer.pause()
-        isPlaying = false
+        syncState()
         updateNowPlayingInfo()
     }
 
     func resume() {
         mediaPlayer.play()
-        isPlaying = true
+        syncState()
         updateNowPlayingInfo()
     }
 
@@ -85,6 +94,8 @@ final class AudioPlayerService: NSObject, ObservableObject {
     }
 
     func stop() {
+        stateTimer?.invalidate()
+        stateTimer = nil
         mediaPlayer.stop()
         currentChannel = nil
         isPlaying = false
@@ -110,22 +121,19 @@ final class AudioPlayerService: NSObject, ObservableObject {
         bufferDuration = duration
     }
 
-    // MARK: - State Observation
+    // MARK: - VLCMediaPlayerDelegate
 
-    private func observePlayerState() {
-        stateObserver = NotificationCenter.default.addObserver(
-            forName: NSNotification.Name(rawValue: "VLCMediaPlayerStateChanged"),
-            object: mediaPlayer,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.handleStateChange()
-            }
+    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
+        Task { @MainActor in
+            self.syncState()
         }
     }
 
-    private func handleStateChange() {
+    // MARK: - State Sync
+
+    private func syncState() {
         let state = mediaPlayer.state
+        let playing = mediaPlayer.isPlaying
 
         switch state {
         case .playing:
@@ -135,22 +143,29 @@ final class AudioPlayerService: NSObject, ObservableObject {
         case .paused:
             isPlaying = false
             isBuffering = false
-        case .buffering:
+        case .buffering, .opening:
             isBuffering = true
         case .stopped:
-            isPlaying = false
-            isBuffering = false
+            if currentChannel != nil {
+                // Only clear if we didn't initiate the stop
+                isPlaying = false
+                isBuffering = false
+            }
         case .error:
             isPlaying = false
             isBuffering = false
             error = "Stream playback error"
-        case .opening:
-            isBuffering = true
         case .ended:
             isPlaying = false
             isBuffering = false
         @unknown default:
             break
+        }
+
+        // Trust VLC's isPlaying as ground truth
+        if playing && !isPlaying {
+            isPlaying = true
+            isBuffering = false
         }
 
         updateNowPlayingInfo()
