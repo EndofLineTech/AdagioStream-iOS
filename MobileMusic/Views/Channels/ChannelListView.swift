@@ -4,6 +4,7 @@ struct ChannelListView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @State private var searchText = ""
+    @State private var collapsedGroups: Set<String> = []
 
     var body: some View {
         NavigationStack {
@@ -36,15 +37,42 @@ struct ChannelListView: View {
     private var channelList: some View {
         List {
             ForEach(groups) { group in
-                Section(group.name) {
-                    ForEach(group.channels) { channel in
-                        ChannelRowView(channel: channel) {
-                            audioPlayer.channels = providerManager.channels
-                            audioPlayer.play(channel: channel)
-                        } onToggleFavorite: {
-                            Task { await providerManager.toggleFavorite(channel) }
+                Section {
+                    if !collapsedGroups.contains(group.name) {
+                        ForEach(group.channels) { channel in
+                            ChannelRowView(channel: channel) {
+                                audioPlayer.channels = providerManager.channels
+                                audioPlayer.play(channel: channel)
+                            } onToggleFavorite: {
+                                Task { await providerManager.toggleFavorite(channel) }
+                            }
                         }
                     }
+                } header: {
+                    Button {
+                        withAnimation {
+                            if collapsedGroups.contains(group.name) {
+                                collapsedGroups.remove(group.name)
+                            } else {
+                                collapsedGroups.insert(group.name)
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text(group.name)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .textCase(.none)
+                            Spacer()
+                            Text("\(group.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Image(systemName: collapsedGroups.contains(group.name) ? "chevron.right" : "chevron.down")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
