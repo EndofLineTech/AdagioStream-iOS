@@ -1,0 +1,5 @@
+MobileMusic.xcodeproj/xcuserdata/
+*.xcuserdatad
+DerivedData/
+.build/
+build/

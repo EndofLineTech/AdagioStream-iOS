@@ -1,0 +1,29 @@
+name: MobileMusic
+options:
+  bundleIdPrefix: com.mobilemusic
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  MobileMusic:
+    type: application
+    platform: iOS
+    sources:
+      - MobileMusic
+    settings:
+      base:
+        INFOPLIST_FILE: MobileMusic/Info.plist
+        CODE_SIGN_ENTITLEMENTS: MobileMusic/MobileMusic.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.mobilemusic.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: MobileMusic/MobileMusic.entitlements
+      properties:
+        com.apple.developer.carplay-audio: true
