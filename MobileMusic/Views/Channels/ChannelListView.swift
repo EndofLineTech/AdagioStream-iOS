@@ -3,12 +3,7 @@ import SwiftUI
 struct ChannelListView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
-    @StateObject private var viewModel: ChannelListViewModel
-
-    init() {
-        // Will be properly initialized via environmentObject
-        _viewModel = StateObject(wrappedValue: ChannelListViewModel(providerManager: ProviderManager()))
-    }
+    @State private var searchText = ""
 
     var body: some View {
         NavigationStack {
@@ -26,16 +21,13 @@ struct ChannelListView: View {
                 }
             }
             .navigationTitle("Channels")
-            .searchable(text: $viewModel.searchText, prompt: "Search channels")
+            .searchable(text: $searchText, prompt: "Search channels")
             .refreshable {
-                await viewModel.refresh()
-            }
-            .onAppear {
-                viewModel.providerManager === providerManager ? () : ()
+                await providerManager.loadChannels()
             }
             .task {
-                if providerManager.channels.isEmpty {
-                    await viewModel.refresh()
+                if providerManager.channels.isEmpty && !providerManager.providers.isEmpty {
+                    await providerManager.loadChannels()
                 }
             }
         }
@@ -67,11 +59,11 @@ struct ChannelListView: View {
     }
 
     private var filteredChannels: [Channel] {
-        if viewModel.searchText.isEmpty {
+        if searchText.isEmpty {
             return providerManager.channels
         }
         return providerManager.channels.filter {
-            $0.name.localizedCaseInsensitiveContains(viewModel.searchText)
+            $0.name.localizedCaseInsensitiveContains(searchText)
         }
     }
 }

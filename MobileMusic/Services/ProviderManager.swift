@@ -22,6 +22,7 @@ final class ProviderManager: ObservableObject {
     func addProvider(_ provider: Provider) async {
         providers.append(provider)
         await saveProviders()
+        await loadChannels()
     }
 
     func deleteProvider(_ provider: Provider) async {
