@@ -12,16 +12,8 @@ struct NowPlayingView: View {
 
                 // Channel artwork
                 if let logoURL = audioPlayer.currentChannel?.logoURL {
-                    AsyncImage(url: logoURL) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    } placeholder: {
-                        channelPlaceholder
-                    }
-                    .frame(width: 200, height: 200)
-                    .clipShape(RoundedRectangle(cornerRadius: 20))
-                    .shadow(radius: 10)
+                    RetryableAsyncImage(url: logoURL, width: 200, height: 200, cornerRadius: 20)
+                        .shadow(radius: 10)
                 } else {
                     channelPlaceholder
                 }

@@ -3,6 +3,8 @@ import SwiftUI
 
 @MainActor
 final class ProviderManager: ObservableObject {
+    static let shared = ProviderManager()
+
     @Published var providers: [Provider] = []
     @Published var channels: [Channel] = []
     @Published var epgData: [String: [EPGEntry]] = [:]
@@ -33,6 +35,12 @@ final class ProviderManager: ObservableObject {
     func deleteProvider(_ provider: Provider) async {
         providers.removeAll { $0.id == provider.id }
         await saveProviders()
+        // Remove channels that came from this provider
+        if providers.isEmpty {
+            channels = []
+            epgData = [:]
+            error = nil
+        }
     }
 
     func updateProvider(_ provider: Provider) async {
@@ -104,6 +112,13 @@ final class ProviderManager: ObservableObject {
 
     var favoriteChannels: [Channel] {
         channels.filter(\.isFavorite)
+    }
+
+    func clearFavorites() async {
+        for i in channels.indices {
+            channels[i].isFavorite = false
+        }
+        await saveFavoriteIDs()
     }
 
     private func loadFavoriteIDs() async -> Set<String> {

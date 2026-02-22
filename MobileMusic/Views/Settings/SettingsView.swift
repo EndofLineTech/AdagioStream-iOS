@@ -2,22 +2,50 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
-    @StateObject private var viewModel: SettingsViewModel
-
-    init() {
-        _viewModel = StateObject(wrappedValue: SettingsViewModel(audioPlayer: AudioPlayerService.shared))
-    }
+    @EnvironmentObject var providerManager: ProviderManager
+    @EnvironmentObject private var viewModel: SettingsViewModel
+    @State private var showClearFavoritesAlert = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Playback") {
-                    VStack(alignment: .leading) {
+                Section("Appearance") {
+                    Picker("Appearance", selection: $viewModel.settings.appearanceMode) {
+                        ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: viewModel.settings.appearanceMode) { newValue in
+                        Task { await viewModel.updateAppearance(newValue) }
+                    }
+                }
+
+                Section {
+                    Picker("Text Size", selection: $viewModel.settings.textSizeMode) {
+                        ForEach(TextSizeMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .onChange(of: viewModel.settings.textSizeMode) { newValue in
+                        Task { await viewModel.updateTextSize(newValue) }
+                    }
+                    Text("Preview: The quick brown fox")
+                        .font(.body)
+                } header: {
+                    Text("Text Size")
+                } footer: {
+                    Text("System follows your device's text size setting.")
+                }
+
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Buffer Duration")
                             Spacer()
                             Text("\(Int(viewModel.settings.bufferDuration))s")
                                 .foregroundStyle(.secondary)
+                                .monospacedDigit()
                         }
                         Slider(
                             value: $viewModel.settings.bufferDuration,
@@ -29,25 +57,104 @@ struct SettingsView: View {
                         .onChange(of: viewModel.settings.bufferDuration) { newValue in
                             Task { await viewModel.updateBufferDuration(newValue) }
                         }
+                        Text("Higher values improve stability on slow connections but increase initial load time.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Playback")
+                } footer: {
+                    if audioPlayer.isPlaying, audioPlayer.streamBitrateKbps > 1 {
+                        let formatted = audioPlayer.streamBitrateKbps >= 1000
+                            ? String(format: "%.1f Mbps", audioPlayer.streamBitrateKbps / 1000)
+                            : "\(Int(audioPlayer.streamBitrateKbps)) kbps"
+                        Text("Current stream: \(formatted)")
                     }
                 }
 
-                Section("About") {
+                Section("Channels") {
                     HStack {
-                        Text("Version")
+                        Text("Loaded Channels")
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                        Text("\(providerManager.channels.count)")
                             .foregroundStyle(.secondary)
                     }
+                    HStack {
+                        Text("Providers")
+                        Spacer()
+                        Text("\(providerManager.providers.count)")
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Favorites")
+                        Spacer()
+                        Text("\(providerManager.favoriteChannels.count)")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        Task { await providerManager.loadChannels() }
+                    } label: {
+                        HStack {
+                            Label("Reload Channels", systemImage: "arrow.clockwise")
+                            Spacer()
+                            if providerManager.isLoading {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
+                }
+
+                Section("Data") {
+                    Button(role: .destructive) {
+                        showClearFavoritesAlert = true
+                    } label: {
+                        Label("Clear All Favorites", systemImage: "star.slash")
+                    }
+                    .disabled(providerManager.favoriteChannels.isEmpty)
+                }
+
+                Section("About") {
                     HStack {
                         Text("App")
                         Spacer()
                         Text(Constants.appName)
                             .foregroundStyle(.secondary)
                     }
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text(appVersion)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Build")
+                        Spacer()
+                        Text(buildNumber)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("Clear Favorites", isPresented: $showClearFavoritesAlert) {
+                Button("Clear", role: .destructive) {
+                    Task { await providerManager.clearFavorites() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Remove all \(providerManager.favoriteChannels.count) channels from your favorites?")
+            }
         }
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+
+    private var buildNumber: String {
+        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
     }
 }

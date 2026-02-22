@@ -12,6 +12,15 @@ bd close <id>         # Complete work
 bd sync               # Sync with git
 ```
 
+## Building
+
+After a successful build, always install and launch in the simulator to verify:
+
+```bash
+xcodebuild -scheme MobileMusic -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; xcrun simctl install "iPhone 17 Pro" ~/Library/Developer/Xcode/DerivedData/MobileMusic-*/Build/Products/Debug-iphonesimulator/MobileMusic.app && xcrun simctl launch "iPhone 17 Pro" com.mobilemusic.app
+```
+
 ## Landing the Plane (Session Completion)
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.

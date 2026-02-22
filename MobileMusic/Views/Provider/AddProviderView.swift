@@ -72,8 +72,13 @@ struct AddProviderView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(!isValid || isSaving)
+                    if isSaving {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Button("Save") { save() }
+                            .disabled(!isValid)
+                    }
                 }
             }
         }

@@ -17,6 +17,8 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
 
     private let mediaPlayer = VLCMediaPlayer()
     private var stateTimer: Timer?
+    private var currentArtwork: MPMediaItemArtwork?
+    private var lastPlayedChannel: Channel?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -49,12 +51,17 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
         // Re-activate audio session
         try? AVAudioSession.sharedInstance().setActive(true)
 
+        let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
         isBuffering = true
         isPlaying = false
         error = nil
         streamBitrateKbps = 0
         statusText = ""
+        if channelChanged {
+            currentArtwork = nil
+            fetchArtwork(for: channel)
+        }
 
         let media = VLCMedia(url: channel.streamURL)
         media.addOptions([
@@ -78,19 +85,21 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
     }
 
     func pause() {
-        mediaPlayer.pause()
-        syncState()
+        stateTimer?.invalidate()
+        stateTimer = nil
+        mediaPlayer.stop()
+        isPlaying = false
+        isBuffering = false
         updateNowPlayingInfo()
     }
 
     func resume() {
-        mediaPlayer.play()
-        syncState()
-        updateNowPlayingInfo()
+        guard let channel = currentChannel ?? lastPlayedChannel else { return }
+        play(channel: channel)
     }
 
     func togglePlayPause() {
-        if isPlaying {
+        if isPlaying || isBuffering {
             pause()
         } else {
             resume()
@@ -101,9 +110,11 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
         stateTimer?.invalidate()
         stateTimer = nil
         mediaPlayer.stop()
+        lastPlayedChannel = currentChannel
         currentChannel = nil
         isPlaying = false
         isBuffering = false
+        currentArtwork = nil
         clearNowPlayingInfo()
     }
 
@@ -136,27 +147,34 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
     // MARK: - State Sync
 
     private func syncState() {
-        let playing = mediaPlayer.isPlaying
+        let vlcIsPlaying = mediaPlayer.isPlaying
+        let vlcState = mediaPlayer.state
 
-        // isPlaying is the most reliable indicator — VLC reports
-        // .buffering state continuously during live streams even
-        // while audio is actively playing
-        if playing {
+        // VLC reports .buffering state and isPlaying=false continuously
+        // for live streams even while audio is actively playing.
+        // Use demux bitrate as a reliable indicator of actual playback.
+        let hasDataFlow: Bool = {
+            guard let media = mediaPlayer.media else { return false }
+            let stats = media.statistics
+            return stats.demuxBitrate > 0 || stats.inputBitrate > 0
+        }()
+
+        if vlcIsPlaying || vlcState == .playing {
+            isPlaying = true
+            isBuffering = false
+            error = nil
+        } else if hasDataFlow && (vlcState == .buffering || vlcState == .opening) {
+            // VLC says buffering but data is flowing — audio is actually playing
             isPlaying = true
             isBuffering = false
             error = nil
         } else {
-            let state = mediaPlayer.state
-            switch state {
-            case .playing:
-                isPlaying = true
-                isBuffering = false
-                error = nil
+            switch vlcState {
+            case .buffering, .opening:
+                isBuffering = true
             case .paused:
                 isPlaying = false
                 isBuffering = false
-            case .buffering, .opening:
-                isBuffering = true
             case .stopped:
                 if currentChannel != nil {
                     isPlaying = false
@@ -169,7 +187,7 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
             case .ended:
                 isPlaying = false
                 isBuffering = false
-            @unknown default:
+            default:
                 break
             }
         }
@@ -233,18 +251,30 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
         ]
 
-        if let logoURL = channel.logoURL {
-            Task {
-                if let (data, _) = try? await URLSession.shared.data(from: logoURL),
-                   let image = UIImage(data: data) {
-                    let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    info[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-                }
-            }
+        if let artwork = currentArtwork {
+            info[MPMediaItemPropertyArtwork] = artwork
         }
 
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        let center = MPNowPlayingInfoCenter.default()
+        center.nowPlayingInfo = info
+        if isPlaying {
+            center.playbackState = .playing
+        } else if isBuffering {
+            center.playbackState = .playing
+        } else if currentChannel != nil {
+            center.playbackState = .paused
+        }
+    }
+
+    private func fetchArtwork(for channel: Channel) {
+        guard let logoURL = channel.logoURL else { return }
+        Task {
+            guard let (data, _) = try? await URLSession.shared.data(from: logoURL),
+                  let image = UIImage(data: data) else { return }
+            guard self.currentChannel?.id == channel.id else { return }
+            self.currentArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.updateNowPlayingInfo()
+        }
     }
 
     private func clearNowPlayingInfo() {

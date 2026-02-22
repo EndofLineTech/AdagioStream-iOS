@@ -29,7 +29,9 @@ targets:
       properties:
         UIBackgroundModes: [audio]
         CFBundleDisplayName: MobileMusic
-        UILaunchScreen: {}
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+          UIImageName: ""
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         UIApplicationSceneManifest:

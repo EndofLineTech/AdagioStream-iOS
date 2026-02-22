@@ -10,7 +10,8 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         self.interfaceController = interfaceController
         templateManager = CarPlayTemplateManager(
             interfaceController: interfaceController,
-            audioPlayer: AudioPlayerService.shared
+            audioPlayer: AudioPlayerService.shared,
+            providerManager: ProviderManager.shared
         )
         templateManager?.configure()
     }

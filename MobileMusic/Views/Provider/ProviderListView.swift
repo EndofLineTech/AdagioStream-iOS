@@ -3,10 +3,11 @@ import SwiftUI
 struct ProviderListView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @State private var showAddProvider = false
+    @State private var providerToDelete: Provider?
 
     var body: some View {
         NavigationStack {
-            List {
+            Group {
                 if providerManager.providers.isEmpty {
                     EmptyStateView(
                         title: "No Providers",
@@ -14,19 +15,36 @@ struct ProviderListView: View {
                         description: "Add an IPTV provider to get started."
                     )
                 } else {
-                    ForEach(providerManager.providers) { provider in
-                        ProviderRow(provider: provider)
-                    }
-                    .onDelete { indexSet in
-                        Task {
-                            for index in indexSet {
-                                await providerManager.deleteProvider(providerManager.providers[index])
+                    List {
+                        ForEach(providerManager.providers) { provider in
+                            ProviderRow(provider: provider)
+                        }
+                        .onDelete { indexSet in
+                            if let index = indexSet.first {
+                                providerToDelete = providerManager.providers[index]
                             }
+                        }
+
+                        Section {
+                            Button {
+                                Task { await providerManager.loadChannels() }
+                            } label: {
+                                HStack {
+                                    Label("Reload All Channels", systemImage: "arrow.clockwise")
+                                    Spacer()
+                                    if providerManager.isLoading {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    }
+                                }
+                            }
+                            .disabled(providerManager.isLoading)
                         }
                     }
                 }
             }
             .navigationTitle("Providers")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -38,6 +56,24 @@ struct ProviderListView: View {
             }
             .sheet(isPresented: $showAddProvider) {
                 AddProviderView()
+            }
+            .alert("Delete Provider", isPresented: .init(
+                get: { providerToDelete != nil },
+                set: { if !$0 { providerToDelete = nil } }
+            )) {
+                Button("Delete", role: .destructive) {
+                    if let provider = providerToDelete {
+                        Task {
+                            await providerManager.deleteProvider(provider)
+                            await providerManager.loadChannels()
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if let provider = providerToDelete {
+                    Text("Are you sure you want to delete \"\(provider.name)\"? Its channels will be removed.")
+                }
             }
         }
     }

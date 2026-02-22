@@ -12,16 +12,7 @@ struct MiniPlayerView: View {
                 // Channel logo
                 ZStack {
                     if let logoURL = audioPlayer.currentChannel?.logoURL {
-                        AsyncImage(url: logoURL) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        } placeholder: {
-                            Image(systemName: "radio")
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(width: 36, height: 36)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        RetryableAsyncImage(url: logoURL, width: 36, height: 36, cornerRadius: 6)
                     } else {
                         Image(systemName: "radio")
                             .frame(width: 36, height: 36)

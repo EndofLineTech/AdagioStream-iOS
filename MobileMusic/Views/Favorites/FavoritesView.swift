@@ -27,6 +27,7 @@ struct FavoritesView: View {
                 }
             }
             .navigationTitle("Favorites")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }

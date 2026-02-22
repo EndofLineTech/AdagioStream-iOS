@@ -9,16 +9,7 @@ struct ChannelRowView: View {
         HStack(spacing: 12) {
             // Channel logo
             if let logoURL = channel.logoURL {
-                AsyncImage(url: logoURL) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    Image(systemName: "radio")
-                        .foregroundStyle(.secondary)
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                RetryableAsyncImage(url: logoURL, width: 40, height: 40, cornerRadius: 8)
             } else {
                 Image(systemName: "radio")
                     .frame(width: 40, height: 40)

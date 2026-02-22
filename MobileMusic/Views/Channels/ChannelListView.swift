@@ -10,19 +10,41 @@ struct ChannelListView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if providerManager.isLoading {
-                    ProgressView("Loading channels...")
-                } else if providerManager.channels.isEmpty {
+                if providerManager.isLoading && providerManager.channels.isEmpty {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .controlSize(.large)
+                        Text("Loading channels...")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if providerManager.channels.isEmpty && providerManager.providers.isEmpty {
                     EmptyStateView(
-                        title: "No Channels",
-                        systemImage: "radio",
-                        description: "Add a provider to load channels."
+                        title: "No Providers",
+                        systemImage: "server.rack",
+                        description: "Add an IPTV provider in the Providers tab to get started."
                     )
+                } else if providerManager.channels.isEmpty {
+                    VStack(spacing: 16) {
+                        EmptyStateView(
+                            title: "No Channels",
+                            systemImage: "radio",
+                            description: providerManager.error ?? "No channels loaded from your providers."
+                        )
+                        Button {
+                            Task { await providerManager.loadChannels() }
+                        } label: {
+                            Label("Retry", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 } else {
                     channelList
                 }
             }
             .navigationTitle("Channels")
+            .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $searchText, prompt: "Search channels")
             .refreshable {
                 await providerManager.loadChannels()
@@ -43,6 +65,24 @@ struct ChannelListView: View {
 
     private var channelList: some View {
         List {
+            if let error = providerManager.error {
+                Section {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(error)
+                            .font(.caption)
+                        Spacer()
+                        Button("Retry") {
+                            Task { await providerManager.loadChannels() }
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                }
+            }
+
             ForEach(groups) { group in
                 Section {
                     if !collapsedGroups.contains(group.name) {

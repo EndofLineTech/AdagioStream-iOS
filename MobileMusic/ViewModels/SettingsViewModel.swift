@@ -28,4 +28,14 @@ final class SettingsViewModel: ObservableObject {
         settings.bufferDuration = duration
         await saveSettings()
     }
+
+    func updateAppearance(_ mode: AppearanceMode) async {
+        settings.appearanceMode = mode
+        await saveSettings()
+    }
+
+    func updateTextSize(_ mode: TextSizeMode) async {
+        settings.textSizeMode = mode
+        await saveSettings()
+    }
 }

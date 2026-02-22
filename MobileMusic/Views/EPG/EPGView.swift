@@ -47,6 +47,7 @@ struct EPGView: View {
             }
         }
         .navigationTitle("Program Guide")
+        .navigationBarTitleDisplayMode(.inline)
     }
 
     private var entries: [EPGEntry] {
