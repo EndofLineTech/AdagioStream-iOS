@@ -133,11 +133,26 @@ class CarPlayTemplateManager {
                 self?.playChannelAndShowNowPlaying(channel)
                 completion()
             }
+            loadChannelIcon(for: channel, into: item)
             return item
         }
         let section = CPListSection(items: items)
         let template = CPListTemplate(title: "Favorites", sections: [section])
         interfaceController.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    private func loadChannelIcon(for channel: Channel, into item: CPListItem) {
+        guard let logoURL = channel.logoURL else { return }
+        Task {
+            guard let (data, _) = try? await URLSession.shared.data(from: logoURL),
+                  let image = UIImage(data: data) else { return }
+            let size = CGSize(width: 40, height: 40)
+            let renderer = UIGraphicsImageRenderer(size: size)
+            let scaled = renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: size))
+            }
+            item.setImage(scaled)
+        }
     }
 
     private func pushChannelList(title: String, channels: [Channel]) {
@@ -147,6 +162,7 @@ class CarPlayTemplateManager {
                 self?.playChannelAndShowNowPlaying(channel)
                 completion()
             }
+            loadChannelIcon(for: channel, into: item)
             return item
         }
         let section = CPListSection(items: items)
