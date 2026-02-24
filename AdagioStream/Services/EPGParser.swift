@@ -27,13 +27,15 @@ final class EPGParser: NSObject, XMLParserDelegate {
         }
 
         let parser = EPGParser()
-        return parser.parse(data: data)
+        return try parser.parse(data: data)
     }
 
-    func parse(data: Data) -> [String: [EPGEntry]] {
+    func parse(data: Data) throws -> [String: [EPGEntry]] {
         let xmlParser = XMLParser(data: data)
         xmlParser.delegate = self
-        xmlParser.parse()
+        guard xmlParser.parse() else {
+            throw xmlParser.parserError ?? URLError(.cannotParseResponse)
+        }
         return entries
     }
 

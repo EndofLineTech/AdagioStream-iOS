@@ -33,7 +33,12 @@ struct MiniPlayerView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                    if !audioPlayer.statusText.isEmpty {
+                    if let error = audioPlayer.error {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .lineLimit(1)
+                    } else if !audioPlayer.statusText.isEmpty {
                         Text(audioPlayer.statusText)
                             .font(.caption)
                             .foregroundStyle(audioPlayer.isBuffering ? .orange : .secondary)

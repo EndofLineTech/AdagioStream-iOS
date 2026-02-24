@@ -53,7 +53,11 @@ final class ProviderManager: ObservableObject {
     }
 
     private func saveProviders() async {
-        try? await persistence.save(providers, to: Constants.StorageKeys.providers)
+        do {
+            try await persistence.save(providers, to: Constants.StorageKeys.providers)
+        } catch {
+            self.error = "Failed to save providers: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Channel Loading
@@ -63,14 +67,19 @@ final class ProviderManager: ObservableObject {
         error = nil
 
         var allChannels: [Channel] = []
+        var errors: [String] = []
 
         for provider in providers {
             do {
                 let loaded = try await loadChannels(from: provider)
                 allChannels.append(contentsOf: loaded)
             } catch {
-                self.error = "Error loading \(provider.name): \(error.localizedDescription)"
+                errors.append("\(provider.name): \(error.localizedDescription)")
             }
+        }
+
+        if !errors.isEmpty {
+            self.error = errors.joined(separator: "\n")
         }
 
         // Restore favorites
@@ -94,8 +103,13 @@ final class ProviderManager: ObservableObject {
         case .m3u(let url, let epgURL):
             let channels = try await M3UParser.parse(from: url)
             if let epgURL {
-                let epg = try await EPGParser.parse(from: epgURL)
-                await MainActor.run { self.epgData.merge(epg) { _, new in new } }
+                do {
+                    let epg = try await EPGParser.parse(from: epgURL)
+                    await MainActor.run { self.epgData.merge(epg) { _, new in new } }
+                } catch {
+                    // EPG failure is non-fatal — channels still load
+                    await MainActor.run { self.error = "EPG data unavailable: \(error.localizedDescription)" }
+                }
             }
             return channels
 
@@ -135,6 +149,10 @@ final class ProviderManager: ObservableObject {
 
     private func saveFavoriteIDs() async {
         let ids = Set(channels.filter(\.isFavorite).map(\.id))
-        try? await persistence.save(ids, to: Constants.StorageKeys.favorites)
+        do {
+            try await persistence.save(ids, to: Constants.StorageKeys.favorites)
+        } catch {
+            self.error = "Failed to save favorites: \(error.localizedDescription)"
+        }
     }
 }

@@ -118,7 +118,12 @@ struct AddProviderView: View {
         let provider = Provider(name: name, type: type)
         Task {
             await providerManager.addProvider(provider)
-            dismiss()
+            if let loadError = providerManager.error {
+                error = loadError
+                isSaving = false
+            } else {
+                dismiss()
+            }
         }
     }
 }
