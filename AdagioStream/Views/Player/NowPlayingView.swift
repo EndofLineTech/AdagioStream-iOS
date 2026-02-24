@@ -14,6 +14,7 @@ struct NowPlayingView: View {
                 if let logoURL = audioPlayer.currentChannel?.logoURL {
                     RetryableAsyncImage(url: logoURL, width: 200, height: 200, cornerRadius: 20)
                         .shadow(radius: 10)
+                        .id(audioPlayer.currentChannel?.id)
                 } else {
                     channelPlaceholder
                 }
@@ -43,19 +44,19 @@ struct NowPlayingView: View {
                         Image(systemName: "backward.fill")
                             .font(.title)
                     }
-                    .buttonStyle(InteractiveGlassButtonStyle())
+                    .buttonStyle(.plain)
 
                     Button { audioPlayer.togglePlayPause() } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 64))
                     }
-                    .buttonStyle(InteractiveGlassButtonStyle())
+                    .buttonStyle(.plain)
 
                     Button { audioPlayer.playNext() } label: {
                         Image(systemName: "forward.fill")
                             .font(.title)
                     }
-                    .buttonStyle(InteractiveGlassButtonStyle())
+                    .buttonStyle(.plain)
                 }
                 .foregroundStyle(.primary)
                 .glassContainer()

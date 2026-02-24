@@ -5,6 +5,7 @@ struct SettingsView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject private var viewModel: SettingsViewModel
     @State private var showClearFavoritesAlert = false
+    @State private var newPrefix = ""
 
     var body: some View {
         NavigationStack {
@@ -105,6 +106,34 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
+                }
+
+                Section {
+                    ForEach(viewModel.settings.sortPrefixes, id: \.self) { prefix in
+                        Text(prefix)
+                    }
+                    .onDelete { indexSet in
+                        viewModel.settings.sortPrefixes.remove(atOffsets: indexSet)
+                        Task { await viewModel.saveSettings() }
+                    }
+                    HStack {
+                        TextField("New prefix...", text: $newPrefix)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        Button("Add") {
+                            let trimmed = newPrefix.trimmingCharacters(in: .whitespaces)
+                            guard !trimmed.isEmpty,
+                                  !viewModel.settings.sortPrefixes.contains(trimmed) else { return }
+                            viewModel.settings.sortPrefixes.append(trimmed)
+                            newPrefix = ""
+                            Task { await viewModel.saveSettings() }
+                        }
+                        .disabled(newPrefix.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                } header: {
+                    Text("Sort Prefixes")
+                } footer: {
+                    Text("Channel names starting with these prefixes will be sorted by the text after the prefix (e.g. \"Radio: Jazz\" sorts under J).")
                 }
 
                 Section("Data") {

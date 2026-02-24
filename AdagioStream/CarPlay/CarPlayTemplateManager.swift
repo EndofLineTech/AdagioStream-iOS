@@ -13,6 +13,7 @@ class CarPlayTemplateManager {
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
+    private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -21,6 +22,12 @@ class CarPlayTemplateManager {
     }
 
     func configure() {
+        Task {
+            let settings: AppSettings = await PersistenceService.shared.loadOrDefault(
+                from: Constants.StorageKeys.settings, default: .default
+            )
+            sortPrefixes = settings.sortPrefixes
+        }
         updateNowPlayingButtons()
         setRootTemplate()
 
@@ -186,8 +193,7 @@ class CarPlayTemplateManager {
     }
 
     private func sortableName(_ name: String) -> String {
-        // Strip common prefixes so "Radio: Classic Vinyl" sorts under "C"
-        for prefix in ["Radio: ", "Radio:", "TV: ", "TV:"] {
+        for prefix in sortPrefixes {
             if name.hasPrefix(prefix) {
                 return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
             }
