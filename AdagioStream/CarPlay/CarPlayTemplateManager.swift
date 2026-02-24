@@ -185,9 +185,19 @@ class CarPlayTemplateManager {
         }
     }
 
+    private func sortableName(_ name: String) -> String {
+        // Strip common prefixes so "Radio: Classic Vinyl" sorts under "C"
+        for prefix in ["Radio: ", "Radio:", "TV: ", "TV:"] {
+            if name.hasPrefix(prefix) {
+                return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return name
+    }
+
     private func pushChannelList(title: String, channels: [Channel]) {
         let grouped = Dictionary(grouping: channels) { channel -> String in
-            let first = channel.name.prefix(1).uppercased()
+            let first = sortableName(channel.name).prefix(1).uppercased()
             return first.first?.isLetter == true ? first : "#"
         }
         let sortedKeys = grouped.keys.sorted { a, b in
