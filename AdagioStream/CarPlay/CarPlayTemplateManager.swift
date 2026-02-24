@@ -207,8 +207,8 @@ class CarPlayTemplateManager {
             return first.first?.isLetter == true ? first : "#"
         }
         let sortedKeys = grouped.keys.sorted { a, b in
-            if a == "#" { return false }
-            if b == "#" { return true }
+            if a == "#" { return true }
+            if b == "#" { return false }
             return a < b
         }
 
