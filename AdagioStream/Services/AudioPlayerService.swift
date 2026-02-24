@@ -19,6 +19,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var stateTimer: Timer?
     private var currentArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
+    private var wasPlayingBeforeInterruption = false
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -39,6 +40,34 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             try session.setActive(true)
         } catch {
             self.error = "Failed to configure audio session: \(error.localizedDescription)"
+        }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    @objc nonisolated private func handleAudioInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        Task { @MainActor in
+            switch type {
+            case .began:
+                wasPlayingBeforeInterruption = isPlaying || isBuffering
+            case .ended:
+                if wasPlayingBeforeInterruption {
+                    wasPlayingBeforeInterruption = false
+                    try? AVAudioSession.sharedInstance().setActive(true)
+                    resume()
+                }
+            @unknown default:
+                break
+            }
         }
     }
 
