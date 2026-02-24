@@ -10,6 +10,7 @@ class CarPlayTemplateManager {
     let providerManager: ProviderManager
     private var cancellable: AnyCancellable?
     private var channelCancellable: AnyCancellable?
+    private var rootTemplate: CPListTemplate?
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -25,12 +26,7 @@ class CarPlayTemplateManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                // Only rebuild root when at root level to avoid popping
-                // the navigation stack (e.g. during a favorite toggle
-                // while Now Playing is shown)
-                if self.interfaceController.templates.count <= 1 {
-                    self.setRootTemplate()
-                }
+                self.updateRootSections()
                 self.updateNowPlayingButtons()
             }
 
@@ -68,7 +64,7 @@ class CarPlayTemplateManager {
         }
     }
 
-    private func setRootTemplate() {
+    private func buildRootSections() -> [CPListSection] {
         var items: [CPListItem] = []
 
         // Now Playing row at top if something is playing
@@ -115,9 +111,23 @@ class CarPlayTemplateManager {
             items.append(placeholder)
         }
 
-        let section = CPListSection(items: items)
-        let root = CPListTemplate(title: "Adagio Stream", sections: [section])
+        return [CPListSection(items: items)]
+    }
+
+    private func setRootTemplate() {
+        let sections = buildRootSections()
+        let root = CPListTemplate(title: "Adagio Stream", sections: sections)
+        rootTemplate = root
         interfaceController.setRootTemplate(root, animated: true, completion: nil)
+    }
+
+    private func updateRootSections() {
+        let sections = buildRootSections()
+        if let root = rootTemplate {
+            root.updateSections(sections)
+        } else {
+            setRootTemplate()
+        }
     }
 
     private func pushNowPlaying() {
