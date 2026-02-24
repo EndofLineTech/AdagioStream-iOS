@@ -186,17 +186,30 @@ class CarPlayTemplateManager {
     }
 
     private func pushChannelList(title: String, channels: [Channel]) {
-        let items = channels.map { channel in
-            let item = CPListItem(text: channel.name, detailText: nil)
-            item.handler = { [weak self] _, completion in
-                self?.playChannelAndShowNowPlaying(channel)
-                completion()
-            }
-            loadChannelIcon(for: channel, into: item)
-            return item
+        let grouped = Dictionary(grouping: channels) { channel -> String in
+            let first = channel.name.prefix(1).uppercased()
+            return first.first?.isLetter == true ? first : "#"
         }
-        let section = CPListSection(items: items)
-        let template = CPListTemplate(title: title, sections: [section])
+        let sortedKeys = grouped.keys.sorted { a, b in
+            if a == "#" { return false }
+            if b == "#" { return true }
+            return a < b
+        }
+
+        let sections = sortedKeys.map { letter in
+            let items = grouped[letter]!.map { channel in
+                let item = CPListItem(text: channel.name, detailText: nil)
+                item.handler = { [weak self] _, completion in
+                    self?.playChannelAndShowNowPlaying(channel)
+                    completion()
+                }
+                loadChannelIcon(for: channel, into: item)
+                return item
+            }
+            return CPListSection(items: items, header: letter, sectionIndexTitle: letter)
+        }
+
+        let template = CPListTemplate(title: title, sections: sections)
         interfaceController.pushTemplate(template, animated: true, completion: nil)
     }
 }
