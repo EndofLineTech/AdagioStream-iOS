@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RetryableAsyncImage: View {
     let url: URL
@@ -7,15 +8,20 @@ struct RetryableAsyncImage: View {
     let cornerRadius: CGFloat
 
     @State private var retryID = 0
+    @State private var loadedImage: UIImage?
+    @State private var backgroundColor: Color = .clear
+    @State private var hasFailed = false
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(backgroundColor)
+
+            if let uiImage = loadedImage {
+                Image(uiImage: uiImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-            case .failure:
+            } else if hasFailed {
                 placeholder
                     .overlay(alignment: .bottomTrailing) {
                         Image(systemName: "arrow.clockwise.circle.fill")
@@ -25,17 +31,98 @@ struct RetryableAsyncImage: View {
                             .padding(4)
                     }
                     .onTapGesture { retryID += 1 }
-            default:
+            } else {
                 placeholder
             }
         }
-        .id(retryID)
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .task(id: retryID) {
+            await loadImage()
+        }
     }
 
     private var placeholder: some View {
         Image(systemName: "radio")
             .foregroundStyle(.secondary)
+    }
+
+    private func loadImage() async {
+        loadedImage = nil
+        hasFailed = false
+        backgroundColor = .clear
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let uiImage = UIImage(data: data) else {
+                hasFailed = true
+                return
+            }
+            loadedImage = uiImage
+            backgroundColor = averageEdgeColor(of: uiImage)
+        } catch {
+            hasFailed = true
+        }
+    }
+
+    private func averageEdgeColor(of image: UIImage) -> Color {
+        guard let cgImage = image.cgImage else { return .clear }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0 else { return .clear }
+
+        let bytesPerPixel = 4
+        let bytesPerRow = bytesPerPixel * width
+        var pixelData = [UInt8](repeating: 0, count: bytesPerRow * height)
+
+        guard let context = CGContext(
+            data: &pixelData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return .clear }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // Sample pixels along the edges
+        var totalR: Double = 0
+        var totalG: Double = 0
+        var totalB: Double = 0
+        var count: Double = 0
+
+        func sample(_ x: Int, _ y: Int) {
+            let offset = (y * bytesPerRow) + (x * bytesPerPixel)
+            let a = Double(pixelData[offset + 3]) / 255.0
+            guard a > 0.1 else { return } // skip transparent pixels
+            totalR += Double(pixelData[offset]) / 255.0
+            totalG += Double(pixelData[offset + 1]) / 255.0
+            totalB += Double(pixelData[offset + 2]) / 255.0
+            count += 1
+        }
+
+        let step = max(1, max(width, height) / 20)
+
+        // Top and bottom edges
+        for x in stride(from: 0, to: width, by: step) {
+            sample(x, 0)
+            sample(x, height - 1)
+        }
+        // Left and right edges
+        for y in stride(from: 0, to: height, by: step) {
+            sample(0, y)
+            sample(width - 1, y)
+        }
+
+        guard count > 0 else { return .clear }
+
+        let r = totalR / count
+        let g = totalG / count
+        let b = totalB / count
+
+        return Color(red: r, green: g, blue: b)
     }
 }
