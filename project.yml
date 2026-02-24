@@ -12,9 +12,9 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
 
 packages:
-  VLCKitSPM:
-    url: https://github.com/tylerjonesio/vlckit-spm
-    from: "3.5.1"
+  MPVKit:
+    url: https://github.com/mpvkit/MPVKit.git
+    from: "0.41.0"
 
 targets:
   AdagioStream:
@@ -23,7 +23,8 @@ targets:
     sources:
       - AdagioStream
     dependencies:
-      - package: VLCKitSPM
+      - package: MPVKit
+        product: MPVKit
     info:
       path: AdagioStream/Info.plist
       properties:

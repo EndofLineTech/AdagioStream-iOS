@@ -1,13 +1,13 @@
 {
-  "originHash" : "294b5443f2fd75dbed7a00528cc25cb27baf812b2346df53611fbd2af4f2803d",
+  "originHash" : "ef00e3d8fbb2d30a5feeffd901afe269da81ef29cbd621b41e76ca47bb5e65af",
   "pins" : [
     {
-      "identity" : "vlckit-spm",
+      "identity" : "mpvkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tylerjonesio/vlckit-spm",
+      "location" : "https://github.com/mpvkit/MPVKit.git",
       "state" : {
-        "revision" : "e932bbd488872fdb74f6654d28c2f291eae03daf",
-        "version" : "3.6.0"
+        "revision" : "613c0ccc3acf70e136aaff880a9b5fe8fdfaf5b8",
+        "version" : "0.41.0"
       }
     }
   ],

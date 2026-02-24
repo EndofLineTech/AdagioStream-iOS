@@ -2,10 +2,9 @@ import AVFoundation
 import Combine
 import MediaPlayer
 import SwiftUI
-import VLCKitSPM
 
 @MainActor
-final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelegate {
+final class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
 
     @Published var currentChannel: Channel?
@@ -15,20 +14,30 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var streamBitrateKbps: Double = 0
     @Published var statusText: String = ""
 
-    private let mediaPlayer = VLCMediaPlayer()
-    private var stateTimer: Timer?
+    private enum Backend {
+        case none
+        case avPlayer
+        case mpv
+    }
+
+    private let avPlayer = AVPlayer()
+    private let mpvPlayer = MPVAudioPlayer()
+    private var activeBackend: Backend = .none
+    private var cancellables = Set<AnyCancellable>()
     private var currentArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
     private var wasPlayingBeforeInterruption = false
+    private var isActiveSession = false
+    private var bitrateTimer: Timer?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
 
-    private override init() {
-        super.init()
-        mediaPlayer.delegate = self
+    private init() {
         configureAudioSession()
         configureRemoteCommands()
+        observeAVPlayer()
+        configureMPVCallbacks()
     }
 
     // MARK: - Audio Session
@@ -71,11 +80,134 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
     }
 
+    // MARK: - Backend Selection
+
+    /// Returns true if the URL should use AVPlayer (HLS), false for MPV (raw TS, etc.)
+    private func shouldUseAVPlayer(for url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        switch ext {
+        case "m3u8", "m3u":
+            return true
+        case "ts":
+            return false
+        default:
+            // For unknown extensions, try AVPlayer first (fallback handled on error)
+            return true
+        }
+    }
+
+    // MARK: - AVPlayer Observation
+
+    private func observeAVPlayer() {
+        avPlayer.publisher(for: \.timeControlStatus)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self, self.activeBackend == .avPlayer, self.isActiveSession else { return }
+                switch status {
+                case .playing:
+                    self.isPlaying = true
+                    self.isBuffering = false
+                    self.error = nil
+                case .waitingToPlayAtSpecifiedRate:
+                    self.isBuffering = true
+                case .paused:
+                    break
+                @unknown default:
+                    break
+                }
+                self.updateStreamStats()
+                self.updateNowPlayingInfo()
+            }
+            .store(in: &cancellables)
+
+        avPlayer.publisher(for: \.currentItem?.status)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self, self.activeBackend == .avPlayer else { return }
+                switch status {
+                case .failed:
+                    let itemError = self.avPlayer.currentItem?.error as NSError?
+                    // If AVPlayer failed and this was an unknown extension, fall back to MPV
+                    if let channel = self.currentChannel {
+                        let ext = channel.streamURL.pathExtension.lowercased()
+                        if ext != "m3u8" && ext != "m3u" {
+                            self.playWithMPV(channel: channel)
+                            return
+                        }
+                    }
+                    self.isPlaying = false
+                    self.isBuffering = false
+                    self.error = itemError?.localizedDescription ?? "Stream playback error"
+                    self.updateNowPlayingInfo()
+                case .readyToPlay:
+                    self.error = nil
+                default:
+                    break
+                }
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .AVPlayerItemFailedToPlayToEndTime)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      self.activeBackend == .avPlayer,
+                      let item = notification.object as? AVPlayerItem,
+                      item == self.avPlayer.currentItem else { return }
+                self.isPlaying = false
+                self.isBuffering = false
+                self.error = "Stream playback failed"
+                self.updateNowPlayingInfo()
+            }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - MPV Callbacks
+
+    private func configureMPVCallbacks() {
+        mpvPlayer.onStateChange = { [weak self] state in
+            Task { @MainActor [weak self] in
+                guard let self, self.activeBackend == .mpv else { return }
+                switch state {
+                case .idle:
+                    self.isPlaying = false
+                    self.isBuffering = false
+                case .loading:
+                    self.isBuffering = true
+                    self.isPlaying = false
+                case .playing:
+                    self.isPlaying = true
+                    self.isBuffering = false
+                    self.error = nil
+                case .paused:
+                    self.isPlaying = false
+                    self.isBuffering = false
+                case .error(let msg):
+                    self.isPlaying = false
+                    self.isBuffering = false
+                    self.error = msg
+                }
+                self.updateStreamStats()
+                self.updateNowPlayingInfo()
+            }
+        }
+
+        mpvPlayer.onBitrateUpdate = { [weak self] kbps in
+            Task { @MainActor [weak self] in
+                guard let self, self.activeBackend == .mpv else { return }
+                if kbps > self.streamBitrateKbps {
+                    self.streamBitrateKbps = kbps
+                }
+                self.updateStreamStats()
+            }
+        }
+    }
+
     // MARK: - Playback
 
     func play(channel: Channel) {
-        mediaPlayer.stop()
-        stateTimer?.invalidate()
+        // Stop any current playback from either backend
+        stopCurrentBackend()
 
         // Re-activate audio session
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -92,31 +224,86 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             fetchArtwork(for: channel)
         }
 
-        let media = VLCMedia(url: channel.streamURL)
-        media.addOptions([
-            "network-caching": Int(bufferDuration * 1000),
-            "live-caching": Int(bufferDuration * 1000),
-            "http-user-agent": "AdagioStream/1.0",
-        ])
+        if shouldUseAVPlayer(for: channel.streamURL) {
+            playWithAVPlayer(channel: channel)
+        } else {
+            playWithMPV(channel: channel)
+        }
+    }
 
-        mediaPlayer.media = media
-        mediaPlayer.audio?.volume = 100
-        mediaPlayer.play()
+    private func playWithAVPlayer(channel: Channel) {
+        stopCurrentBackend()
+        activeBackend = .avPlayer
+
+        let asset = AVURLAsset(url: channel.streamURL)
+        let item = AVPlayerItem(asset: asset)
+        item.preferredForwardBufferDuration = bufferDuration
+
+        avPlayer.replaceCurrentItem(with: item)
+        avPlayer.play()
+        isActiveSession = true
         updateNowPlayingInfo()
 
-        // Poll state as a reliable fallback since VLC delegate
-        // fires on a background thread that can miss MainActor updates
-        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        bitrateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.syncState()
+                self?.updateStreamStats()
+                self?.updateNowPlayingInfo()
             }
         }
     }
 
+    private func playWithMPV(channel: Channel) {
+        stopCurrentBackend()
+        activeBackend = .mpv
+
+        // Reset state for MPV playback
+        isBuffering = true
+        isPlaying = false
+        error = nil
+
+        mpvPlayer.updateCacheDuration(bufferDuration)
+        mpvPlayer.play(url: channel.streamURL)
+        isActiveSession = true
+        updateNowPlayingInfo()
+
+        bitrateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateStreamStats()
+                self?.updateNowPlayingInfo()
+            }
+        }
+    }
+
+    private func stopCurrentBackend() {
+        bitrateTimer?.invalidate()
+        bitrateTimer = nil
+
+        switch activeBackend {
+        case .avPlayer:
+            avPlayer.pause()
+            avPlayer.replaceCurrentItem(with: nil)
+        case .mpv:
+            mpvPlayer.stop()
+        case .none:
+            break
+        }
+        activeBackend = .none
+    }
+
     func pause() {
-        stateTimer?.invalidate()
-        stateTimer = nil
-        mediaPlayer.stop()
+        isActiveSession = false
+        bitrateTimer?.invalidate()
+        bitrateTimer = nil
+
+        switch activeBackend {
+        case .avPlayer:
+            avPlayer.pause()
+        case .mpv:
+            mpvPlayer.pause()
+        case .none:
+            break
+        }
+
         isPlaying = false
         isBuffering = false
         updateNowPlayingInfo()
@@ -128,7 +315,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     func togglePlayPause() {
-        if isPlaying || isBuffering {
+        if isActiveSession {
             pause()
         } else {
             resume()
@@ -136,9 +323,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     func stop() {
-        stateTimer?.invalidate()
-        stateTimer = nil
-        mediaPlayer.stop()
+        isActiveSession = false
+        stopCurrentBackend()
         lastPlayedChannel = currentChannel
         currentChannel = nil
         isPlaying = false
@@ -148,82 +334,25 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     func playNext() {
-        guard let current = currentChannel,
-              let index = channels.firstIndex(where: { $0.id == current.id }),
-              index + 1 < channels.count else { return }
-        play(channel: channels[index + 1])
+        let list = channels.isEmpty ? ProviderManager.shared.channels : channels
+        guard let current = currentChannel ?? lastPlayedChannel,
+              let index = list.firstIndex(where: { $0.id == current.id }),
+              index + 1 < list.count else { return }
+        channels = list
+        play(channel: list[index + 1])
     }
 
     func playPrevious() {
-        guard let current = currentChannel,
-              let index = channels.firstIndex(where: { $0.id == current.id }),
+        let list = channels.isEmpty ? ProviderManager.shared.channels : channels
+        guard let current = currentChannel ?? lastPlayedChannel,
+              let index = list.firstIndex(where: { $0.id == current.id }),
               index > 0 else { return }
-        play(channel: channels[index - 1])
+        channels = list
+        play(channel: list[index - 1])
     }
 
     func updateBufferDuration(_ duration: TimeInterval) {
         bufferDuration = duration
-    }
-
-    // MARK: - VLCMediaPlayerDelegate
-
-    nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
-        Task { @MainActor in
-            self.syncState()
-        }
-    }
-
-    // MARK: - State Sync
-
-    private func syncState() {
-        let vlcIsPlaying = mediaPlayer.isPlaying
-        let vlcState = mediaPlayer.state
-
-        // VLC reports .buffering state and isPlaying=false continuously
-        // for live streams even while audio is actively playing.
-        // Use demux bitrate as a reliable indicator of actual playback.
-        let hasDataFlow: Bool = {
-            guard let media = mediaPlayer.media else { return false }
-            let stats = media.statistics
-            return stats.demuxBitrate > 0 || stats.inputBitrate > 0
-        }()
-
-        if vlcIsPlaying || vlcState == .playing {
-            isPlaying = true
-            isBuffering = false
-            error = nil
-        } else if hasDataFlow && (vlcState == .buffering || vlcState == .opening) {
-            // VLC says buffering but data is flowing — audio is actually playing
-            isPlaying = true
-            isBuffering = false
-            error = nil
-        } else {
-            switch vlcState {
-            case .buffering, .opening:
-                isBuffering = true
-            case .paused:
-                isPlaying = false
-                isBuffering = false
-            case .stopped:
-                if currentChannel != nil {
-                    isPlaying = false
-                    isBuffering = false
-                }
-            case .error:
-                isPlaying = false
-                isBuffering = false
-                error = "Stream playback error"
-            case .ended:
-                isPlaying = false
-                isBuffering = false
-            default:
-                break
-            }
-        }
-
-        // Update stream stats
-        updateStreamStats()
-        updateNowPlayingInfo()
     }
 
     // MARK: - Stream Stats
@@ -235,20 +364,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             return
         }
 
-        if let media = mediaPlayer.media {
-            let stats = media.statistics
-            // demuxBitrate reflects the actual media bitrate being decoded,
-            // while inputBitrate fluctuates as the network buffer fills/drains
-            let demux = Double(stats.demuxBitrate)
-            let input = Double(stats.inputBitrate)
-            let currentKbps = max(demux, input) * 1000
-
-            if currentKbps > 1 {
-                // Keep the highest observed bitrate as the stable value
-                // since instantaneous rates dip when buffers are full
-                if currentKbps > streamBitrateKbps {
-                    streamBitrateKbps = currentKbps
-                }
+        // AVPlayer bitrate from access log
+        if activeBackend == .avPlayer,
+           let event = avPlayer.currentItem?.accessLog()?.events.last {
+            let currentKbps = event.observedBitrate / 1000
+            if currentKbps > 1, currentKbps > streamBitrateKbps {
+                streamBitrateKbps = currentKbps
             }
         }
 
@@ -345,7 +466,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             return .success
         }
 
-        // Disable seek/skip controls — not applicable for live streams
         commandCenter.skipForwardCommand.isEnabled = false
         commandCenter.skipBackwardCommand.isEnabled = false
         commandCenter.seekForwardCommand.isEnabled = false
