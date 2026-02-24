@@ -9,6 +9,7 @@ class CarPlayTemplateManager {
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
     private var cancellable: AnyCancellable?
+    private var channelCancellable: AnyCancellable?
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -17,30 +18,46 @@ class CarPlayTemplateManager {
     }
 
     func configure() {
-        configureNowPlaying()
+        updateNowPlayingButtons()
         setRootTemplate()
 
         cancellable = providerManager.$channels
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.setRootTemplate()
+                self?.updateNowPlayingButtons()
+            }
+
+        channelCancellable = audioPlayer.$currentChannel
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
             }
     }
 
-    private func configureNowPlaying() {
+    private func updateNowPlayingButtons() {
         let nowPlaying = CPNowPlayingTemplate.shared
+        let buttonSize = CGSize(width: 44, height: 44)
 
-        let chDownImage = renderSFSymbol("minus.circle.fill", size: CGSize(width: 44, height: 44))
-        let chUpImage = renderSFSymbol("plus.circle.fill", size: CGSize(width: 44, height: 44))
-
-        let chDown = CPNowPlayingImageButton(image: chDownImage) { [weak self] _ in
+        let chDown = CPNowPlayingImageButton(image: renderSFSymbol("minus.circle.fill", size: buttonSize)) { [weak self] _ in
             Task { @MainActor in self?.audioPlayer.playPrevious() }
         }
-        let chUp = CPNowPlayingImageButton(image: chUpImage) { [weak self] _ in
+        let chUp = CPNowPlayingImageButton(image: renderSFSymbol("plus.circle.fill", size: buttonSize)) { [weak self] _ in
             Task { @MainActor in self?.audioPlayer.playNext() }
         }
 
-        nowPlaying.updateNowPlayingButtons([chDown, chUp])
+        let isFavorite = providerManager.channels
+            .first(where: { $0.id == audioPlayer.currentChannel?.id })?.isFavorite ?? false
+        let favImage = renderSFSymbol(isFavorite ? "star.fill" : "star", size: buttonSize)
+        let favButton = CPNowPlayingImageButton(image: favImage) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, let channel = self.audioPlayer.currentChannel else { return }
+                await self.providerManager.toggleFavorite(channel)
+                self.updateNowPlayingButtons()
+            }
+        }
+
+        nowPlaying.updateNowPlayingButtons([chDown, favButton, chUp])
     }
 
     private func renderSFSymbol(_ name: String, size: CGSize) -> UIImage {
