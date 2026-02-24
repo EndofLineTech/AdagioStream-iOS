@@ -16,6 +16,10 @@ final class SettingsViewModel: ObservableObject {
 
     func loadSettings() async {
         settings = await persistence.loadOrDefault(from: Constants.StorageKeys.settings, default: .default)
+        if settings.bufferDuration > 15 {
+            settings.bufferDuration = 15
+            try? await persistence.save(settings, to: Constants.StorageKeys.settings)
+        }
         audioPlayer.updateBufferDuration(settings.bufferDuration)
     }
 

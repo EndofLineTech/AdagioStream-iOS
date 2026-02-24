@@ -39,7 +39,21 @@ struct SettingsView: View {
                     Text("System follows your device's text size setting.")
                 }
 
-                Section {
+                Section("Playback") {
+                    HStack {
+                        Text("Stream Quality")
+                        Spacer()
+                        if audioPlayer.isPlaying, audioPlayer.streamBitrateKbps > 1 {
+                            let formatted = audioPlayer.streamBitrateKbps >= 1000
+                                ? String(format: "%.1f Mbps", audioPlayer.streamBitrateKbps / 1000)
+                                : "\(Int(audioPlayer.streamBitrateKbps)) kbps"
+                            Text(formatted)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Not playing")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Buffer Duration")
@@ -50,7 +64,7 @@ struct SettingsView: View {
                         }
                         Slider(
                             value: $viewModel.settings.bufferDuration,
-                            in: 2...60,
+                            in: 2...15,
                             step: 1
                         ) {
                             Text("Buffer Duration")
@@ -61,15 +75,6 @@ struct SettingsView: View {
                         Text("Higher values improve stability on slow connections but increase initial load time.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Playback")
-                } footer: {
-                    if audioPlayer.isPlaying, audioPlayer.streamBitrateKbps > 1 {
-                        let formatted = audioPlayer.streamBitrateKbps >= 1000
-                            ? String(format: "%.1f Mbps", audioPlayer.streamBitrateKbps / 1000)
-                            : "\(Int(audioPlayer.streamBitrateKbps)) kbps"
-                        Text("Current stream: \(formatted)")
                     }
                 }
 
