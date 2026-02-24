@@ -100,7 +100,7 @@ class CarPlayTemplateManager {
         }
 
         let section = CPListSection(items: items)
-        let root = CPListTemplate(title: "MobileMusic", sections: [section])
+        let root = CPListTemplate(title: "Adagio Stream", sections: [section])
         interfaceController.setRootTemplate(root, animated: true, completion: nil)
     }
 

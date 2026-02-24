@@ -5,7 +5,7 @@ import SwiftUI
 import VLCKitSPM
 
 @MainActor
-final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCMediaPlayerDelegate {
+final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelegate {
     static let shared = AudioPlayerService()
 
     @Published var currentChannel: Channel?
@@ -67,7 +67,7 @@ final class AudioPlayerService: NSObject, ObservableObject, @preconcurrency VLCM
         media.addOptions([
             "network-caching": Int(bufferDuration * 1000),
             "live-caching": Int(bufferDuration * 1000),
-            "http-user-agent": "MobileMusic/1.0",
+            "http-user-agent": "AdagioStream/1.0",
         ])
 
         mediaPlayer.media = media

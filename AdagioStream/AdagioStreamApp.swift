@@ -18,7 +18,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 @main
-struct MobileMusicApp: App {
+struct AdagioStreamApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @StateObject private var providerManager = ProviderManager.shared

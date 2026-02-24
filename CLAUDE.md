@@ -17,8 +17,8 @@ bd sync               # Sync with git
 After a successful build, always install and launch in the simulator to verify:
 
 ```bash
-xcodebuild -scheme MobileMusic -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
-xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; xcrun simctl install "iPhone 17 Pro" ~/Library/Developer/Xcode/DerivedData/MobileMusic-*/Build/Products/Debug-iphonesimulator/MobileMusic.app && xcrun simctl launch "iPhone 17 Pro" com.mobilemusic.app
+xcodebuild -scheme AdagioStream -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; xcrun simctl install "iPhone 17 Pro" ~/Library/Developer/Xcode/DerivedData/AdagioStream-*/Build/Products/Debug-iphonesimulator/AdagioStream.app && xcrun simctl launch "iPhone 17 Pro" com.adagiostream.app
 ```
 
 ## Landing the Plane (Session Completion)

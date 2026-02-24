@@ -1,7 +1,7 @@
 import Foundation
 
 enum Constants {
-    static let appName = "MobileMusic"
+    static let appName = "Adagio Stream"
     static let defaultBufferDuration: TimeInterval = 10.0
 
     enum StorageKeys {

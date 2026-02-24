@@ -1,6 +1,6 @@
-name: MobileMusic
+name: AdagioStream
 options:
-  bundleIdPrefix: com.mobilemusic
+  bundleIdPrefix: com.adagiostream
   deploymentTarget:
     iOS: "16.0"
   xcodeVersion: "15.0"
@@ -17,18 +17,18 @@ packages:
     from: "3.5.1"
 
 targets:
-  MobileMusic:
+  AdagioStream:
     type: application
     platform: iOS
     sources:
-      - MobileMusic
+      - AdagioStream
     dependencies:
       - package: VLCKitSPM
     info:
-      path: MobileMusic/Info.plist
+      path: AdagioStream/Info.plist
       properties:
         UIBackgroundModes: [audio]
-        CFBundleDisplayName: MobileMusic
+        CFBundleDisplayName: Adagio Stream
         UILaunchScreen:
           UIColorName: LaunchBackground
           UIImageName: ""
@@ -45,11 +45,12 @@ targets:
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
     settings:
       base:
-        CODE_SIGN_ENTITLEMENTS: MobileMusic/MobileMusic.entitlements
-        PRODUCT_BUNDLE_IDENTIFIER: com.mobilemusic.app
+        CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_UIRequiresFullScreen: true
     entitlements:
-      path: MobileMusic/MobileMusic.entitlements
+      path: AdagioStream/AdagioStream.entitlements
       properties:
         com.apple.developer.carplay-audio: true

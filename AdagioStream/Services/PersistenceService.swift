@@ -8,6 +8,14 @@ actor PersistenceService {
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         baseDirectory = appSupport.appendingPathComponent(Constants.appName, isDirectory: true)
+
+        // One-time migration from old "MobileMusic" directory
+        let oldDirectory = appSupport.appendingPathComponent("MobileMusic", isDirectory: true)
+        if FileManager.default.fileExists(atPath: oldDirectory.path),
+           !FileManager.default.fileExists(atPath: baseDirectory.path) {
+            try? FileManager.default.moveItem(at: oldDirectory, to: baseDirectory)
+        }
+
         try? FileManager.default.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
     }
 

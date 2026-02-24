@@ -1,4 +1,4 @@
-# MobileMusic — iOS Audio IPTV Player
+# Adagio Stream — iOS Audio IPTV Player
 
 ## Context
 Build a greenfield iOS app that connects to IPTV providers (via M3U/EPG or Xtream Codes API) and plays channels as **audio only**. The app targets iOS 16+, uses SwiftUI, and supports CarPlay, background audio, configurable buffering, channel search, and favorites.
@@ -8,10 +8,10 @@ Build a greenfield iOS app that connects to IPTV providers (via M3U/EPG or Xtrea
 ## Project Structure
 
 ```
-MobileMusic/
-├── MobileMusicApp.swift                  # App entry point, scene configuration
+AdagioStream/
+├── AdagioStreamApp.swift                 # App entry point, scene configuration
 ├── Info.plist                            # Background modes, CarPlay entitlement
-├── MobileMusic.entitlements
+├── AdagioStream.entitlements
 │
 ├── Models/
 │   ├── Channel.swift                     # Channel data model (Codable, Identifiable)
@@ -137,7 +137,7 @@ struct AppSettings: Codable {
 - KVO on `AVPlayerItem.status` and `AVPlayer.timeControlStatus` for state tracking
 
 ### Persistence Service
-- Stores JSON files in `Application Support/MobileMusic/`
+- Stores JSON files in `Application Support/Adagio Stream/`
 - Files: `providers.json`, `favorites.json`, `settings.json`
 - Generic `save<T: Codable>(_ value: T, to filename: String)` / `load<T>(from:) -> T`
 - Thread-safe with actor isolation
