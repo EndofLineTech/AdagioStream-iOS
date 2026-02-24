@@ -24,8 +24,14 @@ class CarPlayTemplateManager {
         cancellable = providerManager.$channels
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.setRootTemplate()
-                self?.updateNowPlayingButtons()
+                guard let self else { return }
+                // Only rebuild root when at root level to avoid popping
+                // the navigation stack (e.g. during a favorite toggle
+                // while Now Playing is shown)
+                if self.interfaceController.templates.count <= 1 {
+                    self.setRootTemplate()
+                }
+                self.updateNowPlayingButtons()
             }
 
         channelCancellable = audioPlayer.$currentChannel
