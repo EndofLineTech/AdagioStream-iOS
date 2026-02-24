@@ -29,6 +29,7 @@ final class AudioPlayerService: ObservableObject {
     private var wasPlayingBeforeInterruption = false
     private var isActiveSession = false
     private var bitrateTimer: Timer?
+    private var lastToggleTime: Date = .distantPast
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -167,14 +168,13 @@ final class AudioPlayerService: ObservableObject {
     private func configureMPVCallbacks() {
         mpvPlayer.onStateChange = { [weak self] state in
             Task { @MainActor [weak self] in
-                guard let self, self.activeBackend == .mpv else { return }
+                guard let self, self.activeBackend == .mpv, self.isActiveSession else { return }
                 switch state {
                 case .idle:
                     self.isPlaying = false
                     self.isBuffering = false
                 case .loading:
                     self.isBuffering = true
-                    self.isPlaying = false
                 case .playing:
                     self.isPlaying = true
                     self.isBuffering = false
@@ -299,7 +299,8 @@ final class AudioPlayerService: ObservableObject {
         case .avPlayer:
             avPlayer.pause()
         case .mpv:
-            mpvPlayer.pause()
+            // Stop fully for live streams — resume creates a fresh stream
+            mpvPlayer.stop()
         case .none:
             break
         }
@@ -315,6 +316,10 @@ final class AudioPlayerService: ObservableObject {
     }
 
     func togglePlayPause() {
+        let now = Date()
+        guard now.timeIntervalSince(lastToggleTime) > 0.5 else { return }
+        lastToggleTime = now
+
         if isActiveSession {
             pause()
         } else {
