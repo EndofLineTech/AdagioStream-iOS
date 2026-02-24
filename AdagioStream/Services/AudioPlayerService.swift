@@ -403,7 +403,7 @@ final class AudioPlayerService: ObservableObject {
             MPMediaItemPropertyTitle: channel.name,
             MPMediaItemPropertyArtist: channel.group,
             MPNowPlayingInfoPropertyIsLiveStream: true,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyPlaybackRate: (isPlaying || isBuffering) ? 1.0 : 0.0,
         ]
 
         if let artwork = currentArtwork {

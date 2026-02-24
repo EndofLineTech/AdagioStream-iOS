@@ -153,7 +153,14 @@ class CarPlayTemplateManager {
 
     private func pushNowPlaying() {
         let nowPlaying = CPNowPlayingTemplate.shared
-        interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
+        if interfaceController.topTemplate is CPNowPlayingTemplate {
+            return
+        }
+        if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
+            interfaceController.pop(to: nowPlaying, animated: true, completion: nil)
+        } else {
+            interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
+        }
     }
 
     private func playChannelAndShowNowPlaying(_ channel: Channel) {
