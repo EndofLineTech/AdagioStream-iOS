@@ -20,5 +20,6 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
                                   didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         self.interfaceController = nil
         self.templateManager = nil
+        AudioPlayerService.shared.stop()
     }
 }
