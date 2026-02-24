@@ -10,6 +10,8 @@ final class ProviderManager: ObservableObject {
     @Published var epgData: [String: [EPGEntry]] = [:]
     @Published var isLoading = false
     @Published var error: String?
+    @Published var collapsedGroups: Set<String> = []
+    private var hasInitializedCollapsedGroups = false
 
     private let persistence = PersistenceService.shared
 
@@ -77,6 +79,11 @@ final class ProviderManager: ObservableObject {
             var c = channel
             c.isFavorite = favoriteIDs.contains(c.id)
             return c
+        }
+
+        if !hasInitializedCollapsedGroups && !channels.isEmpty {
+            collapsedGroups = Set(channels.map(\.group))
+            hasInitializedCollapsedGroups = true
         }
 
         isLoading = false

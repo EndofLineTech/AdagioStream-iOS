@@ -4,8 +4,6 @@ struct ChannelListView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @State private var searchText = ""
-    @State private var collapsedGroups: Set<String> = []
-    @State private var hasInitializedGroups = false
 
     var body: some View {
         NavigationStack {
@@ -54,12 +52,6 @@ struct ChannelListView: View {
                     await providerManager.loadChannels()
                 }
             }
-            .onChange(of: providerManager.channels) { _ in
-                if !hasInitializedGroups && !providerManager.channels.isEmpty {
-                    collapsedGroups = Set(providerManager.channels.map(\.group))
-                    hasInitializedGroups = true
-                }
-            }
         }
     }
 
@@ -85,7 +77,7 @@ struct ChannelListView: View {
 
             ForEach(groups) { group in
                 Section {
-                    if !collapsedGroups.contains(group.name) {
+                    if !providerManager.collapsedGroups.contains(group.name) {
                         ForEach(group.channels) { channel in
                             ChannelRowView(channel: channel) {
                                 audioPlayer.channels = providerManager.channels
@@ -98,10 +90,10 @@ struct ChannelListView: View {
                 } header: {
                     Button {
                         withAnimation {
-                            if collapsedGroups.contains(group.name) {
-                                collapsedGroups.remove(group.name)
+                            if providerManager.collapsedGroups.contains(group.name) {
+                                providerManager.collapsedGroups.remove(group.name)
                             } else {
-                                collapsedGroups.insert(group.name)
+                                providerManager.collapsedGroups.insert(group.name)
                             }
                         }
                     } label: {
@@ -114,7 +106,7 @@ struct ChannelListView: View {
                             Text("\(group.count)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Image(systemName: collapsedGroups.contains(group.name) ? "chevron.right" : "chevron.down")
+                            Image(systemName: providerManager.collapsedGroups.contains(group.name) ? "chevron.right" : "chevron.down")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
