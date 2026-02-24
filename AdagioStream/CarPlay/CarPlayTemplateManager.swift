@@ -39,13 +39,6 @@ class CarPlayTemplateManager {
         let nowPlaying = CPNowPlayingTemplate.shared
         let buttonSize = CGSize(width: 44, height: 44)
 
-        let chDown = CPNowPlayingImageButton(image: renderSFSymbol("minus.circle.fill", size: buttonSize)) { [weak self] _ in
-            Task { @MainActor in self?.audioPlayer.playPrevious() }
-        }
-        let chUp = CPNowPlayingImageButton(image: renderSFSymbol("plus.circle.fill", size: buttonSize)) { [weak self] _ in
-            Task { @MainActor in self?.audioPlayer.playNext() }
-        }
-
         let isFavorite = providerManager.channels
             .first(where: { $0.id == audioPlayer.currentChannel?.id })?.isFavorite ?? false
         let favImage = renderSFSymbol(isFavorite ? "star.fill" : "star", size: buttonSize)
@@ -57,7 +50,7 @@ class CarPlayTemplateManager {
             }
         }
 
-        nowPlaying.updateNowPlayingButtons([chDown, favButton, chUp])
+        nowPlaying.updateNowPlayingButtons([favButton])
     }
 
     private func renderSFSymbol(_ name: String, size: CGSize) -> UIImage {

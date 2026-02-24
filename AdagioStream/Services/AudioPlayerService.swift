@@ -344,5 +344,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             Task { @MainActor in self?.playPrevious() }
             return .success
         }
+
+        // Disable seek/skip controls — not applicable for live streams
+        commandCenter.skipForwardCommand.isEnabled = false
+        commandCenter.skipBackwardCommand.isEnabled = false
+        commandCenter.seekForwardCommand.isEnabled = false
+        commandCenter.seekBackwardCommand.isEnabled = false
+        commandCenter.changePlaybackPositionCommand.isEnabled = false
     }
 }
