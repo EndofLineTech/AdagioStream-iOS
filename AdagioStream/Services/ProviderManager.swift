@@ -93,8 +93,9 @@ final class ProviderManager: ObservableObject {
             return channels
 
         case .xtreamCodes(let host, let username, let password):
-            let api = XtreamCodesAPI(host: host, username: username, password: password)
-            _ = try await api.authenticate()
+            var api = XtreamCodesAPI(host: host, username: username, password: password)
+            let authResponse = try await api.authenticate()
+            api.applyAuthFormats(authResponse)
             let categories = try await api.getLiveCategories()
             let streams = try await api.getLiveStreams()
             return api.convertToChannels(streams: streams, categories: categories)

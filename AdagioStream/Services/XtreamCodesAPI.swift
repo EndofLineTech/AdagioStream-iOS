@@ -36,6 +36,12 @@ struct XtreamCodesAPI {
             let username: String?
             let status: String?
             let auth: Int?
+            let allowedOutputFormats: [String]?
+
+            enum CodingKeys: String, CodingKey {
+                case username, status, auth
+                case allowedOutputFormats = "allowed_output_formats"
+            }
         }
 
         struct ServerInfo: Codable {
@@ -133,7 +139,16 @@ struct XtreamCodesAPI {
         return response.epgListings ?? []
     }
 
-    func streamURL(for streamID: Int, extension ext: String = Constants.XtreamCodes.defaultStreamExtension) -> URL? {
+    var streamExtension: String = Constants.XtreamCodes.defaultStreamExtension
+
+    mutating func applyAuthFormats(_ response: AuthResponse) {
+        if let formats = response.userInfo?.allowedOutputFormats, let first = formats.first {
+            streamExtension = first
+        }
+    }
+
+    func streamURL(for streamID: Int, extension ext: String? = nil) -> URL? {
+        let ext = ext ?? streamExtension
         var components = URLComponents(url: host, resolvingAgainstBaseURL: false)
         components?.path = "\(Constants.XtreamCodes.livePath)/\(username)/\(password)/\(streamID).\(ext)"
         return components?.url

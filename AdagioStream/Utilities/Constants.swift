@@ -13,6 +13,6 @@ enum Constants {
     enum XtreamCodes {
         static let apiPath = "/player_api.php"
         static let livePath = "/live"
-        static let defaultStreamExtension = "m3u8"
+        static let defaultStreamExtension = "ts"
     }
 }
