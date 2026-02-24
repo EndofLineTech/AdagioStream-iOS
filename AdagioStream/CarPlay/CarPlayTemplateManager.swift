@@ -11,6 +11,8 @@ class CarPlayTemplateManager {
     private var cancellable: AnyCancellable?
     private var channelCancellable: AnyCancellable?
     private var rootTemplate: CPListTemplate?
+    private var favoritesItem: CPListItem?
+    private var hadFavorites = false
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -26,7 +28,15 @@ class CarPlayTemplateManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                self.updateRootSections()
+                let hasFavorites = !self.providerManager.favoriteChannels.isEmpty
+                if hasFavorites != self.hadFavorites {
+                    // Favorites row added or removed — structural change
+                    self.updateRootSections()
+                } else if let item = self.favoritesItem, hasFavorites {
+                    // Just update the count in place without resetting scroll
+                    let count = self.providerManager.favoriteChannels.count
+                    item.setDetailText("\(count) channels")
+                }
                 self.updateNowPlayingButtons()
             }
 
@@ -79,6 +89,7 @@ class CarPlayTemplateManager {
         }
 
         let favorites = providerManager.favoriteChannels
+        hadFavorites = !favorites.isEmpty
         if !favorites.isEmpty {
             let item = CPListItem(text: "Favorites", detailText: "\(favorites.count) channels")
             item.accessoryType = .disclosureIndicator
@@ -86,7 +97,10 @@ class CarPlayTemplateManager {
                 self?.pushFavorites()
                 completion()
             }
+            favoritesItem = item
             items.append(item)
+        } else {
+            favoritesItem = nil
         }
 
         let groups = Dictionary(grouping: providerManager.channels, by: \.group)
