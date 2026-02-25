@@ -15,6 +15,8 @@ class CarPlayTemplateManager {
     private var hadFavorites = false
     private var hadChannels = false
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
+    private var startupStreamID: String?
+    private var hasAttemptedStartupStream = false
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -28,26 +30,27 @@ class CarPlayTemplateManager {
                 from: Constants.StorageKeys.settings, default: .default
             )
             sortPrefixes = settings.sortPrefixes
+            startupStreamID = settings.startupStreamID
         }
         updateNowPlayingButtons()
         setRootTemplate()
 
         cancellable = providerManager.$channels
+            .combineLatest(providerManager.$enabledGroups, providerManager.$favoriteGroupOrder)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] _, _, _ in
                 guard let self else { return }
-                let hasChannels = !self.providerManager.channels.isEmpty
+                let hasChannels = !self.providerManager.visibleChannels.isEmpty
                 let hasFavorites = !self.providerManager.favoriteChannels.isEmpty
                 if hasChannels != self.hadChannels || hasFavorites != self.hadFavorites {
-                    // Channels appeared/disappeared or favorites changed — rebuild root
                     self.hadChannels = hasChannels
                     self.updateRootSections()
                 } else if let item = self.favoritesItem, hasFavorites {
-                    // Just update the count in place without resetting scroll
                     let count = self.providerManager.favoriteChannels.count
                     item.setDetailText("\(count) channels")
                 }
                 self.updateNowPlayingButtons()
+                self.attemptStartupStream()
             }
 
         channelCancellable = audioPlayer.$currentChannel
@@ -55,6 +58,17 @@ class CarPlayTemplateManager {
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
             }
+    }
+
+    private func attemptStartupStream() {
+        guard !hasAttemptedStartupStream,
+              let streamID = startupStreamID,
+              audioPlayer.currentChannel == nil,
+              !providerManager.visibleChannels.isEmpty else { return }
+        hasAttemptedStartupStream = true
+        if let channel = providerManager.visibleChannels.first(where: { $0.id == streamID }) {
+            playChannelAndShowNowPlaying(channel, within: providerManager.visibleChannels)
+        }
     }
 
     private func updateNowPlayingButtons() {
@@ -113,8 +127,19 @@ class CarPlayTemplateManager {
             favoritesItem = nil
         }
 
-        let groups = Dictionary(grouping: providerManager.channels, by: \.group)
-        for group in groups.keys.sorted() {
+        let groups = Dictionary(grouping: providerManager.visibleChannels, by: \.group)
+        let favOrder = providerManager.favoriteGroupOrder
+        let sortedGroupKeys = groups.keys.sorted { a, b in
+            let aFav = favOrder.firstIndex(of: a)
+            let bFav = favOrder.firstIndex(of: b)
+            switch (aFav, bFav) {
+            case let (.some(ai), .some(bi)): return ai < bi
+            case (.some, .none): return true
+            case (.none, .some): return false
+            case (.none, .none): return a < b
+            }
+        }
+        for group in sortedGroupKeys {
             let count = groups[group]?.count ?? 0
             let item = CPListItem(text: group, detailText: "\(count) channels")
             item.accessoryType = .disclosureIndicator
@@ -130,7 +155,7 @@ class CarPlayTemplateManager {
         }
 
         if items.isEmpty {
-            let placeholder = CPListItem(text: "No Channels", detailText: "Add a provider on your phone")
+            let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
             placeholder.handler = { _, completion in completion() }
             items.append(placeholder)
         }

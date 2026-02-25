@@ -10,9 +10,9 @@ struct ProviderListView: View {
             Group {
                 if providerManager.providers.isEmpty {
                     EmptyStateView(
-                        title: "No Providers",
+                        title: "No Accounts",
                         systemImage: "server.rack",
-                        description: "Add an IPTV provider to get started."
+                        description: "Add an account to get started."
                     )
                 } else {
                     List {
@@ -43,7 +43,7 @@ struct ProviderListView: View {
                     }
                 }
             }
-            .navigationTitle("Providers")
+            .navigationTitle("Accounts")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -57,7 +57,7 @@ struct ProviderListView: View {
             .sheet(isPresented: $showAddProvider) {
                 AddProviderView()
             }
-            .alert("Delete Provider", isPresented: .init(
+            .alert("Delete Account", isPresented: .init(
                 get: { providerToDelete != nil },
                 set: { if !$0 { providerToDelete = nil } }
             )) {

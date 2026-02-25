@@ -8,6 +8,8 @@ enum Constants {
         static let providers = "providers.json"
         static let favorites = "favorites.json"
         static let settings = "settings.json"
+        static let enabledGroups = "enabledGroups.json"
+        static let favoriteGroups = "favoriteGroups.json"
     }
 
     enum XtreamCodes {

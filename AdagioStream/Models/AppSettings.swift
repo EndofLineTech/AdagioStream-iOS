@@ -74,17 +74,20 @@ struct AppSettings: Codable {
     var appearanceMode: AppearanceMode
     var textSizeMode: TextSizeMode
     var sortPrefixes: [String]
+    var startupStreamID: String?
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
         appearanceMode: AppearanceMode = .system,
         textSizeMode: TextSizeMode = .system,
-        sortPrefixes: [String] = ["Radio: ", "TV: "]
+        sortPrefixes: [String] = ["Radio: ", "TV: "],
+        startupStreamID: String? = nil
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
         self.textSizeMode = textSizeMode
         self.sortPrefixes = sortPrefixes
+        self.startupStreamID = startupStreamID
     }
 
     static let `default` = AppSettings()

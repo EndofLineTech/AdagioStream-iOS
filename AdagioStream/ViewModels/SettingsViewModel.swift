@@ -42,4 +42,9 @@ final class SettingsViewModel: ObservableObject {
         settings.textSizeMode = mode
         await saveSettings()
     }
+
+    func updateStartupStream(_ channelID: String?) async {
+        settings.startupStreamID = channelID
+        await saveSettings()
+    }
 }

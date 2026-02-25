@@ -78,18 +78,49 @@ struct SettingsView: View {
                     }
                 }
 
+                Section {
+                    Picker("Channel", selection: startupStreamBinding) {
+                        Text("None").tag(String?.none)
+                        ForEach(providerManager.favoriteChannels) { channel in
+                            Text(channel.name).tag(Optional(channel.id))
+                        }
+                    }
+                } header: {
+                    Text("Startup")
+                } footer: {
+                    if providerManager.favoriteChannels.isEmpty {
+                        Text("Favorite a channel to set it as your startup channel.")
+                    } else {
+                        Text("Automatically plays this channel when the app opens. Only favorited channels are shown.")
+                    }
+                }
+
                 Section("Channels") {
                     HStack {
                         Text("Loaded Channels")
                         Spacer()
-                        Text("\(providerManager.channels.count)")
+                        Text("\(providerManager.visibleChannels.count)")
                             .foregroundStyle(.secondary)
                     }
-                    HStack {
-                        Text("Providers")
-                        Spacer()
-                        Text("\(providerManager.providers.count)")
-                            .foregroundStyle(.secondary)
+                    NavigationLink {
+                        GroupManagementView()
+                    } label: {
+                        HStack {
+                            Text("Groups")
+                            Spacer()
+                            Text(groupsLabel)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    NavigationLink {
+                        ProviderManagementView()
+                    } label: {
+                        HStack {
+                            Text("Accounts")
+                            Spacer()
+                            Text(providersLabel)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     HStack {
                         Text("Favorites")
@@ -182,6 +213,32 @@ struct SettingsView: View {
                 Text("Remove all \(providerManager.favoriteChannels.count) channels from your favorites?")
             }
         }
+    }
+
+    private var startupStreamBinding: Binding<String?> {
+        Binding(
+            get: { viewModel.settings.startupStreamID },
+            set: { newValue in
+                Task { await viewModel.updateStartupStream(newValue) }
+            }
+        )
+    }
+
+    private var providersLabel: String {
+        let total = providerManager.providers.count
+        let enabled = providerManager.enabledProviderCount
+        if enabled < total {
+            return "\(enabled) of \(total)"
+        }
+        return "\(total)"
+    }
+
+    private var groupsLabel: String {
+        let total = providerManager.allGroupCounts.count
+        if let enabled = providerManager.enabledGroups {
+            return "\(enabled.count) of \(total)"
+        }
+        return "\(total)"
     }
 
     private var appVersion: String {

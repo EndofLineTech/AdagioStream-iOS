@@ -159,20 +159,22 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     func playNext() {
         let list = channels.isEmpty ? ProviderManager.shared.channels : channels
-        guard let current = currentChannel ?? lastPlayedChannel,
-              let index = list.firstIndex(where: { $0.id == current.id }),
-              index + 1 < list.count else { return }
+        guard !list.isEmpty,
+              let current = currentChannel ?? lastPlayedChannel,
+              let index = list.firstIndex(where: { $0.id == current.id }) else { return }
         channels = list
-        play(channel: list[index + 1])
+        let nextIndex = (index + 1) % list.count
+        play(channel: list[nextIndex])
     }
 
     func playPrevious() {
         let list = channels.isEmpty ? ProviderManager.shared.channels : channels
-        guard let current = currentChannel ?? lastPlayedChannel,
-              let index = list.firstIndex(where: { $0.id == current.id }),
-              index > 0 else { return }
+        guard !list.isEmpty,
+              let current = currentChannel ?? lastPlayedChannel,
+              let index = list.firstIndex(where: { $0.id == current.id }) else { return }
         channels = list
-        play(channel: list[index - 1])
+        let prevIndex = (index - 1 + list.count) % list.count
+        play(channel: list[prevIndex])
     }
 
     func updateBufferDuration(_ duration: TimeInterval) {

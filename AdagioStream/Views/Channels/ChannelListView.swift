@@ -19,16 +19,16 @@ struct ChannelListView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if providerManager.channels.isEmpty && providerManager.providers.isEmpty {
                     EmptyStateView(
-                        title: "No Providers",
+                        title: "No Accounts",
                         systemImage: "server.rack",
-                        description: "Add an IPTV provider in the Providers tab to get started."
+                        description: "Add an account in Settings → Accounts to get started."
                     )
                 } else if providerManager.channels.isEmpty {
                     VStack(spacing: 16) {
                         EmptyStateView(
                             title: "No Channels",
                             systemImage: "radio",
-                            description: providerManager.error ?? "No channels loaded from your providers."
+                            description: providerManager.error ?? "No channels loaded from your accounts."
                         )
                         Button {
                             Task { await providerManager.loadChannels() }
@@ -37,6 +37,12 @@ struct ChannelListView: View {
                         }
                         .buttonStyle(.bordered)
                     }
+                } else if providerManager.sortedVisibleGroups.isEmpty {
+                    EmptyStateView(
+                        title: "All Groups Hidden",
+                        systemImage: "eye.slash",
+                        description: "Enable groups in Settings → Groups to see channels here."
+                    )
                 } else {
                     channelList
                 }
@@ -98,6 +104,11 @@ struct ChannelListView: View {
                         }
                     } label: {
                         HStack {
+                            if group.isFavorite {
+                                Image(systemName: "star.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.yellow)
+                            }
                             Text(group.name)
                                 .font(.subheadline)
                                 .fontWeight(.semibold)
@@ -112,6 +123,21 @@ struct ChannelListView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        Button {
+                            Task { await providerManager.toggleGroupFavorite(group.name) }
+                        } label: {
+                            Label(
+                                group.isFavorite ? "Unfavorite Group" : "Favorite Group",
+                                systemImage: group.isFavorite ? "star.slash" : "star"
+                            )
+                        }
+                        Button {
+                            Task { await providerManager.toggleGroupEnabled(group.name) }
+                        } label: {
+                            Label("Hide Group", systemImage: "eye.slash")
+                        }
+                    }
                 }
             }
         }
@@ -119,18 +145,14 @@ struct ChannelListView: View {
     }
 
     private var groups: [ChannelGroup] {
-        let channels = filteredChannels
-        let grouped = Dictionary(grouping: channels, by: \.group)
-        return grouped.map { ChannelGroup(name: $0.key, channels: $0.value) }
-            .sorted { $0.name < $1.name }
-    }
-
-    private var filteredChannels: [Channel] {
-        if searchText.isEmpty {
-            return providerManager.channels
-        }
-        return providerManager.channels.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText)
+        let base = providerManager.sortedVisibleGroups
+        if searchText.isEmpty { return base }
+        return base.compactMap { group in
+            let filtered = group.channels.filter {
+                $0.name.localizedCaseInsensitiveContains(searchText)
+            }
+            guard !filtered.isEmpty else { return nil }
+            return ChannelGroup(name: group.name, channels: filtered, isFavorite: group.isFavorite)
         }
     }
 }
