@@ -11,6 +11,7 @@ final class ProviderManager: ObservableObject {
     @Published var isLoading = false
     @Published var error: String?
     @Published var collapsedGroups: Set<String> = []
+    @Published private(set) var favoriteOrder: [String] = []
     private var hasInitializedCollapsedGroups = false
 
     private let persistence = PersistenceService.shared
@@ -99,10 +100,11 @@ final class ProviderManager: ObservableObject {
         }
 
         // Restore favorites
-        let favoriteIDs: Set<String> = await loadFavoriteIDs()
+        favoriteOrder = await loadFavoriteOrder()
+        let favoriteSet = Set(favoriteOrder)
         channels = allChannels.map { channel in
             var c = channel
-            c.isFavorite = favoriteIDs.contains(c.id)
+            c.isFavorite = favoriteSet.contains(c.id)
             return c
         }
 
@@ -144,29 +146,69 @@ final class ProviderManager: ObservableObject {
     func toggleFavorite(_ channel: Channel) async {
         if let index = channels.firstIndex(where: { $0.id == channel.id }) {
             channels[index].isFavorite.toggle()
-            await saveFavoriteIDs()
+            if channels[index].isFavorite {
+                favoriteOrder.append(channel.id)
+            } else {
+                favoriteOrder.removeAll { $0 == channel.id }
+            }
+            await saveFavoriteOrder()
         }
     }
 
     var favoriteChannels: [Channel] {
-        channels.filter(\.isFavorite)
+        let channelMap = Dictionary(uniqueKeysWithValues: channels.map { ($0.id, $0) })
+        return favoriteOrder.compactMap { channelMap[$0] }
     }
 
     func clearFavorites() async {
         for i in channels.indices {
             channels[i].isFavorite = false
         }
-        await saveFavoriteIDs()
+        favoriteOrder = []
+        await saveFavoriteOrder()
     }
 
-    private func loadFavoriteIDs() async -> Set<String> {
-        await persistence.loadOrDefault(from: Constants.StorageKeys.favorites, default: Set<String>())
+    func moveFavorite(from source: IndexSet, to destination: Int) {
+        favoriteOrder.move(fromOffsets: source, toOffset: destination)
+        Task { await saveFavoriteOrder() }
     }
 
-    private func saveFavoriteIDs() async {
-        let ids = Set(channels.filter(\.isFavorite).map(\.id))
+    func removeFavorite(at offsets: IndexSet) {
+        let idsToRemove = offsets.map { favoriteOrder[$0] }
+        favoriteOrder.remove(atOffsets: offsets)
+        for id in idsToRemove {
+            if let index = channels.firstIndex(where: { $0.id == id }) {
+                channels[index].isFavorite = false
+            }
+        }
+        Task { await saveFavoriteOrder() }
+    }
+
+    private func loadFavoriteOrder() async -> [String] {
+        // Try loading as ordered array first
+        let order: [String] = await persistence.loadOrDefault(
+            from: Constants.StorageKeys.favorites, default: []
+        )
+        if !order.isEmpty { return order }
+
+        // Migration: load legacy Set<String> and convert to array
+        let legacySet: Set<String> = await persistence.loadOrDefault(
+            from: Constants.StorageKeys.favorites, default: []
+        )
+        if !legacySet.isEmpty {
+            let migrated = Array(legacySet)
+            do {
+                try await persistence.save(migrated, to: Constants.StorageKeys.favorites)
+            } catch {}
+            return migrated
+        }
+
+        return []
+    }
+
+    private func saveFavoriteOrder() async {
         do {
-            try await persistence.save(ids, to: Constants.StorageKeys.favorites)
+            try await persistence.save(favoriteOrder, to: Constants.StorageKeys.favorites)
         } catch {
             self.error = "Failed to save favorites: \(error.localizedDescription)"
         }

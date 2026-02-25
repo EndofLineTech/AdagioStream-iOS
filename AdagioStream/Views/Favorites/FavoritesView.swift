@@ -3,6 +3,7 @@ import SwiftUI
 struct FavoritesView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @State private var editMode: EditMode = .inactive
 
     var body: some View {
         NavigationStack {
@@ -23,11 +24,15 @@ struct FavoritesView: View {
                                 Task { await providerManager.toggleFavorite(channel) }
                             }
                         }
+                        .onMove { providerManager.moveFavorite(from: $0, to: $1) }
+                        .onDelete { providerManager.removeFavorite(at: $0) }
                     }
                 }
             }
             .navigationTitle("Favorites")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { EditButton() }
+            .environment(\.editMode, $editMode)
         }
     }
 }
