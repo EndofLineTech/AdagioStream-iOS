@@ -7,14 +7,19 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00D6F0D279CC3C588D38E834 /* AdagioStreamWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59978A1B27C81E201050FE95 /* AdagioStreamWidgetBundle.swift */; };
+		06D01EDA53CB232933383D28 /* NowPlayingAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */; };
+		0F95AFDDB1B5A060593CBF2F /* NowPlayingLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D27772BEF54C1163A79257 /* NowPlayingLiveActivity.swift */; };
 		107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32076461D1698393DE4F46B /* AppSettings.swift */; };
 		129D39FCB60C075DFBF45289 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
 		1A9DB6A68F4DF94B6E096314 /* ChannelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */; };
 		1CC9AC317E17D1AD301D41B8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2591A7C2156E83DA1F2F30CE /* Assets.xcassets */; };
 		23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */; };
+		248E6AB8097F2A08AA666C30 /* NowPlayingAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */; };
 		2B16DDBB8A24A98B6C6B2D5E /* MPVKit in Frameworks */ = {isa = PBXBuildFile; productRef = A30B843913F14AACC1111974 /* MPVKit */; };
 		33C3578193ABE2495606970B /* CarPlayTemplateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */; };
 		34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */; };
+		45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759D39578A2906EC0C071E9A /* LiveActivityManager.swift */; };
 		462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */; };
 		4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */; };
 		49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
@@ -43,13 +48,39 @@
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
 		F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20796E24826A70D504E871C4 /* PersistenceService.swift */; };
+		F97F56E0B4ED0B4DCF21577A /* AdagioStreamWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = CDEA2D831E69CD4D824B1B12 /* AdagioStreamWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5186F218805196281702F1A /* FavoritesView.swift */; };
 		FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A1C23FDE4BBBF3BBAE7D44C7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C491AA48FB5EFE41DEFBA97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3B863EAC76D53D1796222578;
+			remoteInfo = AdagioStreamWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2E1C115EC7AEAF8BEB569CA3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				F97F56E0B4ED0B4DCF21577A /* AdagioStreamWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
+		11D27772BEF54C1163A79257 /* NowPlayingLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingLiveActivity.swift; sourceTree = "<group>"; };
 		1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowView.swift; sourceTree = "<group>"; };
 		20796E24826A70D504E871C4 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		2591A7C2156E83DA1F2F30CE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -60,9 +91,13 @@
 		4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryableAsyncImage.swift; sourceTree = "<group>"; };
 		48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListViewModel.swift; sourceTree = "<group>"; };
 		4E40BDCF80A62A32C499B93B /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		59978A1B27C81E201050FE95 /* AdagioStreamWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamWidgetBundle.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
+		6F11FFD3957AF605C4334B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingAttributes.swift; sourceTree = "<group>"; };
 		74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		759D39578A2906EC0C071E9A /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManager.swift; sourceTree = "<group>"; };
 		8E50932DB3F2B825187CA4B7 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
 		91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
@@ -74,6 +109,7 @@
 		B785664AF5E9481E580421E3 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassEffect+Helpers.swift"; sourceTree = "<group>"; };
 		BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntry.swift; sourceTree = "<group>"; };
+		CDEA2D831E69CD4D824B1B12 /* AdagioStreamWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = AdagioStreamWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamApp.swift; sourceTree = "<group>"; };
 		D099586458688D813DF57122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
@@ -102,6 +138,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0473C182DEFB9D65A135628B /* AdagioStreamWidget */ = {
+			isa = PBXGroup;
+			children = (
+				59978A1B27C81E201050FE95 /* AdagioStreamWidgetBundle.swift */,
+				6F11FFD3957AF605C4334B57 /* Info.plist */,
+				11D27772BEF54C1163A79257 /* NowPlayingLiveActivity.swift */,
+			);
+			path = AdagioStreamWidget;
+			sourceTree = "<group>";
+		};
 		1D9B7E683E5A145DA73ED921 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -136,6 +182,7 @@
 			isa = PBXGroup;
 			children = (
 				F8C3BD180713EE2506F860EF /* AdagioStream.app */,
+				CDEA2D831E69CD4D824B1B12 /* AdagioStreamWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -160,6 +207,7 @@
 			isa = PBXGroup;
 			children = (
 				C7BB60840AEC2DE630CE1B02 /* AdagioStream */,
+				0473C182DEFB9D65A135628B /* AdagioStreamWidget */,
 				37BE24923E1012894F65BC0D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -171,6 +219,7 @@
 				9CCAE274A593BD7364C5F6FD /* Channel.swift */,
 				F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */,
 				BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */,
+				70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */,
 				4253D682909B25CB052AED9C /* Provider.swift */,
 			);
 			path = Models;
@@ -251,6 +300,7 @@
 			children = (
 				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
 				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
+				759D39578A2906EC0C071E9A /* LiveActivityManager.swift */,
 				DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */,
 				F7F972730D4B1C0AD5AE9C5E /* MPVAudioPlayer.swift */,
 				20796E24826A70D504E871C4 /* PersistenceService.swift */,
@@ -263,6 +313,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		3B863EAC76D53D1796222578 /* AdagioStreamWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 027FDF5E83AD676AD23E7F64 /* Build configuration list for PBXNativeTarget "AdagioStreamWidget" */;
+			buildPhases = (
+				DF0A82527ADACE25EE796BC6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AdagioStreamWidget;
+			packageProductDependencies = (
+			);
+			productName = AdagioStreamWidget;
+			productReference = CDEA2D831E69CD4D824B1B12 /* AdagioStreamWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		C4219BBA2AD1D3270C174F2D /* AdagioStream */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 796BFB25902696DAD2B97C7B /* Build configuration list for PBXNativeTarget "AdagioStream" */;
@@ -270,10 +337,12 @@
 				A1924B7912424CF28B131F74 /* Sources */,
 				E6EADF806124B23FA2ADBEDF /* Resources */,
 				616D289C3562AE68D02BBB38 /* Frameworks */,
+				2E1C115EC7AEAF8BEB569CA3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				225218118EC4E7CF6727551E /* PBXTargetDependency */,
 			);
 			name = AdagioStream;
 			packageProductDependencies = (
@@ -310,6 +379,7 @@
 			projectRoot = "";
 			targets = (
 				C4219BBA2AD1D3270C174F2D /* AdagioStream */,
+				3B863EAC76D53D1796222578 /* AdagioStreamWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -352,9 +422,11 @@
 				E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */,
 				4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */,
 				CF2663D333232D924CFD1984 /* LaunchScreenView.swift in Sources */,
+				45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
 				87148AF8E747236BC0E138B6 /* MPVAudioPlayer.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
+				06D01EDA53CB232933383D28 /* NowPlayingAttributes.swift in Sources */,
 				23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */,
 				F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */,
 				9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */,
@@ -369,9 +441,48 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DF0A82527ADACE25EE796BC6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				00D6F0D279CC3C588D38E834 /* AdagioStreamWidgetBundle.swift in Sources */,
+				248E6AB8097F2A08AA666C30 /* NowPlayingAttributes.swift in Sources */,
+				0F95AFDDB1B5A060593CBF2F /* NowPlayingLiveActivity.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		225218118EC4E7CF6727551E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3B863EAC76D53D1796222578 /* AdagioStreamWidget */;
+			targetProxy = A1C23FDE4BBBF3BBAE7D44C7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		18C40191F01AEC1A18D25DE0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AdagioStreamWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Adagio Stream Widget";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app.widget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		40B57AFD070715DC80152ED3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -474,6 +585,27 @@
 			};
 			name = Release;
 		};
+		87B303FEAA3343D6A1A0C7FE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AdagioStreamWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Adagio Stream Widget";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app.widget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		D7F9D12CEA97C051364ACA40 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -534,6 +666,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		027FDF5E83AD676AD23E7F64 /* Build configuration list for PBXNativeTarget "AdagioStreamWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				87B303FEAA3343D6A1A0C7FE /* Debug */,
+				18C40191F01AEC1A18D25DE0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		3F149C20DE27F54F8A203EBF /* Build configuration list for PBXProject "AdagioStream" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -25,11 +25,13 @@ targets:
     dependencies:
       - package: MPVKit
         product: MPVKit
+      - target: AdagioStreamWidget
     info:
       path: AdagioStream/Info.plist
       properties:
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Adagio Stream
+        NSSupportsLiveActivities: true
         UILaunchScreen:
           UIColorName: LaunchBackground
           UIImageName: ""
@@ -55,3 +57,24 @@ targets:
       path: AdagioStream/AdagioStream.entitlements
       properties:
         com.apple.developer.carplay-audio: true
+
+  AdagioStreamWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: AdagioStreamWidget
+      - path: AdagioStream/Models/NowPlayingAttributes.swift
+    info:
+      path: AdagioStreamWidget/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.widget
+        GENERATE_INFOPLIST_FILE: true
+        IPHONEOS_DEPLOYMENT_TARGET: "16.1"
+        INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream Widget
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SKIP_INSTALL: true
