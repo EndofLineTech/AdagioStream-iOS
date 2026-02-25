@@ -80,7 +80,7 @@ struct ChannelListView: View {
                     if !providerManager.collapsedGroups.contains(group.name) {
                         ForEach(group.channels) { channel in
                             ChannelRowView(channel: channel) {
-                                audioPlayer.channels = providerManager.channels
+                                audioPlayer.channels = group.channels
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {
                                 Task { await providerManager.toggleFavorite(channel) }

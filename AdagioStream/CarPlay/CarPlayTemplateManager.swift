@@ -13,6 +13,7 @@ class CarPlayTemplateManager {
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
+    private var hadChannels = false
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
@@ -35,9 +36,11 @@ class CarPlayTemplateManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                let hasChannels = !self.providerManager.channels.isEmpty
                 let hasFavorites = !self.providerManager.favoriteChannels.isEmpty
-                if hasFavorites != self.hadFavorites {
-                    // Favorites row added or removed — structural change
+                if hasChannels != self.hadChannels || hasFavorites != self.hadFavorites {
+                    // Channels appeared/disappeared or favorites changed — rebuild root
+                    self.hadChannels = hasChannels
                     self.updateRootSections()
                 } else if let item = self.favoritesItem, hasFavorites {
                     // Just update the count in place without resetting scroll
@@ -168,8 +171,8 @@ class CarPlayTemplateManager {
         }
     }
 
-    private func playChannelAndShowNowPlaying(_ channel: Channel) {
-        audioPlayer.channels = providerManager.channels
+    private func playChannelAndShowNowPlaying(_ channel: Channel, within channels: [Channel]) {
+        audioPlayer.channels = channels
         audioPlayer.play(channel: channel)
         pushNowPlaying()
 
@@ -186,7 +189,7 @@ class CarPlayTemplateManager {
         let items = favorites.map { channel in
             let item = CPListItem(text: channel.name, detailText: channel.group)
             item.handler = { [weak self] _, completion in
-                self?.playChannelAndShowNowPlaying(channel)
+                self?.playChannelAndShowNowPlaying(channel, within: favorites)
                 completion()
             }
             loadChannelIcon(for: channel, into: item)
@@ -235,7 +238,7 @@ class CarPlayTemplateManager {
             let items = grouped[letter]!.map { channel in
                 let item = CPListItem(text: channel.name, detailText: nil)
                 item.handler = { [weak self] _, completion in
-                    self?.playChannelAndShowNowPlaying(channel)
+                    self?.playChannelAndShowNowPlaying(channel, within: channels)
                     completion()
                 }
                 loadChannelIcon(for: channel, into: item)

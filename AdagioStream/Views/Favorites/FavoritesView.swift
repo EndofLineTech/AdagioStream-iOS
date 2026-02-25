@@ -17,7 +17,7 @@ struct FavoritesView: View {
                     List {
                         ForEach(providerManager.favoriteChannels) { channel in
                             ChannelRowView(channel: channel) {
-                                audioPlayer.channels = providerManager.channels
+                                audioPlayer.channels = providerManager.favoriteChannels
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {
                                 Task { await providerManager.toggleFavorite(channel) }
