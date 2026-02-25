@@ -12,9 +12,9 @@ settings:
     TARGETED_DEVICE_FAMILY: "1,2"
 
 packages:
-  MPVKit:
-    url: https://github.com/mpvkit/MPVKit.git
-    from: "0.41.0"
+  VLCKitSPM:
+    url: https://github.com/tylerjonesio/vlckit-spm
+    from: "3.6.0"
 
 targets:
   AdagioStream:
@@ -23,15 +23,13 @@ targets:
     sources:
       - AdagioStream
     dependencies:
-      - package: MPVKit
-        product: MPVKit
-      - target: AdagioStreamWidget
+      - package: VLCKitSPM
     info:
       path: AdagioStream/Info.plist
       properties:
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Adagio Stream
-        NSSupportsLiveActivities: true
+        NSSupportsLiveActivities: false
         UILaunchScreen:
           UIColorName: LaunchBackground
           UIImageName: ""
@@ -42,7 +40,6 @@ targets:
           UISceneConfigurations:
             UIWindowSceneSessionRoleApplication:
               - UISceneConfigurationName: Default Configuration
-                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
             CPTemplateApplicationSceneSessionRoleApplication:
               - UISceneConfigurationName: CarPlay Configuration
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
@@ -57,24 +54,3 @@ targets:
       path: AdagioStream/AdagioStream.entitlements
       properties:
         com.apple.developer.carplay-audio: true
-
-  AdagioStreamWidget:
-    type: app-extension
-    platform: iOS
-    sources:
-      - path: AdagioStreamWidget
-      - path: AdagioStream/Models/NowPlayingAttributes.swift
-    info:
-      path: AdagioStreamWidget/Info.plist
-      properties:
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.widget
-        GENERATE_INFOPLIST_FILE: true
-        IPHONEOS_DEPLOYMENT_TARGET: "16.1"
-        INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream Widget
-        MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "1"
-        SKIP_INSTALL: true
