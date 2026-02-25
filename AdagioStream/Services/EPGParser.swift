@@ -32,6 +32,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
 
     func parse(data: Data) throws -> [String: [EPGEntry]] {
         let xmlParser = XMLParser(data: data)
+        xmlParser.shouldResolveExternalEntities = false
         xmlParser.delegate = self
         guard xmlParser.parse() else {
             throw xmlParser.parserError ?? URLError(.cannotParseResponse)

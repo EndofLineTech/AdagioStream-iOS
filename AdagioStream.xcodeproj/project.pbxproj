@@ -19,6 +19,7 @@
 		45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759D39578A2906EC0C071E9A /* LiveActivityManager.swift */; };
 		462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */; };
 		4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */; };
+		A1B2C3D4E5F6071829304152 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A1B2C307182930CAFE /* KeychainService.swift */; };
 		49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
 		50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */; };
 		52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D099586458688D813DF57122 /* SettingsView.swift */; };
@@ -63,6 +64,7 @@
 		4E40BDCF80A62A32C499B93B /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
 		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		D4E5F6A1B2C307182930CAFE /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingAttributes.swift; sourceTree = "<group>"; };
 		74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		759D39578A2906EC0C071E9A /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 			children = (
 				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
 				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
+				D4E5F6A1B2C307182930CAFE /* KeychainService.swift */,
 				759D39578A2906EC0C071E9A /* LiveActivityManager.swift */,
 				DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */,
 				20796E24826A70D504E871C4 /* PersistenceService.swift */,
@@ -353,6 +356,7 @@
 				FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */,
 				E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */,
 				4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */,
+				A1B2C3D4E5F6071829304152 /* KeychainService.swift in Sources */,
 				CF2663D333232D924CFD1984 /* LaunchScreenView.swift in Sources */,
 				45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
@@ -451,7 +455,9 @@
 				INFOPLIST_FILE = AdagioStream/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Adagio Stream";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSSupportsLiveActivities = NO;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -475,7 +481,9 @@
 				INFOPLIST_FILE = AdagioStream/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Adagio Stream";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSSupportsLiveActivities = NO;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

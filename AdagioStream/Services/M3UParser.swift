@@ -45,7 +45,9 @@ struct M3UParser {
                 while i < lines.count {
                     let urlLine = lines[i].trimmingCharacters(in: .whitespaces)
                     if !urlLine.isEmpty && !urlLine.hasPrefix("#") {
-                        if let streamURL = URL(string: urlLine) {
+                        if let streamURL = URL(string: urlLine),
+                           let scheme = streamURL.scheme?.lowercased(),
+                           ["http", "https", "rtsp", "rtmp", "mms"].contains(scheme) {
                             let channel = parseChannel(from: info, streamURL: streamURL)
                             channels.append(channel)
                         }

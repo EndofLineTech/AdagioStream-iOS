@@ -35,6 +35,11 @@ actor PersistenceService {
         (try? load(from: filename) as T) ?? defaultValue
     }
 
+    func delete(_ filename: String) {
+        let url = baseDirectory.appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: url)
+    }
+
     func fileExists(_ filename: String) -> Bool {
         FileManager.default.fileExists(atPath: baseDirectory.appendingPathComponent(filename).path)
     }

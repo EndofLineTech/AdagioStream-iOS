@@ -25,7 +25,22 @@ final class ProviderManager: ObservableObject {
     }
 
     func loadProviders() async {
-        providers = await persistence.loadOrDefault(from: Constants.StorageKeys.providers, default: [Provider]())
+        // Try Keychain first
+        if let data = KeychainService.load(for: Constants.StorageKeys.providers),
+           let decoded = try? JSONDecoder().decode([Provider].self, from: data) {
+            providers = decoded
+            return
+        }
+
+        // Migration: load from plaintext file, move to Keychain, delete file
+        let fileProviders: [Provider] = await persistence.loadOrDefault(
+            from: Constants.StorageKeys.providers, default: []
+        )
+        providers = fileProviders
+        if !fileProviders.isEmpty {
+            await saveProviders()
+            await persistence.delete(Constants.StorageKeys.providers)
+        }
     }
 
     func addProvider(_ provider: Provider) async {
@@ -54,7 +69,8 @@ final class ProviderManager: ObservableObject {
 
     private func saveProviders() async {
         do {
-            try await persistence.save(providers, to: Constants.StorageKeys.providers)
+            let data = try JSONEncoder().encode(providers)
+            try KeychainService.save(data, for: Constants.StorageKeys.providers)
         } catch {
             self.error = "Failed to save providers: \(error.localizedDescription)"
         }
