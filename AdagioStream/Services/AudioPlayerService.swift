@@ -61,7 +61,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         Task { @MainActor in
             switch type {
             case .began:
-                wasPlayingBeforeInterruption = isPlaying || isBuffering
+                // Use isActiveSession rather than isPlaying/isBuffering since VLC's
+                // state timer may have already cleared those by the time this runs
+                wasPlayingBeforeInterruption = isActiveSession
             case .ended:
                 if wasPlayingBeforeInterruption {
                     wasPlayingBeforeInterruption = false

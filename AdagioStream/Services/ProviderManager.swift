@@ -1,8 +1,5 @@
 import Foundation
 import SwiftUI
-import os.log
-
-private let pmLog = Logger(subsystem: "com.adagiostream.app", category: "ProviderMgr")
 
 struct NewProviderInfo: Identifiable {
     let id = UUID()
@@ -45,18 +42,10 @@ final class ProviderManager: ObservableObject {
 
     func loadProviders() async {
         // Try Keychain first
-        if let data = KeychainService.load(for: Constants.StorageKeys.providers) {
-            do {
-                let decoded = try JSONDecoder().decode([Provider].self, from: data)
-                pmLog.info("Loaded \(decoded.count) providers from Keychain: \(decoded.map { "\($0.name) (enabled=\($0.isEnabled))" }.joined(separator: ", "))")
-                providers = decoded
-                return
-            } catch {
-                pmLog.error("Keychain decode failed: \(error)")
-                // Fall through to migration
-            }
-        } else {
-            pmLog.info("No provider data in Keychain")
+        if let data = KeychainService.load(for: Constants.StorageKeys.providers),
+           let decoded = try? JSONDecoder().decode([Provider].self, from: data) {
+            providers = decoded
+            return
         }
 
         // Migration: load from plaintext file, move to Keychain, delete file
@@ -142,13 +131,9 @@ final class ProviderManager: ObservableObject {
     // MARK: - Channel Loading
 
     func loadChannels() async {
-        guard !isLoadingChannels else {
-            pmLog.info("loadChannels() skipped — already in progress")
-            return
-        }
+        guard !isLoadingChannels else { return }
         isLoadingChannels = true
         defer { isLoadingChannels = false }
-        pmLog.info("loadChannels() called — \(self.providers.count) providers, \(self.providers.filter(\.isEnabled).count) enabled")
         isLoading = true
         error = nil
 
@@ -157,19 +142,14 @@ final class ProviderManager: ObservableObject {
         var counts: [UUID: Int] = [:]
 
         for provider in providers.filter(\.isEnabled) {
-            pmLog.info("Loading provider: \(provider.name)")
             do {
                 let loaded = try await loadChannels(from: provider)
                 counts[provider.id] = loaded.count
-                pmLog.info("  → \(provider.name): loaded \(loaded.count) channels")
                 allChannels.append(contentsOf: loaded)
             } catch {
-                pmLog.error("  → \(provider.name) FAILED: \(error)")
                 errors.append("\(provider.name): \(error.localizedDescription)")
             }
         }
-
-        pmLog.info("Total channels loaded: \(allChannels.count), errors: \(errors.count)")
         channelCountByProvider = counts
 
         if !errors.isEmpty {
@@ -321,10 +301,8 @@ final class ProviderManager: ObservableObject {
     private func applyGroupFilter() {
         if let enabled = enabledGroups {
             channels = rawChannels.filter { enabled.contains($0.group) }
-            pmLog.info("applyGroupFilter: enabledGroups has \(enabled.count) groups, rawChannels=\(self.rawChannels.count) → channels=\(self.channels.count)")
         } else {
             channels = rawChannels
-            pmLog.info("applyGroupFilter: no filter (nil), rawChannels=\(self.rawChannels.count) → channels=\(self.channels.count)")
         }
         rebuildVisibleGroups()
     }

@@ -1,7 +1,4 @@
 import Foundation
-import os.log
-
-private let apiLog = Logger(subsystem: "com.adagiostream.app", category: "XtreamAPI")
 
 struct XtreamCodesAPI {
     let host: URL
@@ -179,19 +176,12 @@ struct XtreamCodesAPI {
 
     private func fetch<T: Codable>(_ url: URL) async throws -> T {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            let httpResponse = response as? HTTPURLResponse
-            apiLog.info("GET \(url.path) → HTTP \(httpResponse?.statusCode ?? -1), \(data.count) bytes")
-            if let preview = String(data: data.prefix(500), encoding: .utf8) {
-                apiLog.debug("Response preview: \(preview)")
-            }
+            let (data, _) = try await URLSession.shared.data(from: url)
             let decoder = JSONDecoder()
             return try decoder.decode(T.self, from: data)
         } catch let error as DecodingError {
-            apiLog.error("Decode error for \(String(describing: T.self)): \(error)")
             throw APIError.decodingError(error)
         } catch {
-            apiLog.error("Network error: \(error)")
             throw APIError.networkError(error)
         }
     }
