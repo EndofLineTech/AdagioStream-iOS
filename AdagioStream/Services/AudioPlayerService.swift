@@ -39,6 +39,7 @@ final class AudioPlayerService: ObservableObject {
         configureRemoteCommands()
         observeAVPlayer()
         configureMPVCallbacks()
+        LiveActivityManager.shared.observePlayerState(self)
     }
 
     // MARK: - Audio Session
@@ -171,8 +172,11 @@ final class AudioPlayerService: ObservableObject {
                 guard let self, self.activeBackend == .mpv, self.isActiveSession else { return }
                 switch state {
                 case .idle:
+                    // Ignore stale .idle from a previous stop() during channel changes —
+                    // by the time this async callback runs, play() has already set
+                    // isBuffering = true for the new stream.
+                    guard !self.isBuffering else { break }
                     self.isPlaying = false
-                    self.isBuffering = false
                 case .loading:
                     self.isBuffering = true
                 case .playing:
@@ -244,12 +248,14 @@ final class AudioPlayerService: ObservableObject {
         isActiveSession = true
         updateNowPlayingInfo()
 
-        bitrateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateStreamStats()
                 self?.updateNowPlayingInfo()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        bitrateTimer = timer
     }
 
     private func playWithMPV(channel: Channel) {
@@ -266,12 +272,14 @@ final class AudioPlayerService: ObservableObject {
         isActiveSession = true
         updateNowPlayingInfo()
 
-        bitrateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateStreamStats()
                 self?.updateNowPlayingInfo()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        bitrateTimer = timer
     }
 
     private func stopCurrentBackend() {
@@ -395,6 +403,10 @@ final class AudioPlayerService: ObservableObject {
     }
 
     // MARK: - Now Playing Info
+
+    func refreshNowPlayingInfo() {
+        updateNowPlayingInfo()
+    }
 
     private func updateNowPlayingInfo() {
         guard let channel = currentChannel else { return }

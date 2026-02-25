@@ -154,12 +154,17 @@ class CarPlayTemplateManager {
     private func pushNowPlaying() {
         let nowPlaying = CPNowPlayingTemplate.shared
         if interfaceController.topTemplate is CPNowPlayingTemplate {
+            audioPlayer.refreshNowPlayingInfo()
             return
         }
         if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
-            interfaceController.pop(to: nowPlaying, animated: true, completion: nil)
+            interfaceController.pop(to: nowPlaying, animated: true) { [weak self] _, _ in
+                Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
+            }
         } else {
-            interfaceController.pushTemplate(nowPlaying, animated: true, completion: nil)
+            interfaceController.pushTemplate(nowPlaying, animated: true) { [weak self] _, _ in
+                Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
+            }
         }
     }
 
@@ -167,6 +172,13 @@ class CarPlayTemplateManager {
         audioPlayer.channels = providerManager.channels
         audioPlayer.play(channel: channel)
         pushNowPlaying()
+
+        // Re-publish now playing info after a delay to handle CarPlay head units
+        // that don't pick up metadata set before the app becomes "now playing"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard self?.audioPlayer.currentChannel?.id == channel.id else { return }
+            self?.audioPlayer.refreshNowPlayingInfo()
+        }
     }
 
     private func pushFavorites() {
