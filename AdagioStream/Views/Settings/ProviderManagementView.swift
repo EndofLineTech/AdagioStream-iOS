@@ -3,6 +3,7 @@ import SwiftUI
 struct ProviderManagementView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @State private var showAddProvider = false
+    @State private var providerToEdit: Provider?
     @State private var providerToDelete: Provider?
 
     var body: some View {
@@ -45,6 +46,9 @@ struct ProviderManagementView: View {
         }
         .sheet(isPresented: $showAddProvider) {
             AddProviderView()
+        }
+        .sheet(item: $providerToEdit) { provider in
+            AddProviderView(editing: provider)
         }
         .alert("Account Ready", isPresented: .init(
             get: { providerManager.newProviderInfo != nil },
@@ -98,6 +102,20 @@ struct ProviderManagementView: View {
             .padding(.vertical, 2)
         }
         .toggleStyle(.switch)
+        .swipeActions(edge: .leading) {
+            Button { providerToEdit = provider } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            .tint(.blue)
+        }
+        .contextMenu {
+            Button { providerToEdit = provider } label: {
+                Label("Edit", systemImage: "pencil")
+            }
+            Button(role: .destructive) { providerToDelete = provider } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
     }
 
     private func providerTypeLabel(_ provider: Provider) -> String {

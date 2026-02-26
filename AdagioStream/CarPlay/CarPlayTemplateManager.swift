@@ -67,7 +67,17 @@ class CarPlayTemplateManager {
               !providerManager.visibleChannels.isEmpty else { return }
         hasAttemptedStartupStream = true
         if let channel = providerManager.visibleChannels.first(where: { $0.id == streamID }) {
-            playChannelAndShowNowPlaying(channel, within: providerManager.visibleChannels)
+            // Play in background without navigating to Now Playing —
+            // keeps the user on the channel list so they can quickly switch
+            audioPlayer.channels = providerManager.visibleChannels
+            audioPlayer.play(channel: channel)
+            updateRootSections()
+
+            // Re-publish metadata after a delay for head units that need it
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard self?.audioPlayer.currentChannel?.id == channel.id else { return }
+                self?.audioPlayer.refreshNowPlayingInfo()
+            }
         }
     }
 

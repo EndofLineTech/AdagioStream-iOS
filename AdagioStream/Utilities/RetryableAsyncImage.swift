@@ -20,7 +20,7 @@ struct RetryableAsyncImage: View {
             if let uiImage = loadedImage {
                 Image(uiImage: uiImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(contentMode: .fill)
             } else if hasFailed {
                 placeholder
                     .overlay(alignment: .bottomTrailing) {
@@ -51,9 +51,7 @@ struct RetryableAsyncImage: View {
     }
 
     private func loadImage() async {
-        loadedImage = nil
         hasFailed = false
-        backgroundColor = .clear
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
@@ -61,8 +59,15 @@ struct RetryableAsyncImage: View {
                 hasFailed = true
                 return
             }
-            loadedImage = uiImage
-            backgroundColor = averageEdgeColor(of: uiImage)
+            let color = averageEdgeColor(of: uiImage)
+            // Suppress implicit animation so the list doesn't jump
+            // when images finish loading at different times
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                loadedImage = uiImage
+                backgroundColor = color
+            }
         } catch {
             hasFailed = true
         }

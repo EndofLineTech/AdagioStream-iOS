@@ -50,6 +50,9 @@ struct AddProviderView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @Environment(\.dismiss) private var dismiss
 
+    /// Pass an existing provider to edit it; leave nil to add a new one.
+    var editing: Provider?
+
     @State private var name = ""
     @State private var providerType = 0 // 0 = M3U, 1 = Xtream Codes
 
@@ -65,6 +68,8 @@ struct AddProviderView: View {
     @State private var error: String?
     @State private var isSaving = false
 
+    private var isEditing: Bool { editing != nil }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -75,6 +80,7 @@ struct AddProviderView: View {
                         Text("Xtream Codes").tag(1)
                     }
                     .pickerStyle(.segmented)
+                    .disabled(isEditing)
                 }
 
                 if providerType == 0 {
@@ -112,7 +118,7 @@ struct AddProviderView: View {
                     }
                 }
             }
-            .navigationTitle("Add Account")
+            .navigationTitle(isEditing ? "Edit Account" : "Add Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -128,6 +134,7 @@ struct AddProviderView: View {
                     }
                 }
             }
+            .onAppear { populateFromEditing() }
         }
     }
 
@@ -137,6 +144,22 @@ struct AddProviderView: View {
             return URL(string: m3uURL) != nil
         } else {
             return URL(string: xcHost) != nil && !xcUsername.isEmpty && !xcPassword.isEmpty
+        }
+    }
+
+    private func populateFromEditing() {
+        guard let provider = editing else { return }
+        name = provider.name
+        switch provider.type {
+        case .m3u(let url, let epg):
+            providerType = 0
+            m3uURL = url.absoluteString
+            epgURL = epg?.absoluteString ?? ""
+        case .xtreamCodes(let host, let username, let password):
+            providerType = 1
+            xcHost = host.absoluteString
+            xcUsername = username
+            xcPassword = password
         }
     }
 
@@ -162,14 +185,28 @@ struct AddProviderView: View {
             type = .xtreamCodes(host: host, username: xcUsername, password: xcPassword)
         }
 
-        let provider = Provider(name: name, type: type)
-        Task {
-            await providerManager.addProvider(provider)
-            if let loadError = providerManager.error {
-                error = loadError
-                isSaving = false
-            } else {
-                dismiss()
+        if let existing = editing {
+            let updated = Provider(id: existing.id, name: name, type: type, isEnabled: existing.isEnabled)
+            Task {
+                await providerManager.updateProvider(updated)
+                await providerManager.loadChannels()
+                if let loadError = providerManager.error {
+                    error = loadError
+                    isSaving = false
+                } else {
+                    dismiss()
+                }
+            }
+        } else {
+            let provider = Provider(name: name, type: type)
+            Task {
+                await providerManager.addProvider(provider)
+                if let loadError = providerManager.error {
+                    error = loadError
+                    isSaving = false
+                } else {
+                    dismiss()
+                }
             }
         }
     }

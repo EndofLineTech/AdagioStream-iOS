@@ -22,6 +22,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var wasPlayingBeforeInterruption = false
     private var isActiveSession = false
     private var lastToggleTime: Date = .distantPast
+    private var interruptionRecoveryTask: Task<Void, Never>?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -64,26 +65,63 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 // Use isActiveSession rather than isPlaying/isBuffering since VLC's
                 // state timer may have already cleared those by the time this runs
                 wasPlayingBeforeInterruption = isActiveSession
-            case .ended:
+
+                // Start a recovery watchdog: if .ended never fires (common with
+                // CarPlay Siri announcements), recover automatically after 8s
+                interruptionRecoveryTask?.cancel()
                 if wasPlayingBeforeInterruption {
-                    wasPlayingBeforeInterruption = false
-                    try? AVAudioSession.sharedInstance().setActive(true)
-                    resume()
+                    interruptionRecoveryTask = Task {
+                        try? await Task.sleep(for: .seconds(8))
+                        guard !Task.isCancelled, wasPlayingBeforeInterruption else { return }
+                        wasPlayingBeforeInterruption = false
+                        reactivateSessionAndResume()
+                    }
                 }
+
+            case .ended:
+                interruptionRecoveryTask?.cancel()
+                interruptionRecoveryTask = nil
+                guard wasPlayingBeforeInterruption else { return }
+                wasPlayingBeforeInterruption = false
+
+                // Delay to let the audio route settle (CarPlay route transitions
+                // need time to switch back from phone/Siri to media output)
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    guard !Task.isCancelled else { return }
+                    reactivateSessionAndResume()
+                }
+
             @unknown default:
                 break
             }
         }
     }
 
+    private func reactivateSessionAndResume() {
+        let session = AVAudioSession.sharedInstance()
+
+        // Deactivate first to fully release the old audio route, then
+        // reactivate — this resets stale hardware state that can prevent
+        // VLC from reconnecting after CarPlay interruptions
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        try? session.setActive(true)
+
+        resume()
+    }
+
     // MARK: - Playback
 
     func play(channel: Channel) {
+        interruptionRecoveryTask?.cancel()
+        interruptionRecoveryTask = nil
         mediaPlayer.stop()
         stateTimer?.invalidate()
 
-        // Re-activate audio session
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // Fully reset the audio session to clear stale hardware state
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        try? session.setActive(true)
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
@@ -120,6 +158,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     func pause() {
+        interruptionRecoveryTask?.cancel()
+        interruptionRecoveryTask = nil
+        wasPlayingBeforeInterruption = false
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
@@ -147,6 +188,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     func stop() {
+        interruptionRecoveryTask?.cancel()
+        interruptionRecoveryTask = nil
+        wasPlayingBeforeInterruption = false
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
