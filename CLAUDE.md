@@ -16,21 +16,21 @@ You MUST have an active bd issue before starting implementation. No exceptions.
 
 When a task involves multiple steps, files, or components, you MUST structure it in bd before writing code:
 
-1. **Create an epic** for the overall effort:
+1. **Every phase gets an epic:**
    ```bash
    bd create "Phase N: Title" --type epic --priority 1 --description "Overview"
    ```
-2. **Break it into child issues** — one per logical unit of work:
+2. **Every step in the phase gets a child issue:**
    ```bash
    bd create "Sub-task title" --type task --parent <epic-id> --description "Details"
    ```
-3. **Set dependencies** between children when order matters:
+3. **Set dependencies** — between children when order matters, between epics when phases depend on each other:
    ```bash
    bd dep add <blocked-id> <blocker-id>
    ```
 4. **Work the children in order** — claim, implement, close each one before moving to the next.
 
-A plan without bd issues is just a comment. The epic and its children ARE the plan.
+A plan without bd issues is just a comment. The epic and its children ARE the plan. No phase exists without an epic.
 
 ## During Work
 
