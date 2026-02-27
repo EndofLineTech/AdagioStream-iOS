@@ -12,6 +12,7 @@
 		129D39FCB60C075DFBF45289 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
 		18545F1BF1AC67A74DF31F74 /* GroupManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */; };
 		1A9DB6A68F4DF94B6E096314 /* ChannelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */; };
+		1B7FBCE2515815B7E0C64087 /* XtreamCodesAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */; };
 		1CC9AC317E17D1AD301D41B8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2591A7C2156E83DA1F2F30CE /* Assets.xcassets */; };
 		23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */; };
 		2B16DDBB8A24A98B6C6B2D5E /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 30FF9E502BE3A16ABFA545D6 /* VLCKitSPM */; };
@@ -25,14 +26,19 @@
 		52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D099586458688D813DF57122 /* SettingsView.swift */; };
 		573D9FD1792C3D1E63352518 /* RetryableAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */; };
 		5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64EF86369F656FD2C55498D1 /* ProviderListView.swift */; };
+		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
+		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
 		6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B258B0EF620197CC9833E0 /* ChannelListView.swift */; };
 		6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */; };
 		743B9ECFB3057C393642ADE5 /* ProviderManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49B5499FEB06793F277174C /* ProviderManagementView.swift */; };
 		77F34E2524DD6C89196F2C6D /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */; };
 		781DB2044B7B08D363A75F59 /* AdagioStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */; };
+		840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
 		9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */; };
 		9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */; };
+		9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */; };
 		A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
+		B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */; };
 		B87BC6F49DF0702DA8B0E033 /* ChannelListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */; };
 		BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */; };
 		C0814BA417A9237B8348F95F /* EPGView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */; };
@@ -43,6 +49,7 @@
 		DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
 		E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
 		E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */; };
+		E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */; };
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
 		F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20796E24826A70D504E871C4 /* PersistenceService.swift */; };
@@ -51,14 +58,26 @@
 		FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		1B82872307F0A66CBC7A4DF1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C491AA48FB5EFE41DEFBA97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C4219BBA2AD1D3270C174F2D;
+			remoteInfo = AdagioStream;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
 		1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowView.swift; sourceTree = "<group>"; };
+		1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserTests.swift; sourceTree = "<group>"; };
 		20796E24826A70D504E871C4 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		2591A7C2156E83DA1F2F30CE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateManager.swift; sourceTree = "<group>"; };
 		2E0773D0B4CD7353ACEADE32 /* AdagioStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AdagioStream.entitlements; sourceTree = "<group>"; };
+		2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsTests.swift; sourceTree = "<group>"; };
 		3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProviderView.swift; sourceTree = "<group>"; };
 		4253D682909B25CB052AED9C /* Provider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
 		4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryableAsyncImage.swift; sourceTree = "<group>"; };
@@ -74,15 +93,21 @@
 		8E50932DB3F2B825187CA4B7 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
 		91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesViewModel.swift; sourceTree = "<group>"; };
+		9593372A158F40D59BB914AC /* LicensesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicensesView.swift; sourceTree = "<group>"; };
+		99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntryTests.swift; sourceTree = "<group>"; };
 		9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
 		9CCAE274A593BD7364C5F6FD /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		9DCB0C46B512BF4D2919E11A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPITests.swift; sourceTree = "<group>"; };
+		A1CF4778448EC75225E98912 /* EPGParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParserTests.swift; sourceTree = "<group>"; };
 		A49B5499FEB06793F277174C /* ProviderManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManagementView.swift; sourceTree = "<group>"; };
+		B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AdagioStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B785664AF5E9481E580421E3 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassEffect+Helpers.swift"; sourceTree = "<group>"; };
 		BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntry.swift; sourceTree = "<group>"; };
+		CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LGPL-2.1.txt"; sourceTree = "<group>"; };
 		CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamApp.swift; sourceTree = "<group>"; };
 		D099586458688D813DF57122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
@@ -110,6 +135,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1787FE82B04EA5A83B5335BC /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A1CF4778448EC75225E98912 /* EPGParserTests.swift */,
+				1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */,
+				9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
 		1D9B7E683E5A145DA73ED921 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -144,14 +179,34 @@
 			isa = PBXGroup;
 			children = (
 				F8C3BD180713EE2506F860EF /* AdagioStream.app */,
+				B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3DC32907FEBD360A10C72847 /* AdagioStreamTests */ = {
+			isa = PBXGroup;
+			children = (
+				C76C9EDDA0BC084E53537EC3 /* Models */,
+				1787FE82B04EA5A83B5335BC /* Services */,
+				9E85522650FFA4CE86645183 /* Utilities */,
+			);
+			path = AdagioStreamTests;
+			sourceTree = "<group>";
+		};
+		466ABA381A1500008474A837 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		4C12206AA03A30F359EBF328 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
 				79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */,
+				9593372A158F40D59BB914AC /* LicensesView.swift */,
 				A49B5499FEB06793F277174C /* ProviderManagementView.swift */,
 				D099586458688D813DF57122 /* SettingsView.swift */,
 			);
@@ -170,8 +225,17 @@
 			isa = PBXGroup;
 			children = (
 				C7BB60840AEC2DE630CE1B02 /* AdagioStream */,
+				3DC32907FEBD360A10C72847 /* AdagioStreamTests */,
 				37BE24923E1012894F65BC0D /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		9E85522650FFA4CE86645183 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */,
+			);
+			path = Utilities;
 			sourceTree = "<group>";
 		};
 		9EFBDF60AA9723373E93EFE1 /* Models */ = {
@@ -231,6 +295,14 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
+		C76C9EDDA0BC084E53537EC3 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
 		C7BB60840AEC2DE630CE1B02 /* AdagioStream */ = {
 			isa = PBXGroup;
 			children = (
@@ -240,6 +312,7 @@
 				09037EC9D6025B184F4A718E /* Info.plist */,
 				A3DDF9D70932BE3F2F65D4D1 /* CarPlay */,
 				9EFBDF60AA9723373E93EFE1 /* Models */,
+				466ABA381A1500008474A837 /* Resources */,
 				DF51025FE93F2750A527721A /* Services */,
 				A89E763DDE3B95BBE8B186D5 /* Utilities */,
 				1D9B7E683E5A145DA73ED921 /* ViewModels */,
@@ -295,6 +368,24 @@
 			productReference = F8C3BD180713EE2506F860EF /* AdagioStream.app */;
 			productType = "com.apple.product-type.application";
 		};
+		F3279506301FB0CF807A03E5 /* AdagioStreamTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F7A9B93054AFA0C343F33B9 /* Build configuration list for PBXNativeTarget "AdagioStreamTests" */;
+			buildPhases = (
+				6B1B0E3762342E3317356402 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				ABF8FA9BBD92255BE3829053 /* PBXTargetDependency */,
+			);
+			name = AdagioStreamTests;
+			packageProductDependencies = (
+			);
+			productName = AdagioStreamTests;
+			productReference = B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -322,6 +413,7 @@
 			projectRoot = "";
 			targets = (
 				C4219BBA2AD1D3270C174F2D /* AdagioStream */,
+				F3279506301FB0CF807A03E5 /* AdagioStreamTests */,
 			);
 		};
 /* End PBXProject section */
@@ -332,12 +424,25 @@
 			buildActionMask = 2147483647;
 			files = (
 				1CC9AC317E17D1AD301D41B8 /* Assets.xcassets in Resources */,
+				840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6B1B0E3762342E3317356402 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */,
+				64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */,
+				E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */,
+				9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */,
+				1B7FBCE2515815B7E0C64087 /* XtreamCodesAPITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A1924B7912424CF28B131F74 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -366,6 +471,7 @@
 				18545F1BF1AC67A74DF31F74 /* GroupManagementView.swift in Sources */,
 				F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */,
 				CF2663D333232D924CFD1984 /* LaunchScreenView.swift in Sources */,
+				652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */,
 				45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
@@ -387,7 +493,32 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		ABF8FA9BBD92255BE3829053 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C4219BBA2AD1D3270C174F2D /* AdagioStream */;
+			targetProxy = 1B82872307F0A66CBC7A4DF1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		09AFE31E35FA5AAF7327E4C1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.AdagioStreamTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AdagioStream.app/AdagioStream";
+			};
+			name = Debug;
+		};
 		40B57AFD070715DC80152ED3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -458,7 +589,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
@@ -479,7 +610,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
@@ -491,6 +622,23 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C7F4BEBB9CB64C71C3466CCB /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.AdagioStreamTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AdagioStream.app/AdagioStream";
 			};
 			name = Release;
 		};
@@ -554,6 +702,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1F7A9B93054AFA0C343F33B9 /* Build configuration list for PBXNativeTarget "AdagioStreamTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				09AFE31E35FA5AAF7327E4C1 /* Debug */,
+				C7F4BEBB9CB64C71C3466CCB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		3F149C20DE27F54F8A203EBF /* Build configuration list for PBXProject "AdagioStream" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -21,6 +21,14 @@ xcodebuild -scheme AdagioStream -destination 'platform=iOS Simulator,name=iPhone
 xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; xcrun simctl install "iPhone 17 Pro" ~/Library/Developer/Xcode/DerivedData/AdagioStream-*/Build/Products/Debug-iphonesimulator/AdagioStream.app && xcrun simctl launch "iPhone 17 Pro" com.adagiostream.app
 ```
 
+## Testing
+
+Run unit tests after code changes:
+
+```bash
+xcodebuild test -scheme AdagioStream -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:AdagioStreamTests
+```
+
 ## Versioning
 
 Bump `CURRENT_PROJECT_VERSION` in `project.yml` when making code changes, then regenerate with `xcodegen generate`.
