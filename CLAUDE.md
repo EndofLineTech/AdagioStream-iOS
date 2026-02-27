@@ -2,15 +2,21 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
-## Quick Reference
+## Before Starting Work (MANDATORY)
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --status in_progress  # Claim work
-bd close <id>         # Complete work
-bd sync               # Sync with git
-```
+ALWAYS run these steps before writing any code:
+
+1. **Check for work:** `bd ready` — find available issues
+2. **Claim work:** `bd update <id> --status in_progress` — claim the issue you're working on
+3. **If no issue exists** for the task, create one with `bd create`
+
+You MUST have an active bd issue before starting implementation. No exceptions.
+
+## During Work
+
+- Use `bd show <id>` to review issue details
+- If you discover sub-tasks or follow-up work, file new issues with `bd create`
+- When blocked, note it on the issue
 
 ## Building
 
@@ -39,23 +45,24 @@ Bump `CURRENT_PROJECT_VERSION` in `project.yml` when making code changes, then r
 
 **MANDATORY WORKFLOW:**
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+1. **File issues for remaining work** — `bd create` for anything that needs follow-up
+2. **Run quality gates** (if code changed) — tests, linters, builds
+3. **Close finished issues** — `bd close <id>` for every completed issue
+4. **Sync and push** — this is MANDATORY, every step:
    ```bash
    git pull --rebase
    bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+5. **Clean up** — clear stashes, prune remote branches
+6. **Verify** — all changes committed AND pushed, all issues updated
+7. **Hand off** — provide context for next session
 
 **CRITICAL RULES:**
 - Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
+- NEVER stop before pushing — that leaves work stranded locally
+- NEVER say "ready to push when you are" — YOU must push
 - If push fails, resolve and retry until it succeeds
+- EVERY issue you worked on MUST be closed or updated before session ends
 
