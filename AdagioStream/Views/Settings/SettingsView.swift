@@ -205,6 +205,11 @@ struct SettingsView: View {
                         Text(buildNumber)
                             .foregroundStyle(.secondary)
                     }
+                    NavigationLink {
+                        LicensesView()
+                    } label: {
+                        Text("Licenses")
+                    }
                 }
             }
             .navigationTitle("Settings")

@@ -14,8 +14,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var error: String?
     @Published var streamBitrateKbps: Double = 0
     @Published var statusText: String = ""
+    @Published var listeningDuration: TimeInterval = 0
 
     private let mediaPlayer = VLCMediaPlayer()
+    private var listeningStartDate: Date?
+    private var accumulatedListeningTime: TimeInterval = 0
     private var stateTimer: Timer?
     private var currentArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
@@ -131,9 +134,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         streamBitrateKbps = 0
         statusText = ""
         if channelChanged {
+            accumulatedListeningTime = 0
+            listeningDuration = 0
             currentArtwork = nil
             fetchArtwork(for: channel)
         }
+        listeningStartDate = Date()
 
         let media = VLCMedia(url: channel.streamURL)
         media.addOptions([
@@ -164,6 +170,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
+        if let start = listeningStartDate {
+            accumulatedListeningTime += Date().timeIntervalSince(start)
+            listeningStartDate = nil
+        }
         mediaPlayer.stop()
         isPlaying = false
         isBuffering = false
@@ -194,6 +204,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
+        listeningStartDate = nil
+        accumulatedListeningTime = 0
+        listeningDuration = 0
         mediaPlayer.stop()
         lastPlayedChannel = currentChannel
         currentChannel = nil
@@ -283,6 +296,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             default:
                 break
             }
+        }
+
+        if let start = listeningStartDate {
+            listeningDuration = accumulatedListeningTime + Date().timeIntervalSince(start)
         }
 
         updateStreamStats()

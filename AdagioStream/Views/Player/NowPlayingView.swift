@@ -79,6 +79,14 @@ struct NowPlayingView: View {
                     .padding(.top, 8)
                 }
 
+                // Listening timer
+                if audioPlayer.listeningDuration >= 1 {
+                    Text(formattedDuration(audioPlayer.listeningDuration))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
                 if let error = audioPlayer.error {
                     VStack(spacing: 8) {
                         Text(error)
@@ -120,6 +128,17 @@ struct NowPlayingView: View {
                     .font(.system(size: 60))
                     .foregroundStyle(.secondary)
             }
+    }
+
+    private func formattedDuration(_ duration: TimeInterval) -> String {
+        let total = Int(duration)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let seconds = total % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
     }
 
     private var currentEPG: EPGEntry? {
