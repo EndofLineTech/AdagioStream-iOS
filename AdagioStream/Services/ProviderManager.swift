@@ -25,6 +25,7 @@ final class ProviderManager: ObservableObject {
     @Published private(set) var channelCountByProvider: [UUID: Int] = [:]
     @Published private(set) var sortedVisibleGroups: [ChannelGroup] = []
     @Published private(set) var allGroupCounts: [String: Int] = [:]
+    @Published var channelSortOrder: ChannelSortOrder = .providerOrder
     private var rawChannels: [Channel] = []
     private var hasInitializedCollapsedGroups = false
     private var isLoadingChannels = false
@@ -33,6 +34,10 @@ final class ProviderManager: ObservableObject {
 
     init() {
         Task {
+            let settings: AppSettings = await persistence.loadOrDefault(
+                from: Constants.StorageKeys.settings, default: .default
+            )
+            channelSortOrder = settings.channelSortOrder
             await loadProviders()
             if !providers.isEmpty {
                 await loadChannels()
@@ -310,8 +315,22 @@ final class ProviderManager: ObservableObject {
     func rebuildVisibleGroups() {
         let grouped = Dictionary(grouping: channels, by: \.group)
         let favOrder = favoriteGroupOrder
+        let sortOrder = channelSortOrder
         sortedVisibleGroups = grouped.map { name, chans in
-            ChannelGroup(name: name, channels: chans, isFavorite: favOrder.contains(name))
+            let sortedChans: [Channel]
+            switch sortOrder {
+            case .providerOrder:
+                sortedChans = chans
+            case .natural:
+                sortedChans = chans.sorted {
+                    $0.name.localizedStandardCompare($1.name) == .orderedAscending
+                }
+            case .alphabetical:
+                sortedChans = chans.sorted {
+                    $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+                }
+            }
+            return ChannelGroup(name: name, channels: sortedChans, isFavorite: favOrder.contains(name))
         }
         .sorted { a, b in
             let aFav = favOrder.firstIndex(of: a.name)

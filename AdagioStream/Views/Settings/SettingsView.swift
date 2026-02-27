@@ -96,6 +96,11 @@ struct SettingsView: View {
                 }
 
                 Section("Channels") {
+                    Picker("Sort Order", selection: channelSortBinding) {
+                        ForEach(ChannelSortOrder.allCases, id: \.self) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
                     HStack {
                         Text("Loaded Channels")
                         Spacer()
@@ -213,6 +218,15 @@ struct SettingsView: View {
                 Text("Remove all \(providerManager.favoriteChannels.count) channels from your favorites?")
             }
         }
+    }
+
+    private var channelSortBinding: Binding<ChannelSortOrder> {
+        Binding(
+            get: { viewModel.settings.channelSortOrder },
+            set: { newValue in
+                Task { await viewModel.updateChannelSortOrder(newValue, providerManager: providerManager) }
+            }
+        )
     }
 
     private var startupStreamBinding: Binding<String?> {

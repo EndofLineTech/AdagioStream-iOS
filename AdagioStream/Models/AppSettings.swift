@@ -69,25 +69,42 @@ enum TextSizeMode: String, Codable, CaseIterable {
     }
 }
 
+enum ChannelSortOrder: String, Codable, CaseIterable {
+    case providerOrder
+    case natural
+    case alphabetical
+
+    var label: String {
+        switch self {
+        case .providerOrder: "Provider Order"
+        case .natural: "Natural Sort"
+        case .alphabetical: "A–Z"
+        }
+    }
+}
+
 struct AppSettings: Codable {
     var bufferDuration: TimeInterval
     var appearanceMode: AppearanceMode
     var textSizeMode: TextSizeMode
     var sortPrefixes: [String]
     var startupStreamID: String?
+    var channelSortOrder: ChannelSortOrder
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
         appearanceMode: AppearanceMode = .system,
         textSizeMode: TextSizeMode = .system,
         sortPrefixes: [String] = ["Radio: ", "TV: "],
-        startupStreamID: String? = nil
+        startupStreamID: String? = nil,
+        channelSortOrder: ChannelSortOrder = .providerOrder
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
         self.textSizeMode = textSizeMode
         self.sortPrefixes = sortPrefixes
         self.startupStreamID = startupStreamID
+        self.channelSortOrder = channelSortOrder
     }
 
     static let `default` = AppSettings()

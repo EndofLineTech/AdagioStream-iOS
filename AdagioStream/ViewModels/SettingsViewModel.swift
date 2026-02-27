@@ -47,4 +47,11 @@ final class SettingsViewModel: ObservableObject {
         settings.startupStreamID = channelID
         await saveSettings()
     }
+
+    func updateChannelSortOrder(_ order: ChannelSortOrder, providerManager: ProviderManager) async {
+        settings.channelSortOrder = order
+        await saveSettings()
+        providerManager.channelSortOrder = order
+        providerManager.rebuildVisibleGroups()
+    }
 }
