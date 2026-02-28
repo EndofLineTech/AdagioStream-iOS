@@ -10,6 +10,7 @@ struct XtreamCodesAPI {
         case authenticationFailed
         case networkError(Error)
         case decodingError(Error)
+        case serverError(statusCode: Int)
 
         var errorDescription: String? {
             switch self {
@@ -17,6 +18,7 @@ struct XtreamCodesAPI {
             case .authenticationFailed: return "Authentication failed"
             case .networkError(let e): return "Network error: \(e.localizedDescription)"
             case .decodingError(let e): return "Data error: \(e.localizedDescription)"
+            case .serverError(let code): return "Server error (HTTP \(code))"
             }
         }
     }
@@ -174,12 +176,30 @@ struct XtreamCodesAPI {
 
     // MARK: - Private
 
-    private func fetch<T: Codable>(_ url: URL) async throws -> T {
+    private func fetch<T: Codable>(_ url: URL, attempt: Int = 1) async throws -> T {
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(from: url)
+
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200...299).contains(httpResponse.statusCode) {
+                // Retry once on server errors (5xx)
+                if attempt == 1, (500...599).contains(httpResponse.statusCode) {
+                    try? await Task.sleep(for: .seconds(2))
+                    return try await fetch(url, attempt: 2)
+                }
+                throw APIError.serverError(statusCode: httpResponse.statusCode)
+            }
+
             let decoder = JSONDecoder()
             return try decoder.decode(T.self, from: data)
+        } catch let error as APIError {
+            throw error
         } catch let error as DecodingError {
+            // Retry once on decoding errors (server may have returned transient garbage)
+            if attempt == 1 {
+                try? await Task.sleep(for: .seconds(2))
+                return try await fetch(url, attempt: 2)
+            }
             throw APIError.decodingError(error)
         } catch {
             throw APIError.networkError(error)

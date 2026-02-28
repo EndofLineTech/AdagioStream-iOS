@@ -83,13 +83,16 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
             case .ended:
                 interruptionRecoveryTask?.cancel()
-                interruptionRecoveryTask = nil
-                guard wasPlayingBeforeInterruption else { return }
+                guard wasPlayingBeforeInterruption else {
+                    interruptionRecoveryTask = nil
+                    return
+                }
                 wasPlayingBeforeInterruption = false
 
                 // Delay to let the audio route settle (CarPlay route transitions
-                // need time to switch back from phone/Siri to media output)
-                Task {
+                // need time to switch back from phone/Siri to media output).
+                // Store in interruptionRecoveryTask so a new .began cancels it.
+                interruptionRecoveryTask = Task {
                     try? await Task.sleep(for: .milliseconds(500))
                     guard !Task.isCancelled else { return }
                     reactivateSessionAndResume()
@@ -120,11 +123,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         interruptionRecoveryTask = nil
         mediaPlayer.stop()
         stateTimer?.invalidate()
-
-        // Fully reset the audio session to clear stale hardware state
-        let session = AVAudioSession.sharedInstance()
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
-        try? session.setActive(true)
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
