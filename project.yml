@@ -28,7 +28,6 @@ targets:
       path: AdagioStream/Info.plist
       properties:
         ITSAppUsesNonExemptEncryption: false
-        LSApplicationCategoryType: public.app-category.music
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Adagio Stream
         NSSupportsLiveActivities: false
@@ -50,11 +49,12 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "21"
+        CURRENT_PROJECT_VERSION: "22"
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_KEY_UIRequiresFullScreen: true
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
     entitlements:
       path: AdagioStream/AdagioStream.entitlements
       properties:
