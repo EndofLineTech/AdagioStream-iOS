@@ -49,12 +49,13 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "22"
+        CURRENT_PROJECT_VERSION: "23"
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_KEY_UIRequiresFullScreen: true
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
     entitlements:
       path: AdagioStream/AdagioStream.entitlements
       properties:
