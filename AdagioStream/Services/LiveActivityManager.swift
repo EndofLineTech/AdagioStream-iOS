@@ -101,7 +101,7 @@ final class LiveActivityManager {
             let resized = Self.resizeImage(image, maxDimension: 96)
             guard let pngData = resized.pngData() else { return }
             guard !Task.isCancelled else { return }
-            await self?.updateArtwork(pngData)
+            self?.updateArtwork(pngData)
         }
     }
 
