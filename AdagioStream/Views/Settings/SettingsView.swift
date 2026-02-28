@@ -96,7 +96,12 @@ struct SettingsView: View {
                 }
 
                 Section("Channels") {
-                    Picker("Sort Order", selection: channelSortBinding) {
+                    Picker("Group Sort", selection: groupSortBinding) {
+                        ForEach(ChannelSortOrder.allCases, id: \.self) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
+                    Picker("Channel Sort", selection: channelSortBinding) {
                         ForEach(ChannelSortOrder.allCases, id: \.self) { order in
                             Text(order.label).tag(order)
                         }
@@ -230,6 +235,15 @@ struct SettingsView: View {
             get: { viewModel.settings.channelSortOrder },
             set: { newValue in
                 Task { await viewModel.updateChannelSortOrder(newValue, providerManager: providerManager) }
+            }
+        )
+    }
+
+    private var groupSortBinding: Binding<ChannelSortOrder> {
+        Binding(
+            get: { viewModel.settings.groupSortOrder },
+            set: { newValue in
+                Task { await viewModel.updateGroupSortOrder(newValue, providerManager: providerManager) }
             }
         )
     }

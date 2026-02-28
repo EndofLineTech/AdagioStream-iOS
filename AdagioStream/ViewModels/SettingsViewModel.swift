@@ -54,4 +54,11 @@ final class SettingsViewModel: ObservableObject {
         providerManager.channelSortOrder = order
         providerManager.rebuildVisibleGroups()
     }
+
+    func updateGroupSortOrder(_ order: ChannelSortOrder, providerManager: ProviderManager) async {
+        settings.groupSortOrder = order
+        await saveSettings()
+        providerManager.groupSortOrder = order
+        providerManager.rebuildVisibleGroups()
+    }
 }

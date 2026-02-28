@@ -90,6 +90,7 @@ struct AppSettings: Codable {
     var sortPrefixes: [String]
     var startupStreamID: String?
     var channelSortOrder: ChannelSortOrder
+    var groupSortOrder: ChannelSortOrder
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -97,7 +98,8 @@ struct AppSettings: Codable {
         textSizeMode: TextSizeMode = .system,
         sortPrefixes: [String] = ["Radio: ", "TV: "],
         startupStreamID: String? = nil,
-        channelSortOrder: ChannelSortOrder = .providerOrder
+        channelSortOrder: ChannelSortOrder = .providerOrder,
+        groupSortOrder: ChannelSortOrder = .providerOrder
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -105,6 +107,7 @@ struct AppSettings: Codable {
         self.sortPrefixes = sortPrefixes
         self.startupStreamID = startupStreamID
         self.channelSortOrder = channelSortOrder
+        self.groupSortOrder = groupSortOrder
     }
 
     static let `default` = AppSettings()

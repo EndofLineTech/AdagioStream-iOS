@@ -26,6 +26,7 @@ final class ProviderManager: ObservableObject {
     @Published private(set) var sortedVisibleGroups: [ChannelGroup] = []
     @Published private(set) var allGroupCounts: [String: Int] = [:]
     @Published var channelSortOrder: ChannelSortOrder = .providerOrder
+    @Published var groupSortOrder: ChannelSortOrder = .providerOrder
     private var rawChannels: [Channel] = []
     private var hasInitializedCollapsedGroups = false
     private var isLoadingChannels = false
@@ -38,6 +39,7 @@ final class ProviderManager: ObservableObject {
                 from: Constants.StorageKeys.settings, default: .default
             )
             channelSortOrder = settings.channelSortOrder
+            groupSortOrder = settings.groupSortOrder
             await loadProviders()
             if !providers.isEmpty {
                 await loadChannels()
@@ -315,10 +317,20 @@ final class ProviderManager: ObservableObject {
     func rebuildVisibleGroups() {
         let grouped = Dictionary(grouping: channels, by: \.group)
         let favOrder = favoriteGroupOrder
-        let sortOrder = channelSortOrder
+        let chanSort = channelSortOrder
+        let grpSort = groupSortOrder
+
+        // Build first-seen index for provider order of groups
+        var groupFirstIndex: [String: Int] = [:]
+        for (index, channel) in channels.enumerated() {
+            if groupFirstIndex[channel.group] == nil {
+                groupFirstIndex[channel.group] = index
+            }
+        }
+
         sortedVisibleGroups = grouped.map { name, chans in
             let sortedChans: [Channel]
-            switch sortOrder {
+            switch chanSort {
             case .providerOrder:
                 sortedChans = chans
             case .natural:
@@ -339,7 +351,15 @@ final class ProviderManager: ObservableObject {
             case let (.some(ai), .some(bi)): return ai < bi
             case (.some, .none): return true
             case (.none, .some): return false
-            case (.none, .none): return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+            case (.none, .none):
+                switch grpSort {
+                case .providerOrder:
+                    return (groupFirstIndex[a.name] ?? Int.max) < (groupFirstIndex[b.name] ?? Int.max)
+                case .natural:
+                    return a.name.localizedStandardCompare(b.name) == .orderedAscending
+                case .alphabetical:
+                    return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+                }
             }
         }
     }
