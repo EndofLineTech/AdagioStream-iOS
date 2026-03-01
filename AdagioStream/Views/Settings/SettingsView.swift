@@ -195,6 +195,8 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Enable Debug Logging", isOn: debugLoggingBinding)
+
                     Button {
                         showShareSheet = true
                     } label: {
@@ -216,7 +218,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Debug Logs")
                 } footer: {
-                    Text("Logs record player and CarPlay events for troubleshooting. Share them via AirDrop, email, or save to Files.")
+                    Text("When enabled, logs record player, CarPlay, call, and Siri events for troubleshooting. Share them via AirDrop, email, or save to Files.")
                 }
 
                 Section("About") {
@@ -296,6 +298,15 @@ struct SettingsView: View {
             get: { viewModel.settings.startupStreamID },
             set: { newValue in
                 Task { await viewModel.updateStartupStream(newValue) }
+            }
+        )
+    }
+
+    private var debugLoggingBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.settings.debugLoggingEnabled },
+            set: { newValue in
+                Task { await viewModel.updateDebugLogging(newValue) }
             }
         )
     }

@@ -21,6 +21,7 @@ final class SettingsViewModel: ObservableObject {
             try? await persistence.save(settings, to: Constants.StorageKeys.settings)
         }
         audioPlayer.updateBufferDuration(settings.bufferDuration)
+        DebugLogger.shared.isEnabled = settings.debugLoggingEnabled
     }
 
     func saveSettings() async {
@@ -60,5 +61,14 @@ final class SettingsViewModel: ObservableObject {
         await saveSettings()
         providerManager.groupSortOrder = order
         providerManager.rebuildVisibleGroups()
+    }
+
+    func updateDebugLogging(_ enabled: Bool) async {
+        settings.debugLoggingEnabled = enabled
+        DebugLogger.shared.isEnabled = enabled
+        await saveSettings()
+        if enabled {
+            DebugLogger.shared.log("Debug logging ENABLED by user", category: .general)
+        }
     }
 }

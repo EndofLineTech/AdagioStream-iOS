@@ -91,6 +91,7 @@ struct AppSettings: Codable {
     var startupStreamID: String?
     var channelSortOrder: ChannelSortOrder
     var groupSortOrder: ChannelSortOrder
+    var debugLoggingEnabled: Bool
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -99,7 +100,8 @@ struct AppSettings: Codable {
         sortPrefixes: [String] = ["Radio: ", "TV: "],
         startupStreamID: String? = nil,
         channelSortOrder: ChannelSortOrder = .providerOrder,
-        groupSortOrder: ChannelSortOrder = .providerOrder
+        groupSortOrder: ChannelSortOrder = .providerOrder,
+        debugLoggingEnabled: Bool = false
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -108,6 +110,7 @@ struct AppSettings: Codable {
         self.startupStreamID = startupStreamID
         self.channelSortOrder = channelSortOrder
         self.groupSortOrder = groupSortOrder
+        self.debugLoggingEnabled = debugLoggingEnabled
     }
 
     static let `default` = AppSettings()

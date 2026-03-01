@@ -2,8 +2,15 @@ import Foundation
 
 /// Persistent file-based logger for debugging CarPlay and player issues.
 /// Logs are written to the app's documents directory and can be exported via the share sheet.
-final class DebugLogger: Sendable {
+final class DebugLogger: @unchecked Sendable {
     static let shared = DebugLogger()
+
+    /// Controls whether log messages are written. Toggled via Settings.
+    var isEnabled: Bool {
+        get { queue.sync { _isEnabled } }
+        set { queue.sync { _isEnabled = newValue } }
+    }
+    private var _isEnabled = false
 
     private let queue = DispatchQueue(label: "com.adagiostream.debuglogger")
     private let maxFileSize: UInt64 = 2 * 1024 * 1024 // 2 MB
@@ -29,6 +36,7 @@ final class DebugLogger: Sendable {
     // MARK: - Public API
 
     func log(_ message: String, category: Category = .general, file: String = #fileID, line: Int = #line) {
+        guard isEnabled else { return }
         let timestamp = dateFormatter.string(from: Date())
         let fileName = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
         let entry = "[\(timestamp)] [\(category.rawValue)] [\(fileName):\(line)] \(message)\n"
@@ -65,6 +73,7 @@ final class DebugLogger: Sendable {
         case interruption = "INTERRUPT"
         case remoteCommand = "REMOTE"
         case nowPlaying = "NOWPLAY"
+        case call = "CALL"
     }
 
     // MARK: - Private

@@ -1,4 +1,5 @@
 import AVFoundation
+import CallKit
 import Combine
 import MediaPlayer
 import SwiftUI
@@ -18,6 +19,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var listeningDuration: TimeInterval = 0
 
     private let mediaPlayer = VLCMediaPlayer()
+    private let callObserver = CXCallObserver()
+    private let callDelegate = CallObserverDelegate()
     private var listeningStartDate: Date?
     private var accumulatedListeningTime: TimeInterval = 0
     private var stateTimer: Timer?
@@ -35,6 +38,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         super.init()
         log.log("AudioPlayerService init", category: .player)
         mediaPlayer.delegate = self
+        callObserver.setDelegate(callDelegate, queue: nil)
         configureAudioSession()
         configureRemoteCommands()
         // Live Activity disabled — system Now Playing widget is sufficient
@@ -66,6 +70,26 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             name: AVAudioSession.routeChangeNotification,
             object: AVAudioSession.sharedInstance()
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSilenceSecondaryAudio),
+            name: AVAudioSession.silenceSecondaryAudioHintNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    @objc nonisolated private func handleSilenceSecondaryAudio(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionSilenceSecondaryAudioHintTypeKey] as? UInt,
+              let type = AVAudioSession.SilenceSecondaryAudioHintType(rawValue: typeValue) else { return }
+        let hintName: String
+        switch type {
+        case .begin: hintName = "BEGIN (system audio started, e.g. Siri/Voice Control)"
+        case .end: hintName = "END (system audio stopped)"
+        @unknown default: hintName = "rawValue(\(typeValue))"
+        }
+        DebugLogger.shared.log("Secondary audio hint: \(hintName), otherAudioPlaying=\(AVAudioSession.sharedInstance().isOtherAudioPlaying)", category: .interruption)
     }
 
     @objc nonisolated private func handleRouteChange(_ notification: Notification) {
@@ -74,6 +98,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
               let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else { return }
         let session = AVAudioSession.sharedInstance()
         let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        let inputs = session.currentRoute.inputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
         let reasonName: String
         switch reason {
         case .newDeviceAvailable: reasonName = "newDeviceAvailable"
@@ -86,7 +111,16 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         case .unknown: reasonName = "unknown"
         @unknown default: reasonName = "rawValue(\(reasonValue))"
         }
-        DebugLogger.shared.log("Route change: reason=\(reasonName), outputs=[\(outputs)]", category: .audioSession)
+
+        let isCarPlayOutput = session.currentRoute.outputs.contains { $0.portType == .carAudio }
+        let prevRouteDesc: String
+        if let prev = userInfo[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription {
+            prevRouteDesc = prev.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        } else {
+            prevRouteDesc = "unknown"
+        }
+
+        DebugLogger.shared.log("Route change: reason=\(reasonName), carplay=\(isCarPlayOutput), outputs=[\(outputs)], inputs=[\(inputs)], prev=[\(prevRouteDesc)], otherAudio=\(session.isOtherAudioPlaying)", category: .audioSession)
     }
 
     @objc nonisolated private func handleAudioInterruption(_ notification: Notification) {
@@ -101,6 +135,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 // state timer may have already cleared those by the time this runs
                 wasPlayingBeforeInterruption = isActiveSession
                 self.log.log("Interruption BEGAN: wasPlaying=\(self.wasPlayingBeforeInterruption), isActive=\(self.isActiveSession), vlcState=\(self.mediaPlayer.state.rawValue)", category: .interruption)
+                self.logAudioSessionSnapshot("interruption.began")
 
                 // Start a recovery watchdog: if .ended never fires (common with
                 // CarPlay Siri announcements), recover automatically after 8s
@@ -115,6 +150,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                         }
 
                         DebugLogger.shared.log("Recovery watchdog: .ended never fired, checking other audio", category: .interruption)
+                        await self.logAudioSessionSnapshot("watchdog.fired")
 
                         // If another audio session is still active (phone call,
                         // long Siri response), poll until it finishes rather than
@@ -139,6 +175,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 let options = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
                 let shouldResume = AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume)
                 self.log.log("Interruption ENDED: wasPlaying=\(self.wasPlayingBeforeInterruption), shouldResume=\(shouldResume)", category: .interruption)
+                self.logAudioSessionSnapshot("interruption.ended")
 
                 interruptionRecoveryTask?.cancel()
                 guard wasPlayingBeforeInterruption else {
@@ -167,6 +204,23 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 break
             }
         }
+    }
+
+    private func logAudioSessionSnapshot(_ context: String) {
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        let inputs = session.currentRoute.inputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        let isCarPlay = session.currentRoute.outputs.contains { $0.portType == .carAudio }
+        let activeCalls = callObserver.calls.map { call -> String in
+            let state: String
+            if call.hasConnected { state = "connected" }
+            else if call.hasEnded { state = "ended" }
+            else if call.isOutgoing { state = "outgoing-ringing" }
+            else { state = "incoming-ringing" }
+            return "\(state)(onHold=\(call.isOnHold))"
+        }
+        let callInfo = activeCalls.isEmpty ? "none" : activeCalls.joined(separator: ", ")
+        log.log("Session[\(context)]: cat=\(session.category.rawValue), mode=\(session.mode.rawValue), otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), carplay=\(isCarPlay), outputs=[\(outputs)], inputs=[\(inputs)], calls=[\(callInfo)]", category: .audioSession)
     }
 
     private func reactivateSessionAndResume() {
@@ -529,5 +583,27 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         commandCenter.seekForwardCommand.isEnabled = false
         commandCenter.seekBackwardCommand.isEnabled = false
         commandCenter.changePlaybackPositionCommand.isEnabled = false
+    }
+}
+
+// MARK: - Call Observer
+
+/// Logs phone call state changes for debugging CarPlay interruption issues.
+final class CallObserverDelegate: NSObject, CXCallObserverDelegate {
+    func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
+        let state: String
+        if call.hasEnded {
+            state = "ENDED"
+        } else if call.hasConnected {
+            state = "CONNECTED"
+        } else if call.isOutgoing {
+            state = "OUTGOING_RINGING"
+        } else {
+            state = "INCOMING_RINGING"
+        }
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        let isCarPlay = session.currentRoute.outputs.contains { $0.portType == .carAudio }
+        DebugLogger.shared.log("Call \(state): onHold=\(call.isOnHold), carplay=\(isCarPlay), outputs=[\(outputs)], otherAudio=\(session.isOtherAudioPlaying), mode=\(session.mode.rawValue)", category: .call)
     }
 }
