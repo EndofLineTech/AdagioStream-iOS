@@ -18,6 +18,7 @@
 		2B16DDBB8A24A98B6C6B2D5E /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 30FF9E502BE3A16ABFA545D6 /* VLCKitSPM */; };
 		33C3578193ABE2495606970B /* CarPlayTemplateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */; };
 		34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */; };
+		3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */; };
 		45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759D39578A2906EC0C071E9A /* LiveActivityManager.swift */; };
 		462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */; };
 		4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */; };
@@ -88,6 +89,7 @@
 		70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingAttributes.swift; sourceTree = "<group>"; };
 		74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		759D39578A2906EC0C071E9A /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogger.swift; sourceTree = "<group>"; };
 		79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManager.swift; sourceTree = "<group>"; };
 		79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupManagementView.swift; sourceTree = "<group>"; };
 		8E50932DB3F2B825187CA4B7 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
@@ -334,6 +336,7 @@
 			isa = PBXGroup;
 			children = (
 				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
+				765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */,
 				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
 				B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */,
 				759D39578A2906EC0C071E9A /* LiveActivityManager.swift */,
@@ -465,6 +468,7 @@
 				6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */,
 				C49FDC073B2434235202F075 /* Constants.swift in Sources */,
 				E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */,
+				3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */,
 				49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */,
 				C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */,
 				C0814BA417A9237B8348F95F /* EPGView.swift in Sources */,
@@ -594,7 +598,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -618,7 +622,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;

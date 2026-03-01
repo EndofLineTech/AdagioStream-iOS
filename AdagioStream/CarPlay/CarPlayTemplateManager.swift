@@ -8,6 +8,7 @@ class CarPlayTemplateManager {
     let interfaceController: CPInterfaceController
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
+    private let log = DebugLogger.shared
     private var cancellable: AnyCancellable?
     private var channelCancellable: AnyCancellable?
     private var rootTemplate: CPListTemplate?
@@ -25,12 +26,14 @@ class CarPlayTemplateManager {
     }
 
     func configure() {
+        log.log("configure() starting", category: .carplay)
         Task {
             let settings: AppSettings = await PersistenceService.shared.loadOrDefault(
                 from: Constants.StorageKeys.settings, default: .default
             )
             sortPrefixes = settings.sortPrefixes
             startupStreamID = settings.startupStreamID
+            log.log("Settings loaded: startupStream=\(settings.startupStreamID ?? "none")", category: .carplay)
         }
         updateNowPlayingButtons()
         setRootTemplate()
@@ -67,6 +70,7 @@ class CarPlayTemplateManager {
               !providerManager.visibleChannels.isEmpty else { return }
         hasAttemptedStartupStream = true
         if let channel = providerManager.visibleChannels.first(where: { $0.id == streamID }) {
+            log.log("Auto-playing startup channel: \"\(channel.name)\"", category: .carplay)
             // Play in background without navigating to Now Playing —
             // keeps the user on the channel list so they can quickly switch
             audioPlayer.channels = providerManager.visibleChannels
@@ -177,6 +181,7 @@ class CarPlayTemplateManager {
         let sections = buildRootSections()
         let root = CPListTemplate(title: "Adagio Stream", sections: sections)
         rootTemplate = root
+        log.log("setRootTemplate: \(sections.flatMap(\.items).count) items", category: .carplay)
         interfaceController.setRootTemplate(root, animated: true, completion: nil)
     }
 
@@ -192,14 +197,17 @@ class CarPlayTemplateManager {
     private func pushNowPlaying() {
         let nowPlaying = CPNowPlayingTemplate.shared
         if interfaceController.topTemplate is CPNowPlayingTemplate {
+            log.log("pushNowPlaying: already on top, refreshing info", category: .carplay)
             audioPlayer.refreshNowPlayingInfo()
             return
         }
         if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
+            log.log("pushNowPlaying: popping back to existing template", category: .carplay)
             interfaceController.pop(to: nowPlaying, animated: true) { [weak self] _, _ in
                 Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
             }
         } else {
+            log.log("pushNowPlaying: pushing new template", category: .carplay)
             interfaceController.pushTemplate(nowPlaying, animated: true) { [weak self] _, _ in
                 Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
             }
@@ -207,6 +215,7 @@ class CarPlayTemplateManager {
     }
 
     private func playChannelAndShowNowPlaying(_ channel: Channel, within channels: [Channel]) {
+        log.log("CarPlay selected channel: \"\(channel.name)\" from \(channels.count) channels", category: .carplay)
         audioPlayer.channels = channels
         audioPlayer.play(channel: channel)
         pushNowPlaying()

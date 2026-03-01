@@ -5,6 +5,9 @@ struct SettingsView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject private var viewModel: SettingsViewModel
     @State private var showClearFavoritesAlert = false
+    @State private var showClearLogsAlert = false
+    @State private var showShareSheet = false
+    @State private var logSize = DebugLogger.shared.logFileSize()
     @State private var newPrefix = ""
 
     var body: some View {
@@ -191,6 +194,31 @@ struct SettingsView: View {
                     .disabled(providerManager.favoriteChannels.isEmpty)
                 }
 
+                Section {
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        HStack {
+                            Label("Share Logs", systemImage: "square.and.arrow.up")
+                            Spacer()
+                            Text(logSize)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(!FileManager.default.fileExists(atPath: DebugLogger.shared.logFileURL.path))
+
+                    Button(role: .destructive) {
+                        showClearLogsAlert = true
+                    } label: {
+                        Label("Clear Logs", systemImage: "trash")
+                    }
+                    .disabled(!FileManager.default.fileExists(atPath: DebugLogger.shared.logFileURL.path))
+                } header: {
+                    Text("Debug Logs")
+                } footer: {
+                    Text("Logs record player and CarPlay events for troubleshooting. Share them via AirDrop, email, or save to Files.")
+                }
+
                 Section("About") {
                     HStack {
                         Text("App")
@@ -226,6 +254,21 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Remove all \(providerManager.favoriteChannels.count) channels from your favorites?")
+            }
+            .alert("Clear Logs", isPresented: $showClearLogsAlert) {
+                Button("Clear", role: .destructive) {
+                    DebugLogger.shared.clearLogs()
+                    logSize = DebugLogger.shared.logFileSize()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Delete all debug log files?")
+            }
+            .sheet(isPresented: $showShareSheet) {
+                logSize = DebugLogger.shared.logFileSize()
+            } content: {
+                ShareSheet(activityItems: [DebugLogger.shared.logFileURL])
+                    .presentationDetents([.medium, .large])
             }
         }
     }
