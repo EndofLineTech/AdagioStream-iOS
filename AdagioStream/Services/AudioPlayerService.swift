@@ -76,6 +76,18 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                     interruptionRecoveryTask = Task {
                         try? await Task.sleep(for: .seconds(8))
                         guard !Task.isCancelled, wasPlayingBeforeInterruption else { return }
+
+                        // If another audio session is still active (phone call,
+                        // long Siri response), poll until it finishes rather than
+                        // resuming over it.  For phone calls the .ended notification
+                        // will cancel this task; the loop is a safety net.
+                        for _ in 0..<60 {
+                            guard !Task.isCancelled, wasPlayingBeforeInterruption else { return }
+                            guard AVAudioSession.sharedInstance().isOtherAudioPlaying else { break }
+                            try? await Task.sleep(for: .seconds(2))
+                        }
+                        guard !Task.isCancelled, wasPlayingBeforeInterruption else { return }
+
                         wasPlayingBeforeInterruption = false
                         reactivateSessionAndResume()
                     }
