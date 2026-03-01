@@ -2,7 +2,7 @@ import Foundation
 
 enum Constants {
     static let appName = "Adagio Stream"
-    static let defaultBufferDuration: TimeInterval = 10.0
+    static let defaultBufferDuration: TimeInterval = 2.0
 
     enum StorageKeys {
         static let providers = "providers.json"

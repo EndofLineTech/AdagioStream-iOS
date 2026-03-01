@@ -20,7 +20,7 @@ struct RetryableAsyncImage: View {
             if let uiImage = loadedImage {
                 Image(uiImage: uiImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: .fit)
             } else if hasFailed {
                 placeholder
                     .overlay(alignment: .bottomTrailing) {

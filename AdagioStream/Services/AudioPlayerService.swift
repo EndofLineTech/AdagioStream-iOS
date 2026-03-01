@@ -18,7 +18,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var statusText: String = ""
     @Published var listeningDuration: TimeInterval = 0
 
-    private let mediaPlayer = VLCMediaPlayer()
+    private var mediaPlayer = VLCMediaPlayer()
     private let callObserver = CXCallObserver()
     private let callDelegate = CallObserverDelegate()
     private var listeningStartDate: Date?
@@ -31,6 +31,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastToggleTime: Date = .distantPast
     private var interruptionRecoveryTask: Task<Void, Never>?
     private var lastLoggedVLCState: VLCMediaPlayerState?
+    private var channelChangeRetryCount = 0
+    private let maxChannelChangeRetries = 3
+    private var pendingPlayWorkItem: DispatchWorkItem?
+    private var lastTeardownTime: Date = .distantPast
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -252,30 +256,42 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     func play(channel: Channel) {
         log.log("play() channel=\"\(channel.name)\" group=\"\(channel.group)\" url=\(channel.streamURL.absoluteString)", category: .player)
+
+        // Cancel any pending stream start from a previous rapid channel tap
+        pendingPlayWorkItem?.cancel()
+        pendingPlayWorkItem = nil
         interruptionRecoveryTask?.cancel()
         interruptionRecoveryTask = nil
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
 
-        // Fully tear down the previous stream before starting a new one.
-        // VLC's stop() is async internally — the HTTP connection lingers
-        // briefly.  Xtream Codes servers enforce a connection limit per
-        // account and will 403 if the old stream is still open when the
-        // new one connects.  Nil-ing out the media forces VLC to release
-        // the old connection, and the short delay lets the TCP teardown
-        // complete before we open a new one.
-        let hadPreviousStream = mediaPlayer.media != nil
-        mediaPlayer.stop()
-        mediaPlayer.media = nil
+        // Destroy the old VLCMediaPlayer entirely and create a fresh one.
+        // VLC's stop() is async — the HTTP socket can linger for seconds.
+        // Xtream Codes servers enforce a per-account connection limit and
+        // 403 new requests while the old one is still open.  Deallocating
+        // the player guarantees all internal threads and sockets are torn
+        // down before we open a new connection.
+        let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
+        if hadActiveMedia {
+            log.log("Destroying old VLCMediaPlayer to release connection", category: .player)
+            mediaPlayer.stop()
+            mediaPlayer.media = nil
+            mediaPlayer.delegate = nil
+            mediaPlayer = VLCMediaPlayer()
+            mediaPlayer.delegate = self
+            lastTeardownTime = Date()
+        }
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
+        isActiveSession = false
         isBuffering = true
         isPlaying = false
         error = nil
         streamBitrateKbps = 0
         statusText = ""
         if channelChanged {
+            channelChangeRetryCount = 0
             accumulatedListeningTime = 0
             listeningDuration = 0
             currentArtwork = nil
@@ -284,41 +300,57 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         listeningStartDate = Date()
         updateNowPlayingInfo()
 
-        let startBlock = { [weak self] in
+        // Debounce: each tap resets a 1.5s timer.  The stream only starts
+        // once the user has stopped switching for 1.5s.  This prevents
+        // opening (and immediately tearing down) connections while the
+        // user scrolls through channels, which upsets Xtream Codes servers.
+        let needsDelay = lastTeardownTime.timeIntervalSince1970 > 0
+            && Date().timeIntervalSince(lastTeardownTime) < 10
+
+        let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let media = VLCMedia(url: channel.streamURL)
-            let cacheMs = Int(self.bufferDuration * 1000)
-            self.log.log("VLC media options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
-            media.addOptions([
-                "network-caching": cacheMs,
-                "live-caching": cacheMs,
-                "http-user-agent": "AdagioStream/1.0",
-            ])
-
-            media.delegate = self
-            self.mediaPlayer.media = media
-            self.mediaPlayer.audio?.volume = 100
-            self.mediaPlayer.play()
-            self.isActiveSession = true
-            self.log.log("play() started: playerState=\(self.vlcStateName(self.mediaPlayer.state)), willPlay=\(self.mediaPlayer.willPlay)", category: .player)
-
-            // Poll state as a reliable fallback since VLC delegate
-            // fires on a background thread that can miss MainActor updates
-            self.stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    self?.syncState()
-                }
+            guard self.currentChannel?.id == channel.id else {
+                self.log.log("Channel changed during debounce, aborting play for \(channel.name)", category: .player)
+                return
             }
+            self.startStream(for: channel)
         }
+        pendingPlayWorkItem = workItem
 
-        if hadPreviousStream {
-            // Give the old connection time to close before opening a new one
-            log.log("Waiting for previous stream teardown before starting new stream", category: .player)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: startBlock)
+        if needsDelay {
+            log.log("Debouncing 1.5s before starting stream", category: .player)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
         } else {
-            startBlock()
+            workItem.perform()
         }
     }
+
+    private func startStream(for channel: Channel) {
+        let media = VLCMedia(url: channel.streamURL)
+        let cacheMs = Int(bufferDuration * 1000)
+        log.log("VLC media options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
+        media.addOptions([
+            "network-caching": cacheMs,
+            "live-caching": cacheMs,
+            "http-user-agent": "AdagioStream/1.0",
+        ])
+
+        media.delegate = self
+        mediaPlayer.media = media
+        mediaPlayer.audio?.volume = 100
+        mediaPlayer.play()
+        isActiveSession = true
+        log.log("play() started: playerState=\(vlcStateName(mediaPlayer.state)), willPlay=\(mediaPlayer.willPlay)", category: .player)
+
+        // Poll state as a reliable fallback since VLC delegate
+        // fires on a background thread that can miss MainActor updates
+        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncState()
+            }
+        }
+    }
+
 
     func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
@@ -376,6 +408,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         accumulatedListeningTime = 0
         listeningDuration = 0
         mediaPlayer.stop()
+        mediaPlayer.media = nil
         lastPlayedChannel = currentChannel
         currentChannel = nil
         isPlaying = false
@@ -556,9 +589,41 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 if currentChannel != nil {
                     isPlaying = false
                     isBuffering = false
-                    // Log when VLC stops unexpectedly while we expect playback
                     if isActiveSession {
-                        log.log("VLC stopped unexpectedly while session active, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
+                        // Check if this is a server rejection (0 bytes read)
+                        let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
+                        if bytesRead == 0 && channelChangeRetryCount < maxChannelChangeRetries {
+                            channelChangeRetryCount += 1
+                            let retryDelay = Double(channelChangeRetryCount) * 1.5
+                            log.log("VLC stopped with 0 bytes (server likely rejected) — retry \(channelChangeRetryCount)/\(maxChannelChangeRetries) in \(retryDelay)s, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
+                            isActiveSession = false
+                            stateTimer?.invalidate()
+                            stateTimer = nil
+                            if let channel = currentChannel {
+                                let workItem = DispatchWorkItem { [weak self] in
+                                    guard let self, self.currentChannel?.id == channel.id else { return }
+                                    self.log.log("Retrying channel \"\(channel.name)\" (attempt \(self.channelChangeRetryCount))", category: .player)
+                                    self.mediaPlayer.stop()
+                                    self.mediaPlayer.media = nil
+                                    self.mediaPlayer.delegate = nil
+                                    self.mediaPlayer = VLCMediaPlayer()
+                                    self.mediaPlayer.delegate = self
+                                    self.lastLoggedVLCState = nil
+                                    self.isBuffering = true
+                                    self.startStream(for: channel)
+                                }
+                                pendingPlayWorkItem = workItem
+                                DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay, execute: workItem)
+                            }
+                        } else {
+                            log.log("VLC stopped unexpectedly, channel=\"\(currentChannel?.name ?? "nil")\", bytesRead=\(bytesRead), retries=\(channelChangeRetryCount)", category: .vlcState)
+                            isActiveSession = false
+                            stateTimer?.invalidate()
+                            stateTimer = nil
+                            if channelChangeRetryCount >= maxChannelChangeRetries {
+                                error = "Unable to connect — server may be limiting connections. Try again in a moment."
+                            }
+                        }
                     }
                 }
             case .error:
