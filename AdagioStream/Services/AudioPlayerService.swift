@@ -6,7 +6,7 @@ import SwiftUI
 import VLCKitSPM
 
 @MainActor
-final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelegate {
+final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelegate, VLCMediaDelegate {
     static let shared = AudioPlayerService()
     private let log = DebugLogger.shared
 
@@ -30,6 +30,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var isActiveSession = false
     private var lastToggleTime: Date = .distantPast
     private var interruptionRecoveryTask: Task<Void, Never>?
+    private var lastLoggedVLCState: VLCMediaPlayerState?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -253,6 +254,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         log.log("play() channel=\"\(channel.name)\" group=\"\(channel.group)\" url=\(channel.streamURL.absoluteString)", category: .player)
         interruptionRecoveryTask?.cancel()
         interruptionRecoveryTask = nil
+        lastLoggedVLCState = nil
         mediaPlayer.stop()
         stateTimer?.invalidate()
 
@@ -280,10 +282,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             "http-user-agent": "AdagioStream/1.0",
         ])
 
+        media.delegate = self
         mediaPlayer.media = media
         mediaPlayer.audio?.volume = 100
         mediaPlayer.play()
         isActiveSession = true
+        log.log("play() called: playerState=\(vlcStateName(mediaPlayer.state)), willPlay=\(mediaPlayer.willPlay)", category: .player)
         updateNowPlayingInfo()
 
         // Poll state as a reliable fallback since VLC delegate
@@ -387,9 +391,111 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     nonisolated func mediaPlayerStateChanged(_ aNotification: Notification) {
         Task { @MainActor in
-            DebugLogger.shared.log("VLC delegate stateChanged: state=\(self.mediaPlayer.state.rawValue), isPlaying=\(self.mediaPlayer.isPlaying)", category: .vlcState)
+            let newState = self.mediaPlayer.state
+            let oldState = self.lastLoggedVLCState
+
+            // Only log on actual state transitions to avoid flooding
+            if newState != oldState {
+                self.lastLoggedVLCState = newState
+                self.logVLCTransition(from: oldState, to: newState)
+            }
             self.syncState()
         }
+    }
+
+    private func logVLCTransition(from oldState: VLCMediaPlayerState?, to newState: VLCMediaPlayerState) {
+        let oldName = oldState.map { vlcStateName($0) } ?? "nil"
+        let newName = vlcStateName(newState)
+        let isPlaying = mediaPlayer.isPlaying
+        let willPlay = mediaPlayer.willPlay
+
+        var details = "VLC STATE: \(oldName) → \(newName), isPlaying=\(isPlaying), willPlay=\(willPlay)"
+
+        // Add media-level diagnostics
+        if let media = mediaPlayer.media {
+            let mediaState = media.state
+            let parsed = media.parsedStatus
+            let mediaStateName: String
+            switch mediaState {
+            case .nothingSpecial: mediaStateName = "nothingSpecial"
+            case .buffering: mediaStateName = "buffering"
+            case .playing: mediaStateName = "playing"
+            case .error: mediaStateName = "ERROR"
+            @unknown default: mediaStateName = "unknown(\(mediaState.rawValue))"
+            }
+
+            let parsedName: String
+            switch parsed.rawValue {
+            case 0: parsedName = "init"
+            case 1: parsedName = "skipped"
+            case 2: parsedName = "FAILED"
+            case 3: parsedName = "TIMEOUT"
+            case 4: parsedName = "done"
+            default: parsedName = "unknown(\(parsed.rawValue))"
+            }
+
+            details += ", media=\(mediaStateName), parsed=\(parsedName)"
+
+            // Stats snapshot
+            let stats = media.statistics
+            details += ", in=\(stats.readBytes)B@\(String(format: "%.1f", stats.inputBitrate * 1000))kbps"
+            details += ", demux=\(stats.demuxReadBytes)B@\(String(format: "%.1f", stats.demuxBitrate * 1000))kbps"
+            if stats.demuxCorrupted > 0 { details += ", corrupted=\(stats.demuxCorrupted)" }
+            if stats.demuxDiscontinuity > 0 { details += ", discontinuity=\(stats.demuxDiscontinuity)" }
+            details += ", decoded(a=\(stats.decodedAudio),v=\(stats.decodedVideo))"
+            if stats.lostAudioBuffers > 0 { details += ", lostAudio=\(stats.lostAudioBuffers)" }
+
+            // Track info
+            let tracks = media.tracksInformation as? [[String: Any]] ?? []
+            let audioTracks = tracks.filter { ($0["type"] as? String) == "audio" }
+            let videoTracks = tracks.filter { ($0["type"] as? String) == "video" }
+            details += ", tracks(a=\(audioTracks.count),v=\(videoTracks.count))"
+        } else {
+            details += ", media=NIL"
+        }
+
+        log.log(details, category: .vlcState)
+    }
+
+    private func vlcStateName(_ state: VLCMediaPlayerState) -> String {
+        switch state {
+        case .stopped: return "stopped"
+        case .opening: return "opening"
+        case .buffering: return "buffering"
+        case .ended: return "ended"
+        case .error: return "ERROR"
+        case .playing: return "playing"
+        case .paused: return "paused"
+        case .esAdded: return "esAdded"
+        @unknown default: return "unknown(\(state.rawValue))"
+        }
+    }
+
+    // MARK: - VLCMediaDelegate
+
+    nonisolated func mediaDidFinishParsing(_ aMedia: VLCMedia) {
+        Task { @MainActor in
+            let parsed = aMedia.parsedStatus
+            let parsedName: String
+            switch parsed.rawValue {
+            case 0: parsedName = "init"
+            case 1: parsedName = "skipped"
+            case 2: parsedName = "FAILED"
+            case 3: parsedName = "TIMEOUT"
+            case 4: parsedName = "done"
+            default: parsedName = "unknown(\(parsed.rawValue))"
+            }
+            let tracks = aMedia.tracksInformation as? [[String: Any]] ?? []
+            DebugLogger.shared.log("Media parsed: status=\(parsedName), tracks=\(tracks.count), url=\(aMedia.url?.absoluteString ?? "nil")", category: .vlcState)
+            if parsed.rawValue == 2 || parsed.rawValue == 3 { // failed or timeout
+                DebugLogger.shared.log("MEDIA PARSE FAILURE: This may explain why playback didn't start", category: .vlcState)
+            }
+        }
+    }
+
+    nonisolated func mediaMetaDataDidChange(_ aMedia: VLCMedia) {
+        // Intentionally minimal — just note it happened
+        DebugLogger.shared.log("Media metadata changed", category: .vlcState)
     }
 
     // MARK: - State Sync
@@ -429,6 +535,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 if currentChannel != nil {
                     isPlaying = false
                     isBuffering = false
+                    // Log when VLC stops unexpectedly while we expect playback
+                    if isActiveSession {
+                        log.log("VLC stopped unexpectedly while session active, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
+                    }
                 }
             case .error:
                 isPlaying = false
