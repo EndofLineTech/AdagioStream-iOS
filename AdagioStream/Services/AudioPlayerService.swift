@@ -255,8 +255,18 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         interruptionRecoveryTask?.cancel()
         interruptionRecoveryTask = nil
         lastLoggedVLCState = nil
-        mediaPlayer.stop()
         stateTimer?.invalidate()
+
+        // Fully tear down the previous stream before starting a new one.
+        // VLC's stop() is async internally — the HTTP connection lingers
+        // briefly.  Xtream Codes servers enforce a connection limit per
+        // account and will 403 if the old stream is still open when the
+        // new one connects.  Nil-ing out the media forces VLC to release
+        // the old connection, and the short delay lets the TCP teardown
+        // complete before we open a new one.
+        let hadPreviousStream = mediaPlayer.media != nil
+        mediaPlayer.stop()
+        mediaPlayer.media = nil
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
@@ -272,30 +282,41 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             fetchArtwork(for: channel)
         }
         listeningStartDate = Date()
-
-        let media = VLCMedia(url: channel.streamURL)
-        let cacheMs = Int(bufferDuration * 1000)
-        log.log("VLC media options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
-        media.addOptions([
-            "network-caching": cacheMs,
-            "live-caching": cacheMs,
-            "http-user-agent": "AdagioStream/1.0",
-        ])
-
-        media.delegate = self
-        mediaPlayer.media = media
-        mediaPlayer.audio?.volume = 100
-        mediaPlayer.play()
-        isActiveSession = true
-        log.log("play() called: playerState=\(vlcStateName(mediaPlayer.state)), willPlay=\(mediaPlayer.willPlay)", category: .player)
         updateNowPlayingInfo()
 
-        // Poll state as a reliable fallback since VLC delegate
-        // fires on a background thread that can miss MainActor updates
-        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.syncState()
+        let startBlock = { [weak self] in
+            guard let self else { return }
+            let media = VLCMedia(url: channel.streamURL)
+            let cacheMs = Int(self.bufferDuration * 1000)
+            self.log.log("VLC media options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
+            media.addOptions([
+                "network-caching": cacheMs,
+                "live-caching": cacheMs,
+                "http-user-agent": "AdagioStream/1.0",
+            ])
+
+            media.delegate = self
+            self.mediaPlayer.media = media
+            self.mediaPlayer.audio?.volume = 100
+            self.mediaPlayer.play()
+            self.isActiveSession = true
+            self.log.log("play() started: playerState=\(self.vlcStateName(self.mediaPlayer.state)), willPlay=\(self.mediaPlayer.willPlay)", category: .player)
+
+            // Poll state as a reliable fallback since VLC delegate
+            // fires on a background thread that can miss MainActor updates
+            self.stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.syncState()
+                }
             }
+        }
+
+        if hadPreviousStream {
+            // Give the old connection time to close before opening a new one
+            log.log("Waiting for previous stream teardown before starting new stream", category: .player)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: startBlock)
+        } else {
+            startBlock()
         }
     }
 
