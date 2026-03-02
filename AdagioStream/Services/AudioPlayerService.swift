@@ -26,10 +26,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var stateTimer: Timer?
     private var currentArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
-    private var wasPlayingBeforeInterruption = false
+    private var interruptedChannel: Channel?
     private var isActiveSession = false
     private var lastToggleTime: Date = .distantPast
-    private var interruptionRecoveryTask: Task<Void, Never>?
     private var lastLoggedVLCState: VLCMediaPlayerState?
     private var channelChangeRetryCount = 0
     private let maxChannelChangeRetries = 3
@@ -95,6 +94,20 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         @unknown default: hintName = "rawValue(\(typeValue))"
         }
         DebugLogger.shared.log("Secondary audio hint: \(hintName), otherAudioPlaying=\(AVAudioSession.sharedInstance().isOtherAudioPlaying)", category: .interruption)
+
+        // Safety fallback: if .ended interruption never fires (common with
+        // CarPlay Siri), the .end hint tells us the other audio stopped.
+        // Treat it as the interruption ending and resume.
+        if type == .end {
+            Task { @MainActor in
+                guard let channel = self.interruptedChannel else { return }
+                self.log.log("Secondary audio hint .end: resuming interrupted channel \"\(channel.name)\"", category: .interruption)
+                self.interruptedChannel = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.reactivateAndPlay(channel: channel)
+                }
+            }
+        }
     }
 
     @objc nonisolated private func handleRouteChange(_ notification: Notification) {
@@ -136,72 +149,35 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         Task { @MainActor in
             switch type {
             case .began:
-                // Use isActiveSession rather than isPlaying/isBuffering since VLC's
-                // state timer may have already cleared those by the time this runs
-                wasPlayingBeforeInterruption = isActiveSession
-                self.log.log("Interruption BEGAN: wasPlaying=\(self.wasPlayingBeforeInterruption), isActive=\(self.isActiveSession), vlcState=\(self.mediaPlayer.state.rawValue)", category: .interruption)
+                self.log.log("Interruption BEGAN: isActive=\(self.isActiveSession), channel=\"\(self.currentChannel?.name ?? "nil")\", vlcState=\(self.mediaPlayer.state.rawValue)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.began")
 
-                // Start a recovery watchdog: if .ended never fires (common with
-                // CarPlay Siri announcements), recover automatically after 8s
-                interruptionRecoveryTask?.cancel()
-                if wasPlayingBeforeInterruption {
-                    self.log.log("Starting 8s recovery watchdog", category: .interruption)
-                    interruptionRecoveryTask = Task {
-                        try? await Task.sleep(for: .seconds(8))
-                        guard !Task.isCancelled, wasPlayingBeforeInterruption else {
-                            DebugLogger.shared.log("Recovery watchdog: cancelled or not needed", category: .interruption)
-                            return
-                        }
-
-                        DebugLogger.shared.log("Recovery watchdog: .ended never fired, checking other audio", category: .interruption)
-                        await self.logAudioSessionSnapshot("watchdog.fired")
-
-                        // If another audio session is still active (phone call,
-                        // long Siri response), poll until it finishes rather than
-                        // resuming over it.  For phone calls the .ended notification
-                        // will cancel this task; the loop is a safety net.
-                        var pollCount = 0
-                        for _ in 0..<60 {
-                            guard !Task.isCancelled, wasPlayingBeforeInterruption else { return }
-                            guard AVAudioSession.sharedInstance().isOtherAudioPlaying else { break }
-                            pollCount += 1
-                            try? await Task.sleep(for: .seconds(2))
-                        }
-                        guard !Task.isCancelled, wasPlayingBeforeInterruption else { return }
-
-                        DebugLogger.shared.log("Recovery watchdog: resuming after \(pollCount) polls", category: .interruption)
-                        wasPlayingBeforeInterruption = false
-                        reactivateSessionAndResume()
-                    }
+                // Remember what was playing, then stop the stream cleanly.
+                // VLC's state becomes unpredictable after audio session
+                // interruptions — a fresh start on .ended is more reliable.
+                if self.isActiveSession, let channel = self.currentChannel {
+                    self.interruptedChannel = channel
+                    self.log.log("Saving interrupted channel \"\(channel.name)\", stopping stream", category: .interruption)
+                    self.stop()
                 }
 
             case .ended:
                 let options = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
                 let shouldResume = AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume)
-                self.log.log("Interruption ENDED: wasPlaying=\(self.wasPlayingBeforeInterruption), shouldResume=\(shouldResume)", category: .interruption)
+                self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.ended")
 
-                interruptionRecoveryTask?.cancel()
-                guard wasPlayingBeforeInterruption else {
-                    self.log.log("Interruption ended but was not playing, skipping resume", category: .interruption)
-                    interruptionRecoveryTask = nil
+                guard let channel = self.interruptedChannel else {
+                    self.log.log("Interruption ended but no interrupted channel, skipping resume", category: .interruption)
                     return
                 }
-                wasPlayingBeforeInterruption = false
+                self.interruptedChannel = nil
 
                 // Delay to let the audio route settle (CarPlay route transitions
                 // need time to switch back from phone/Siri to media output).
-                // Store in interruptionRecoveryTask so a new .began cancels it.
-                self.log.log("Scheduling 500ms delayed resume", category: .interruption)
-                interruptionRecoveryTask = Task {
-                    try? await Task.sleep(for: .milliseconds(500))
-                    guard !Task.isCancelled else {
-                        DebugLogger.shared.log("Delayed resume cancelled", category: .interruption)
-                        return
-                    }
-                    DebugLogger.shared.log("Executing delayed resume", category: .interruption)
-                    reactivateSessionAndResume()
+                self.log.log("Scheduling 500ms delayed restart for \"\(channel.name)\"", category: .interruption)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.reactivateAndPlay(channel: channel)
                 }
 
             @unknown default:
@@ -228,10 +204,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         log.log("Session[\(context)]: cat=\(session.category.rawValue), mode=\(session.mode.rawValue), otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), carplay=\(isCarPlay), outputs=[\(outputs)], inputs=[\(inputs)], calls=[\(callInfo)]", category: .audioSession)
     }
 
-    private func reactivateSessionAndResume() {
+    private func reactivateAndPlay(channel: Channel) {
         let session = AVAudioSession.sharedInstance()
         let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
-        log.log("reactivateSessionAndResume: outputs=[\(outputs)]", category: .audioSession)
+        log.log("reactivateAndPlay: channel=\"\(channel.name)\", outputs=[\(outputs)]", category: .audioSession)
 
         // Deactivate first to fully release the old audio route, then
         // reactivate — this resets stale hardware state that can prevent
@@ -249,7 +225,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             log.log("Session reactivate FAILED: \(error.localizedDescription)", category: .audioSession)
         }
 
-        resume()
+        play(channel: channel)
     }
 
     // MARK: - Playback
@@ -260,8 +236,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Cancel any pending stream start from a previous rapid channel tap
         pendingPlayWorkItem?.cancel()
         pendingPlayWorkItem = nil
-        interruptionRecoveryTask?.cancel()
-        interruptionRecoveryTask = nil
+        interruptedChannel = nil
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
 
@@ -354,9 +329,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
-        interruptionRecoveryTask?.cancel()
-        interruptionRecoveryTask = nil
-        wasPlayingBeforeInterruption = false
+        interruptedChannel = nil
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
@@ -398,9 +371,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     func stop() {
         log.log("stop() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
-        interruptionRecoveryTask?.cancel()
-        interruptionRecoveryTask = nil
-        wasPlayingBeforeInterruption = false
+        interruptedChannel = nil
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
