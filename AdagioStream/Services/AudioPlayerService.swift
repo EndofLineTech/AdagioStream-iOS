@@ -371,7 +371,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     func stop() {
         log.log("stop() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
-        interruptedChannel = nil
+        // Note: do NOT clear interruptedChannel here — stop() is called
+        // by the interruption handler after saving the channel to resume.
+        // Only pause() and play() should clear it (explicit user actions).
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
