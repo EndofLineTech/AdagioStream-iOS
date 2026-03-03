@@ -68,7 +68,9 @@ final class SettingsViewModel: ObservableObject {
         DebugLogger.shared.isEnabled = enabled
         await saveSettings()
         if enabled {
-            DebugLogger.shared.log("Debug logging ENABLED by user", category: .general)
+            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+            DebugLogger.shared.log("Debug logging ENABLED by user — v\(version) build \(build)", category: .general)
         }
     }
 }

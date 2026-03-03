@@ -82,8 +82,10 @@ final class DebugLogger: @unchecked Sendable {
         let url = logFileURL
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
-            // Write a header
-            let header = "=== AdagioStream Debug Log ===\n\n"
+            // Write a header with build info
+            let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+            let header = "=== AdagioStream Debug Log === v\(version) (build \(build))\n\n"
             try? header.write(to: url, atomically: false, encoding: .utf8)
         }
         guard let handle = try? FileHandle(forWritingTo: url) else { return }
