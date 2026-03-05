@@ -38,6 +38,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
     private var bufferedChannel: Channel?
+    private var currentBufferFileURL: URL?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -259,6 +260,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         pendingPlayWorkItem?.cancel()
         pendingPlayWorkItem = nil
         interruptedChannel = nil
+        if let oldURL = currentBufferFileURL {
+            timeShiftBuffer.deleteBufferFile(at: oldURL)
+            currentBufferFileURL = nil
+        }
         isPlayingBufferedFile = false
         bufferedChannel = nil
         timeShiftBuffer.cancelAndCleanup()
@@ -375,6 +380,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         currentChannel = channel
         isPlayingBufferedFile = true
         bufferedChannel = channel
+        currentBufferFileURL = fileURL
         isActiveSession = false
         isBuffering = true
         isPlaying = false
@@ -386,9 +392,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         mediaPlayer.audio?.volume = 100
         mediaPlayer.play()
         isActiveSession = true
-        timeShiftBuffer.bufferPlaybackStarted()
 
-        log.log("Buffered playback started", category: .player)
+        log.log("Buffered playback started, starting continuation capture", category: .player)
+
+        // Start capturing the live stream into a new file while we play
+        // the old buffer — this chains seamlessly when the buffer ends.
+        timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: streamBitrateKbps)
 
         stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -403,6 +412,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         guard isPlayingBufferedFile || timeShiftBuffer.isTimeShifted,
               let channel = bufferedChannel ?? currentChannel else { return }
 
+        if let oldURL = currentBufferFileURL {
+            timeShiftBuffer.deleteBufferFile(at: oldURL)
+            currentBufferFileURL = nil
+        }
         isPlayingBufferedFile = false
         bufferedChannel = nil
         timeShiftBuffer.goLive()
@@ -412,6 +425,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         interruptedChannel = nil
+        if let oldURL = currentBufferFileURL {
+            timeShiftBuffer.deleteBufferFile(at: oldURL)
+            currentBufferFileURL = nil
+        }
         isPlayingBufferedFile = false
         bufferedChannel = nil
         timeShiftBuffer.cancelAndCleanup()
@@ -460,6 +477,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // by the interruption handler after saving the channel to resume.
         // Only pause() and play() should clear it (explicit user actions).
         let wasPlayingBuffer = isPlayingBufferedFile
+        if let oldURL = currentBufferFileURL {
+            timeShiftBuffer.deleteBufferFile(at: oldURL)
+            currentBufferFileURL = nil
+        }
         isPlayingBufferedFile = false
         bufferedChannel = nil
         // Cancel time-shift if: explicit user stop (no interruptedChannel),
@@ -702,12 +723,24 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 isPlaying = false
                 isBuffering = false
                 if isPlayingBufferedFile, let channel = bufferedChannel {
-                    log.log("Buffered file playback ended, transitioning to live for \"\(channel.name)\"", category: .player)
-                    isPlayingBufferedFile = false
-                    bufferedChannel = nil
-                    timeShiftBuffer.bufferPlaybackDidEnd()
-                    play(channel: channel)
-                    timeShiftBuffer.transitionToLiveComplete()
+                    // Clean up the buffer file we just finished playing
+                    if let oldURL = currentBufferFileURL {
+                        timeShiftBuffer.deleteBufferFile(at: oldURL)
+                        currentBufferFileURL = nil
+                    }
+
+                    // Stop the continuation capture and check for a next buffer
+                    let nextBuffer = timeShiftBuffer.stopCapture()
+                    if let nextBuffer {
+                        log.log("Buffer ended, chaining to next buffer for \"\(channel.name)\"", category: .player)
+                        playBufferedFile(nextBuffer, for: channel)
+                    } else {
+                        log.log("Buffer ended, caught up to live for \"\(channel.name)\"", category: .player)
+                        isPlayingBufferedFile = false
+                        bufferedChannel = nil
+                        timeShiftBuffer.cancelAndCleanup()
+                        play(channel: channel)
+                    }
                 }
             default:
                 break

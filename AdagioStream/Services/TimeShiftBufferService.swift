@@ -3,22 +3,14 @@ import Foundation
 /// Downloads stream data during audio interruptions so playback can resume
 /// from where it left off instead of rejoining live.
 ///
-/// Uses URLSession to capture TS segments into a temp file while VLC is stopped.
-/// When the interruption ends, AudioPlayerService plays the buffered file first,
-/// then transitions back to the live stream.
+/// Pure capture utility — AudioPlayerService manages playback and chaining.
+/// Each startCapture creates a new temp file. The caller owns returned URLs
+/// and is responsible for deleting them after use.
 @MainActor
 final class TimeShiftBufferService: NSObject, ObservableObject {
     static let shared = TimeShiftBufferService()
 
-    enum State: String {
-        case idle
-        case capturing
-        case readyToPlay
-        case playingBuffer
-        case transitioningToLive
-    }
-
-    @Published private(set) var state: State = .idle
+    @Published private(set) var isCapturing: Bool = false
     @Published private(set) var isTimeShifted: Bool = false
     @Published private(set) var capturedDuration: TimeInterval = 0
 
@@ -41,10 +33,14 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
     // MARK: - Public API
 
     /// Begin capturing stream data for the given channel's URL.
+    /// Can be called while already capturing — stops the old capture first
+    /// (without deleting its file, which the caller may still be using).
     func startCapture(for channel: Channel, estimatedBitrateKbps: Double = 0) {
-        guard state == .idle else {
-            log.log("startCapture ignored: state=\(state.rawValue)", category: .timeShift)
-            return
+        // If already capturing, tear down the old session but don't delete
+        // the old file — the caller (AudioPlayerService) owns it.
+        if isCapturing {
+            log.log("Restarting capture (was already capturing)", category: .timeShift)
+            stopSession()
         }
 
         log.log("Starting time-shift capture for \"\(channel.name)\"", category: .timeShift)
@@ -79,7 +75,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
         dataTask = session?.dataTask(with: request)
         dataTask?.resume()
 
-        state = .capturing
+        isCapturing = true
         isTimeShifted = true
         capturedDuration = 0
 
@@ -94,79 +90,55 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
     }
 
     /// Stop capturing and return the buffer file URL if enough data was captured.
+    /// Does NOT clear isTimeShifted — caller decides when time-shift mode ends.
     func stopCapture() -> URL? {
-        guard state == .capturing else {
-            log.log("stopCapture ignored: state=\(state.rawValue)", category: .timeShift)
+        guard isCapturing else {
+            log.log("stopCapture ignored: not capturing", category: .timeShift)
             return nil
         }
 
         log.log("Stopping capture: \(capturedBytes) bytes, ~\(String(format: "%.1f", capturedDuration))s", category: .timeShift)
-
-        dataTask?.cancel()
-        dataTask = nil
-        session?.invalidateAndCancel()
-        session = nil
-        durationTimer?.invalidate()
-        durationTimer = nil
-
-        writeQueue.sync {
-            try? self.fileHandle?.close()
-        }
-        fileHandle = nil
+        stopSession()
 
         if capturedBytes >= Constants.TimeShift.minBytes, let url = bufferFileURL {
-            state = .readyToPlay
             log.log("Buffer ready: \(capturedBytes) bytes at \(url.lastPathComponent)", category: .timeShift)
+            bufferFileURL = nil  // Caller owns this URL now
             return url
         } else {
             log.log("Buffer too small (\(capturedBytes) bytes < \(Constants.TimeShift.minBytes)), discarding", category: .timeShift)
-            cleanupFile()
-            reset()
+            if let url = bufferFileURL {
+                try? FileManager.default.removeItem(at: url)
+                bufferFileURL = nil
+            }
             return nil
         }
     }
 
-    /// Called when AudioPlayerService starts playing the buffered file.
-    func bufferPlaybackStarted() {
-        guard state == .readyToPlay else { return }
-        state = .playingBuffer
-        log.log("Buffer playback started", category: .timeShift)
-    }
-
-    /// Called when VLC finishes playing the buffered file.
-    func bufferPlaybackDidEnd() {
-        guard state == .playingBuffer else { return }
-        state = .transitioningToLive
-        log.log("Buffer playback ended, transitioning to live", category: .timeShift)
-    }
-
-    /// Called when the live stream has resumed after buffer playback.
-    func transitionToLiveComplete() {
-        log.log("Transition to live complete", category: .timeShift)
-        cleanupFile()
-        reset()
-    }
-
-    /// Skip buffered content and go straight to live.
+    /// Skip buffered content and go straight to live. Cancels any active
+    /// capture and clears time-shift state.
     func goLive() {
-        log.log("goLive: skipping buffer, state=\(state.rawValue)", category: .timeShift)
-        dataTask?.cancel()
-        dataTask = nil
-        session?.invalidateAndCancel()
-        session = nil
-        durationTimer?.invalidate()
-        durationTimer = nil
-        writeQueue.sync {
-            try? self.fileHandle?.close()
-        }
-        fileHandle = nil
+        log.log("goLive: isCapturing=\(isCapturing)", category: .timeShift)
+        stopSession()
         cleanupFile()
-        reset()
+        resetState()
     }
 
     /// Discard any captured data and return to idle.
     func cancelAndCleanup() {
-        log.log("cancelAndCleanup: state=\(state.rawValue)", category: .timeShift)
+        log.log("cancelAndCleanup: isCapturing=\(isCapturing)", category: .timeShift)
+        stopSession()
+        cleanupFile()
+        resetState()
+    }
+
+    /// Delete a buffer file that the caller is done with.
+    func deleteBufferFile(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Private
+
+    private func stopSession() {
         dataTask?.cancel()
         dataTask = nil
         session?.invalidateAndCancel()
@@ -177,14 +149,14 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
             try? self.fileHandle?.close()
         }
         fileHandle = nil
-        cleanupFile()
-        reset()
+        isCapturing = false
+        capturedBytes = 0
+        captureStartTime = nil
+        estimatedBitrateBytes = 0
     }
 
-    // MARK: - Private
-
-    private func reset() {
-        state = .idle
+    private func resetState() {
+        isCapturing = false
         isTimeShifted = false
         capturedDuration = 0
         capturedBytes = 0
@@ -200,17 +172,14 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
     }
 
     private func updateEstimatedDuration() {
-        guard state == .capturing, let start = captureStartTime else { return }
+        guard isCapturing, let start = captureStartTime else { return }
 
         if estimatedBitrateBytes > 0 {
-            // Estimate from bytes and bitrate
             capturedDuration = Double(capturedBytes) / estimatedBitrateBytes
         } else {
-            // Fallback: wall clock time (less accurate but good enough)
             capturedDuration = Date().timeIntervalSince(start)
         }
 
-        // Cap at max duration
         if capturedDuration >= Constants.TimeShift.maxDuration {
             log.log("Max time-shift duration reached (\(Int(Constants.TimeShift.maxDuration))s), stopping capture", category: .timeShift)
             _ = stopCapture()
@@ -227,7 +196,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
         if let error = error as? NSError, error.code != NSURLErrorCancelled {
             log.log("Time-shift download error: \(error.localizedDescription)", category: .timeShift)
         }
-        if state == .capturing {
+        if isCapturing {
             log.log("Download completed/errored during capture, stopping", category: .timeShift)
             _ = stopCapture()
         }
@@ -239,7 +208,6 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
 /// Handles URLSession callbacks on the writeQueue, writing data to the
 /// file handle directly, then notifying the MainActor service of byte counts.
 private final class DataDelegate: NSObject, URLSessionDataDelegate {
-    // Unowned to avoid retain cycle — the service owns the session which owns this delegate
     private let fileHandle: FileHandle
     private weak var service: TimeShiftBufferService?
 
@@ -249,7 +217,6 @@ private final class DataDelegate: NSObject, URLSessionDataDelegate {
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        // This runs on writeQueue — file I/O is serialized
         fileHandle.write(data)
         let count = data.count
         Task { @MainActor [weak service] in
