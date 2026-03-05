@@ -39,7 +39,8 @@ final class DebugLogger: @unchecked Sendable {
         guard isEnabled else { return }
         let timestamp = dateFormatter.string(from: Date())
         let fileName = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
-        let entry = "[\(timestamp)] [\(category.rawValue)] [\(fileName):\(line)] \(message)\n"
+        let redacted = Self.redactXtreamCodesCredentials(message)
+        let entry = "[\(timestamp)] [\(category.rawValue)] [\(fileName):\(line)] \(redacted)\n"
 
         queue.async { [self] in
             rotateIfNeeded()
@@ -77,6 +78,38 @@ final class DebugLogger: @unchecked Sendable {
         case timeShift = "TIMESHIFT"
         case sxm = "SXM"
         case imageCache = "IMGCACHE"
+    }
+
+    // MARK: - Redaction
+
+    /// Redacts Xtream Codes credentials from log messages.
+    /// Handles stream URLs (`/live/user/pass/id.ext`) and API URLs (`?username=...&password=...`).
+    static func redactXtreamCodesCredentials(_ message: String) -> String {
+        var result = message
+        // Stream URLs: https://host:port/live/user/pass/id.ext → https://***/live/***/***/id.ext
+        result = result.replacingOccurrences(
+            of: #"(https?://)([^/\s]+)(/live/)([^/]+)/([^/]+)/"#,
+            with: "$1***$3***/***/",
+            options: .regularExpression
+        )
+        // API URLs: https://host:port/player_api.php?username=...&password=...
+        result = result.replacingOccurrences(
+            of: #"(https?://)([^/\s]+)(/player_api\.php)"#,
+            with: "$1***$3",
+            options: .regularExpression
+        )
+        // Query params: username=...&password=...
+        result = result.replacingOccurrences(
+            of: #"username=[^&\s]+"#,
+            with: "username=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"password=[^&\s]+"#,
+            with: "password=***",
+            options: .regularExpression
+        )
+        return result
     }
 
     // MARK: - Private
