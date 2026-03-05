@@ -784,10 +784,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         if let media = mediaPlayer.media {
             let stats = media.statistics
-            let currentKbps = Double(stats.demuxBitrate) * 1000
+            let currentKbps = Double(stats.inputBitrate) * 1000
 
             if currentKbps > 1 {
-                // Smooth toward the actual demux rate (EMA, ~5s window at 0.5s poll)
+                // Smooth with EMA (~5s window at 0.5s poll) so initial
+                // buffer-fill spikes settle to the sustained rate
                 if streamBitrateKbps < 1 {
                     streamBitrateKbps = currentKbps
                 } else {
