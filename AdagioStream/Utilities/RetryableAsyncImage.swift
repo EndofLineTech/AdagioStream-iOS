@@ -54,8 +54,7 @@ struct RetryableAsyncImage: View {
         hasFailed = false
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard let uiImage = UIImage(data: data) else {
+            guard let uiImage = await ImageCacheService.shared.image(for: url) else {
                 hasFailed = true
                 return
             }

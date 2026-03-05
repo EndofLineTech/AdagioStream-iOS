@@ -76,6 +76,7 @@ final class DebugLogger: @unchecked Sendable {
         case call = "CALL"
         case timeShift = "TIMESHIFT"
         case sxm = "SXM"
+        case imageCache = "IMGCACHE"
     }
 
     // MARK: - Private

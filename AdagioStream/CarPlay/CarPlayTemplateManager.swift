@@ -266,8 +266,7 @@ class CarPlayTemplateManager {
     private func loadChannelIcon(for channel: Channel, into item: CPListItem) {
         guard let logoURL = channel.logoURL else { return }
         Task {
-            guard let (data, _) = try? await URLSession.shared.data(from: logoURL),
-                  let image = UIImage(data: data) else { return }
+            guard let image = await ImageCacheService.shared.image(for: logoURL) else { return }
             let size = CGSize(width: 40, height: 40)
             let renderer = UIGraphicsImageRenderer(size: size)
             let scaled = renderer.image { _ in
