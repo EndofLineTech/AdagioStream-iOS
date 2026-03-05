@@ -40,7 +40,7 @@ struct SavedSongRowView: View {
                 Label("Search on Spotify", systemImage: "magnifyingglass")
             }
             Button {
-                searchAppleMusic()
+                Task { await searchAppleMusic() }
             } label: {
                 Label("Search on Apple Music", systemImage: "magnifyingglass")
             }
@@ -57,8 +57,20 @@ struct SavedSongRowView: View {
         }
     }
 
-    private func searchAppleMusic() {
+    private func searchAppleMusic() async {
         guard let encoded = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
-        openURL(URL(string: "https://music.apple.com/us/search?term=\(encoded)")!)
+        // Use iTunes Search API to get a direct link to the song in Apple Music
+        if let url = URL(string: "https://itunes.apple.com/search?term=\(encoded)&media=music&limit=1"),
+           let (data, _) = try? await URLSession.shared.data(from: url),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let results = json["results"] as? [[String: Any]],
+           let first = results.first,
+           let trackURL = first["trackViewUrl"] as? String,
+           let directURL = URL(string: trackURL) {
+            openURL(directURL)
+        } else {
+            // Fallback to search page
+            openURL(URL(string: "https://music.apple.com/us/search?term=\(encoded)")!)
+        }
     }
 }
