@@ -74,9 +74,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, policy: .longFormAudio)
+            try session.setCategory(.playback, mode: .default, policy: .longFormAudio, options: [.duckOthers])
             try session.setActive(true)
-            log.log("Audio session configured: category=playback, policy=longFormAudio", category: .audioSession)
+            log.log("Audio session configured: category=playback, policy=longFormAudio, options=duckOthers", category: .audioSession)
         } catch {
             log.log("Audio session config FAILED: \(error.localizedDescription)", category: .audioSession)
             self.error = "Failed to configure audio session: \(error.localizedDescription)"
@@ -307,6 +307,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
+        UserDefaults.standard.set(channel.id, forKey: "lastPlayedChannelID")
         isActiveSession = false
         isBuffering = true
         isPlaying = false
