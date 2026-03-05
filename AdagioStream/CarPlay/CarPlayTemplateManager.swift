@@ -14,10 +14,13 @@ class CarPlayTemplateManager {
     private var channelCancellable: AnyCancellable?
     private var timeShiftCancellable: AnyCancellable?
     private var trackCancellable: AnyCancellable?
+    private var feedTracksCancellable: AnyCancellable?
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
     private var hadChannels = false
+    /// Maps CPListItem identity to channel ID for live detail text updates.
+    private var itemChannelMap: [ObjectIdentifier: String] = [:]
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
     private var startupStreamID: String?
     private var hasAttemptedStartupStream = false
@@ -75,6 +78,12 @@ class CarPlayTemplateManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
+            }
+
+        feedTracksCancellable = SXMMetadataService.shared.$feedTracks
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshChannelListDetailText()
             }
     }
 
@@ -277,6 +286,7 @@ class CarPlayTemplateManager {
         let favorites = providerManager.favoriteChannels
         let items = favorites.map { channel in
             let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel) ?? channel.group)
+            itemChannelMap[ObjectIdentifier(item)] = channel.id
             item.handler = { [weak self] _, completion in
                 self?.playChannelAndShowNowPlaying(channel, within: favorites)
                 completion()
@@ -311,6 +321,26 @@ class CarPlayTemplateManager {
         return name
     }
 
+    private func refreshChannelListDetailText() {
+        for template in interfaceController.templates {
+            guard let list = template as? CPListTemplate else { continue }
+            for section in list.sections {
+                for case let item as CPListItem in section.items {
+                    guard let channelID = itemChannelMap[ObjectIdentifier(item)] else { continue }
+                    let newDetail = trackDetailTextByID(channelID)
+                    if let newDetail, item.detailText != newDetail {
+                        item.setDetailText(newDetail)
+                    }
+                }
+            }
+        }
+    }
+
+    private func trackDetailTextByID(_ channelID: String) -> String? {
+        guard let track = SXMMetadataService.shared.feedTracks[channelID] else { return nil }
+        return "\(track.artistDisplay) — \(track.title)"
+    }
+
     private func pushChannelList(title: String, channels: [Channel]) {
         let grouped = Dictionary(grouping: channels) { channel -> String in
             let first = sortableName(channel.name).prefix(1).uppercased()
@@ -325,6 +355,7 @@ class CarPlayTemplateManager {
         let sections = sortedKeys.map { letter in
             let items = grouped[letter]!.map { channel in
                 let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel))
+                itemChannelMap[ObjectIdentifier(item)] = channel.id
                 item.handler = { [weak self] _, completion in
                     self?.playChannelAndShowNowPlaying(channel, within: channels)
                     completion()
