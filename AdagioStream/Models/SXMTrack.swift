@@ -18,7 +18,7 @@ struct SXMTrack: Equatable {
 struct SXMStation: Decodable {
     let id: String
     let name: String
-    let number: Int?
+    let number: String?
     let deeplink: String
     let genres: [String]?
 }
