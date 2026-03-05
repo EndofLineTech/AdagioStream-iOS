@@ -13,7 +13,7 @@ final class SXMMetadataService: ObservableObject {
     private var currentDeeplink: String?
     private var pollTimer: Timer?
     private var inFlightTask: Task<Void, Never>?
-    private let pollInterval: TimeInterval = 30
+    private let pollInterval: TimeInterval = 5
 
     /// Timestamped track history from API responses, sorted newest-first.
     private var trackHistory: [SXMTrack] = []
