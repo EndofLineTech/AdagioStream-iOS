@@ -43,10 +43,9 @@ final class SXMMetadataService: ObservableObject {
         stopFeedPolling()
         feedTracks = [:]
         channelDeeplinkMap = [:]
+        let sxmPattern = #"(?i)\b(siriusxm|sirius\s*xm|sxm|sirius|xm)\b"#
         let sxmChannels = channels.filter {
-            $0.group.localizedCaseInsensitiveContains("siriusxm") ||
-            $0.group.localizedCaseInsensitiveContains("sirius xm") ||
-            $0.group.localizedCaseInsensitiveContains("sxm")
+            $0.group.range(of: sxmPattern, options: .regularExpression) != nil
         }
         guard !sxmChannels.isEmpty else {
             log.log("No SiriusXM channels found in \(channels.count) total channels", category: .sxm)
