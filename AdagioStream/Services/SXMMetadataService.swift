@@ -66,20 +66,28 @@ final class SXMMetadataService: ObservableObject {
         )
 
         var matched = 0
+        var unmatched: [String] = []
         for channel in appChannels {
             var cleanName = channel.name
+            var strippedPrefix: String?
             for prefix in sortPrefixes {
                 if cleanName.hasPrefix(prefix) {
+                    strippedPrefix = prefix
                     cleanName = String(cleanName.dropFirst(prefix.count))
                     break
                 }
             }
             let normalized = cleanName.lowercased().trimmingCharacters(in: .whitespaces)
 
+            if let strippedPrefix {
+                log.log("MATCH: \"\(channel.name)\" → stripped \"\(strippedPrefix)\" → normalized \"\(normalized)\"", category: .sxm)
+            }
+
             // Exact match first
             if let station = stationsByName[normalized] {
                 channelDeeplinkMap[channel.id] = station.deeplink
                 matched += 1
+                log.log("MATCH: \"\(channel.name)\" ✓ exact → \"\(station.name)\" (deeplink=\(station.deeplink))", category: .sxm)
                 continue
             }
 
@@ -90,10 +98,17 @@ final class SXMMetadataService: ObservableObject {
             }) {
                 channelDeeplinkMap[channel.id] = station.deeplink
                 matched += 1
+                log.log("MATCH: \"\(channel.name)\" ✓ contains → \"\(station.name)\" (deeplink=\(station.deeplink))", category: .sxm)
+            } else {
+                unmatched.append(channel.name)
+                log.log("MATCH: \"\(channel.name)\" ✗ no match (normalized=\"\(normalized)\")", category: .sxm)
             }
         }
 
-        log.log("Matched \(matched)/\(appChannels.count) SXM channels to xmplaylist stations", category: .sxm)
+        log.log("Matching complete: \(matched)/\(appChannels.count) matched, \(unmatched.count) unmatched", category: .sxm)
+        if !unmatched.isEmpty {
+            log.log("Unmatched channels: \(unmatched.joined(separator: ", "))", category: .sxm)
+        }
     }
 
     // MARK: - Polling
