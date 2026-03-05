@@ -45,7 +45,8 @@ final class SXMMetadataService: ObservableObject {
         channelDeeplinkMap = [:]
         let sxmChannels = channels.filter {
             $0.group.localizedCaseInsensitiveContains("siriusxm") ||
-            $0.group.localizedCaseInsensitiveContains("sirius xm")
+            $0.group.localizedCaseInsensitiveContains("sirius xm") ||
+            $0.group.localizedCaseInsensitiveContains("sxm")
         }
         guard !sxmChannels.isEmpty else {
             log.log("No SiriusXM channels found in \(channels.count) total channels", category: .sxm)
