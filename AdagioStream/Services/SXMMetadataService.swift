@@ -15,6 +15,13 @@ final class SXMMetadataService: ObservableObject {
     private var inFlightTask: Task<Void, Never>?
     private let pollInterval: TimeInterval = 30
 
+    /// Timestamped track history from API responses, sorted newest-first.
+    private var trackHistory: [SXMTrack] = []
+    private let maxHistoryAge: TimeInterval = 600  // 10 minutes
+
+    /// When true, polls continue but currentTrack is driven by showTrack(at:) instead of live data.
+    private var isDisplaySuspended = false
+
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10
@@ -114,6 +121,8 @@ final class SXMMetadataService: ObservableObject {
     // MARK: - Polling
 
     func channelChanged(to channel: Channel) {
+        // Coming back to live — clear suspension and reset
+        isDisplaySuspended = false
         stopPolling()
 
         guard let deeplink = channelDeeplinkMap[channel.id] else {
@@ -138,6 +147,7 @@ final class SXMMetadataService: ObservableObject {
         }
     }
 
+    /// Full stop — clears everything including history. Use for explicit user stop/pause.
     func stopPolling() {
         pollTimer?.invalidate()
         pollTimer = nil
@@ -146,6 +156,37 @@ final class SXMMetadataService: ObservableObject {
         currentDeeplink = nil
         currentTrack = nil
         isSXMChannel = false
+        isDisplaySuspended = false
+        trackHistory = []
+    }
+
+    /// Suspend display updates but keep polling and history.
+    /// Used during audio interruptions so track data stays current.
+    func suspendForTimeShift() {
+        isDisplaySuspended = true
+        log.log("Display suspended for time-shift, polling continues (history: \(trackHistory.count) tracks)", category: .sxm)
+    }
+
+    /// Look up and display the track that was playing at the given date.
+    /// Call from syncState() during buffer playback.
+    func showTrack(at date: Date) {
+        guard isDisplaySuspended else { return }
+        let track = self.track(at: date)
+        if currentTrack?.id != track?.id {
+            if let track {
+                log.log("Time-shift track: \"\(track.title)\" by \(track.artistDisplay) (started \(track.startedAt?.description ?? "?"))", category: .sxm)
+            } else {
+                log.log("Time-shift: no track for \(date)", category: .sxm)
+            }
+            currentTrack = track
+        }
+    }
+
+    /// Find the track that was playing at the given date.
+    /// Returns the most recent track whose startedAt <= date.
+    func track(at date: Date) -> SXMTrack? {
+        // trackHistory is sorted newest-first
+        trackHistory.first(where: { ($0.startedAt ?? .distantPast) <= date })
     }
 
     private func fetchCurrentTrack(deeplink: String) {
@@ -157,14 +198,19 @@ final class SXMMetadataService: ObservableObject {
                 guard !Task.isCancelled else { return }
                 let response = try JSONDecoder().decode(SXMStationTracksResponse.self, from: data)
 
-                if let latest = response.results.first {
-                    let track = latest.toSXMTrack()
-                    if currentTrack?.id != track.id {
-                        log.log("Now playing: \"\(track.title)\" by \(track.artistDisplay)", category: .sxm)
-                        currentTrack = track
+                // Update history from all tracks in the response
+                let tracks = response.results.map { $0.toSXMTrack() }
+                mergeIntoHistory(tracks)
+
+                // Only update live display if not suspended for time-shift
+                guard !isDisplaySuspended else { return }
+
+                if let latest = tracks.first {
+                    if currentTrack?.id != latest.id {
+                        log.log("Now playing: \"\(latest.title)\" by \(latest.artistDisplay)", category: .sxm)
+                        currentTrack = latest
                     }
                 } else {
-                    // Empty results = commercial break or no data
                     if currentTrack != nil {
                         log.log("Track cleared (commercial break?)", category: .sxm)
                         currentTrack = nil
@@ -173,8 +219,20 @@ final class SXMMetadataService: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 log.log("Track fetch failed: \(error.localizedDescription)", category: .sxm)
-                // Keep last known track on error
             }
         }
+    }
+
+    private func mergeIntoHistory(_ tracks: [SXMTrack]) {
+        let existingIDs = Set(trackHistory.map(\.id))
+        let newTracks = tracks.filter { !existingIDs.contains($0.id) }
+        trackHistory.append(contentsOf: newTracks)
+
+        // Sort newest-first by startedAt
+        trackHistory.sort { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+
+        // Prune entries older than maxHistoryAge
+        let cutoff = Date().addingTimeInterval(-maxHistoryAge)
+        trackHistory.removeAll { ($0.startedAt ?? .distantPast) < cutoff }
     }
 }

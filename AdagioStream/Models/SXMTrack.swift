@@ -7,6 +7,7 @@ struct SXMTrack: Equatable {
     let title: String
     let artists: [String]
     let artworkURL: URL?
+    let startedAt: Date?
 
     var artistDisplay: String {
         artists.joined(separator: ", ")
@@ -29,6 +30,7 @@ struct SXMStationListResponse: Decodable {
 }
 
 struct SXMTrackEntry: Decodable {
+    let timestamp: String?
     let track: TrackInfo
     let spotify: SpotifyInfo?
 
@@ -49,12 +51,19 @@ struct SXMTrackEntry: Decodable {
         }
     }
 
+    private static let iso8601: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
     func toSXMTrack() -> SXMTrack {
         SXMTrack(
             id: track.id ?? UUID().uuidString,
             title: track.title,
             artists: track.artists,
-            artworkURL: spotify?.bestImageURL
+            artworkURL: spotify?.bestImageURL,
+            startedAt: timestamp.flatMap { Self.iso8601.date(from: $0) }
         )
     }
 }

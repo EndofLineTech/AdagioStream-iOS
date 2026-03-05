@@ -42,6 +42,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var isPlayingBufferedFile = false
     private var bufferedChannel: Channel?
     private var currentBufferFileURL: URL?
+    private var interruptionTime: Date?
+    private var bufferPlaybackStartedAt: Date?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -280,6 +282,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
         isPlayingBufferedFile = false
         bufferedChannel = nil
+        interruptionTime = nil
+        bufferPlaybackStartedAt = nil
         timeShiftBuffer.cancelAndCleanup()
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
@@ -396,6 +400,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isPlayingBufferedFile = true
         bufferedChannel = channel
         currentBufferFileURL = fileURL
+        bufferPlaybackStartedAt = Date()
         isActiveSession = false
         isBuffering = true
         isPlaying = false
@@ -519,7 +524,15 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isBuffering = false
         currentArtwork = nil
         sxmArtwork = nil
-        sxmService.stopPolling()
+        if interruptedChannel != nil {
+            // Interruption — keep polling so track history stays current
+            interruptionTime = Date()
+            sxmService.suspendForTimeShift()
+        } else {
+            interruptionTime = nil
+            bufferPlaybackStartedAt = nil
+            sxmService.stopPolling()
+        }
         clearNowPlayingInfo()
     }
 
@@ -767,6 +780,14 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         if let start = listeningStartDate {
             listeningDuration = accumulatedListeningTime + Date().timeIntervalSince(start)
+        }
+
+        // During buffer playback, estimate what time the audio is from
+        // and show the matching SXM track from history
+        if isPlayingBufferedFile, let intTime = interruptionTime, let pbStart = bufferPlaybackStartedAt {
+            let elapsed = Date().timeIntervalSince(pbStart)
+            let estimatedAudioTime = intTime.addingTimeInterval(elapsed)
+            sxmService.showTrack(at: estimatedAudioTime)
         }
 
         updateStreamStats()
