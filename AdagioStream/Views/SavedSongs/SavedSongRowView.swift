@@ -2,6 +2,11 @@ import SwiftUI
 
 struct SavedSongRowView: View {
     let song: SavedSong
+    @Environment(\.openURL) private var openURL
+
+    private var searchQuery: String {
+        "\(song.title) \(song.artistDisplay)"
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -28,5 +33,32 @@ struct SavedSongRowView: View {
                     .foregroundStyle(.tertiary)
             }
         }
+        .contextMenu {
+            Button {
+                searchSpotify()
+            } label: {
+                Label("Search on Spotify", systemImage: "magnifyingglass")
+            }
+            Button {
+                searchAppleMusic()
+            } label: {
+                Label("Search on Apple Music", systemImage: "magnifyingglass")
+            }
+        }
+    }
+
+    private func searchSpotify() {
+        guard let encoded = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
+        let appURL = URL(string: "spotify:search:\(encoded)")!
+        if UIApplication.shared.canOpenURL(appURL) {
+            openURL(appURL)
+        } else {
+            openURL(URL(string: "https://open.spotify.com/search/\(encoded)")!)
+        }
+    }
+
+    private func searchAppleMusic() {
+        guard let encoded = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
+        openURL(URL(string: "https://music.apple.com/us/search?term=\(encoded)")!)
     }
 }
