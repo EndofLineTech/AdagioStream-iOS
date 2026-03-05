@@ -3,6 +3,7 @@ import SwiftUI
 struct FavoritesView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @EnvironmentObject var sxmService: SXMMetadataService
     @State private var editMode: EditMode = .inactive
 
     var body: some View {
@@ -17,7 +18,7 @@ struct FavoritesView: View {
                 } else {
                     List {
                         ForEach(providerManager.favoriteChannels) { channel in
-                            ChannelRowView(channel: channel) {
+                            ChannelRowView(channel: channel, nowPlayingTrack: sxmService.feedTracks[channel.id]) {
                                 audioPlayer.channels = providerManager.favoriteChannels
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChannelRowView: View {
     let channel: Channel
+    var nowPlayingTrack: SXMTrack? = nil
     let onTap: () -> Void
     let onToggleFavorite: () -> Void
 
@@ -16,14 +17,21 @@ struct ChannelRowView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Channel name
+            // Channel name + subtitle
             VStack(alignment: .leading, spacing: 2) {
                 Text(channel.name)
                     .font(.body)
                     .foregroundStyle(.primary)
-                Text(channel.group)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let track = nowPlayingTrack {
+                    Text("\(track.artistDisplay) — \(track.title)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(channel.group)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()

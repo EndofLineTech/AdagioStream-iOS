@@ -247,10 +247,15 @@ class CarPlayTemplateManager {
         }
     }
 
+    private func trackDetailText(for channel: Channel) -> String? {
+        guard let track = SXMMetadataService.shared.feedTracks[channel.id] else { return nil }
+        return "\(track.artistDisplay) — \(track.title)"
+    }
+
     private func pushFavorites() {
         let favorites = providerManager.favoriteChannels
         let items = favorites.map { channel in
-            let item = CPListItem(text: channel.name, detailText: channel.group)
+            let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel) ?? channel.group)
             item.handler = { [weak self] _, completion in
                 self?.playChannelAndShowNowPlaying(channel, within: favorites)
                 completion()
@@ -298,7 +303,7 @@ class CarPlayTemplateManager {
 
         let sections = sortedKeys.map { letter in
             let items = grouped[letter]!.map { channel in
-                let item = CPListItem(text: channel.name, detailText: nil)
+                let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel))
                 item.handler = { [weak self] _, completion in
                     self?.playChannelAndShowNowPlaying(channel, within: channels)
                     completion()

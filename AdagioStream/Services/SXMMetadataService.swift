@@ -7,6 +7,7 @@ final class SXMMetadataService: ObservableObject {
 
     @Published var currentTrack: SXMTrack?
     @Published var isSXMChannel = false
+    @Published var feedTracks: [String: SXMTrack] = [:]  // app channel ID -> latest track
 
     private let log = DebugLogger.shared
     private var channelDeeplinkMap: [String: String] = [:]  // channelID -> deeplink
@@ -14,6 +15,9 @@ final class SXMMetadataService: ObservableObject {
     private var pollTimer: Timer?
     private var inFlightTask: Task<Void, Never>?
     private let pollInterval: TimeInterval = 5
+    private var feedTimer: Timer?
+    private var feedTask: Task<Void, Never>?
+    private let feedPollInterval: TimeInterval = 30
 
     /// Timestamped track history from API responses, sorted newest-first.
     private var trackHistory: [SXMTrack] = []
@@ -36,6 +40,9 @@ final class SXMMetadataService: ObservableObject {
     /// Build a lookup table mapping app channel IDs to xmplaylist deeplinks.
     /// Call after channels are loaded from providers.
     func matchChannels(_ channels: [Channel], sortPrefixes: [String] = ["Radio: ", "TV: "]) {
+        stopFeedPolling()
+        feedTracks = [:]
+        channelDeeplinkMap = [:]
         let sxmChannels = channels.filter {
             $0.group.localizedCaseInsensitiveContains("siriusxm") ||
             $0.group.localizedCaseInsensitiveContains("sirius xm")
@@ -115,6 +122,81 @@ final class SXMMetadataService: ObservableObject {
         log.log("Matching complete: \(matched)/\(appChannels.count) matched, \(unmatched.count) unmatched", category: .sxm)
         if !unmatched.isEmpty {
             log.log("Unmatched channels: \(unmatched.joined(separator: ", "))", category: .sxm)
+        }
+
+        startFeedPolling()
+    }
+
+    // MARK: - Feed Polling
+
+    /// Reverse lookup: deeplink -> [app channel IDs]
+    private var deeplinkToChannelIDs: [String: [String]] {
+        var map: [String: [String]] = [:]
+        for (channelID, deeplink) in channelDeeplinkMap {
+            map[deeplink, default: []].append(channelID)
+        }
+        return map
+    }
+
+    private func startFeedPolling() {
+        stopFeedPolling()
+        log.log("Starting feed polling (interval=\(feedPollInterval)s)", category: .sxm)
+        fetchFeed()
+        feedTimer = Timer.scheduledTimer(withTimeInterval: feedPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.fetchFeed()
+            }
+        }
+    }
+
+    private func stopFeedPolling() {
+        feedTimer?.invalidate()
+        feedTimer = nil
+        feedTask?.cancel()
+        feedTask = nil
+    }
+
+    private func fetchFeed() {
+        feedTask?.cancel()
+        feedTask = Task {
+            guard let url = URL(string: "https://xmplaylist.com/api/feed") else { return }
+            do {
+                let (data, _) = try await session.data(from: url)
+                guard !Task.isCancelled else { return }
+                let response = try JSONDecoder().decode(SXMFeedResponse.self, from: data)
+
+                let lookup = deeplinkToChannelIDs
+
+                // Group by channelId (deeplink), pick newest per channel
+                var newestByDeeplink: [String: SXMFeedEntry] = [:]
+                for entry in response.results {
+                    if let existing = newestByDeeplink[entry.channelId] {
+                        let existingDate = existing.timestamp.flatMap { SXMTrackEntry.iso8601.date(from: $0) } ?? .distantPast
+                        let newDate = entry.timestamp.flatMap { SXMTrackEntry.iso8601.date(from: $0) } ?? .distantPast
+                        if newDate > existingDate {
+                            newestByDeeplink[entry.channelId] = entry
+                        }
+                    } else {
+                        newestByDeeplink[entry.channelId] = entry
+                    }
+                }
+
+                // Map deeplinks to app channel IDs
+                var newFeedTracks: [String: SXMTrack] = [:]
+                for (deeplink, entry) in newestByDeeplink {
+                    guard let channelIDs = lookup[deeplink] else { continue }
+                    let track = entry.toSXMTrack()
+                    for id in channelIDs {
+                        newFeedTracks[id] = track
+                    }
+                }
+
+                feedTracks = newFeedTracks
+                log.log("Feed updated: \(newFeedTracks.count) channels with tracks (from \(response.results.count) entries)", category: .sxm)
+            } catch {
+                guard !Task.isCancelled else { return }
+                log.log("Feed fetch failed: \(error.localizedDescription)", category: .sxm)
+            }
         }
     }
 

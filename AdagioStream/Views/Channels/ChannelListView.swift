@@ -3,6 +3,7 @@ import SwiftUI
 struct ChannelListView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @EnvironmentObject var sxmService: SXMMetadataService
     @State private var searchText = ""
 
     var body: some View {
@@ -85,7 +86,7 @@ struct ChannelListView: View {
                 Section {
                     if !providerManager.collapsedGroups.contains(group.name) {
                         ForEach(group.channels) { channel in
-                            ChannelRowView(channel: channel) {
+                            ChannelRowView(channel: channel, nowPlayingTrack: sxmService.feedTracks[channel.id]) {
                                 audioPlayer.channels = group.channels
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {

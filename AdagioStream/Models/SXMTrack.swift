@@ -51,7 +51,7 @@ struct SXMTrackEntry: Decodable {
         }
     }
 
-    private static let iso8601: ISO8601DateFormatter = {
+    static let iso8601: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
@@ -70,4 +70,28 @@ struct SXMTrackEntry: Decodable {
 
 struct SXMStationTracksResponse: Decodable {
     let results: [SXMTrackEntry]
+}
+
+// MARK: - Feed API models
+
+struct SXMFeedEntry: Decodable {
+    let channelId: String
+    let timestamp: String?
+    let track: SXMTrackEntry.TrackInfo
+    let spotify: SXMTrackEntry.SpotifyInfo?
+
+    func toSXMTrack() -> SXMTrack {
+        SXMTrack(
+            id: track.id ?? UUID().uuidString,
+            title: track.title,
+            artists: track.artists,
+            artworkURL: spotify?.bestImageURL,
+            startedAt: timestamp.flatMap { SXMTrackEntry.iso8601.date(from: $0) }
+        )
+    }
+}
+
+struct SXMFeedResponse: Decodable {
+    let count: Int?
+    let results: [SXMFeedEntry]
 }
