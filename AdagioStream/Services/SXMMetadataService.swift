@@ -105,10 +105,13 @@ final class SXMMetadataService: ObservableObject {
                 continue
             }
 
-            // Contains match: station name contains channel name or vice versa
+            // Word-boundary match: station name appears as whole word(s) in channel name or vice versa
             if let station = stations.first(where: {
                 let stationNorm = $0.name.lowercased().trimmingCharacters(in: .whitespaces)
-                return stationNorm.contains(normalized) || normalized.contains(stationNorm)
+                let stationPattern = "\\b\(NSRegularExpression.escapedPattern(for: stationNorm))\\b"
+                let channelPattern = "\\b\(NSRegularExpression.escapedPattern(for: normalized))\\b"
+                return stationNorm.range(of: channelPattern, options: .regularExpression) != nil
+                    || normalized.range(of: stationPattern, options: .regularExpression) != nil
             }) {
                 channelDeeplinkMap[channel.id] = station.deeplink
                 matched += 1
