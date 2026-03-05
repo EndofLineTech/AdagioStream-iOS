@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MiniPlayerView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
+    @EnvironmentObject var sxmService: SXMMetadataService
     @State private var showNowPlaying = false
 
     var body: some View {
@@ -12,7 +13,9 @@ struct MiniPlayerView: View {
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
-                        if let logoURL = audioPlayer.currentChannel?.logoURL {
+                        if let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
+                            RetryableAsyncImage(url: artworkURL, width: 36, height: 36, cornerRadius: 6)
+                        } else if let logoURL = audioPlayer.currentChannel?.logoURL {
                             RetryableAsyncImage(url: logoURL, width: 36, height: 36, cornerRadius: 6)
                         } else {
                             Image(systemName: "radio")
@@ -34,7 +37,12 @@ struct MiniPlayerView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        if let error = audioPlayer.error {
+                        if let track = sxmService.currentTrack {
+                            Text("\(track.artistDisplay) — \(track.title)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } else if let error = audioPlayer.error {
                             Text(error)
                                 .font(.caption)
                                 .foregroundStyle(.red)

@@ -3,6 +3,7 @@ import SwiftUI
 struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var providerManager: ProviderManager
+    @EnvironmentObject var sxmService: SXMMetadataService
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -10,8 +11,12 @@ struct NowPlayingView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                // Channel artwork
-                if let logoURL = audioPlayer.currentChannel?.logoURL {
+                // Artwork
+                if let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
+                    RetryableAsyncImage(url: artworkURL, width: 200, height: 200, cornerRadius: 20)
+                        .shadow(radius: 10)
+                        .id(track.id)
+                } else if let logoURL = audioPlayer.currentChannel?.logoURL {
                     RetryableAsyncImage(url: logoURL, width: 200, height: 200, cornerRadius: 20)
                         .shadow(radius: 10)
                         .id(audioPlayer.currentChannel?.id)
@@ -19,22 +24,31 @@ struct NowPlayingView: View {
                     channelPlaceholder
                 }
 
-                // Channel info
+                // Channel / track info
                 VStack(spacing: 8) {
                     Text(audioPlayer.currentChannel?.name ?? "Not Playing")
                         .font(.title2)
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
 
-                    Text(audioPlayer.currentChannel?.group ?? "")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    if let epg = currentEPG {
-                        Text(epg.title)
-                            .font(.callout)
+                    if let track = sxmService.currentTrack {
+                        Text(track.title)
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                        Text(track.artistDisplay)
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+                    } else {
+                        Text(audioPlayer.currentChannel?.group ?? "")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+
+                        if let epg = currentEPG {
+                            Text(epg.title)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 4)
+                        }
                     }
                 }
 

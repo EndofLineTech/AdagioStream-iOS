@@ -75,6 +75,7 @@ final class DebugLogger: @unchecked Sendable {
         case nowPlaying = "NOWPLAY"
         case call = "CALL"
         case timeShift = "TIMESHIFT"
+        case sxm = "SXM"
     }
 
     // MARK: - Private

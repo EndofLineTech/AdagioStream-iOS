@@ -30,6 +30,7 @@ struct AdagioStreamApp: App {
                 .environmentObject(audioPlayer)
                 .environmentObject(providerManager)
                 .environmentObject(settingsViewModel)
+                .environmentObject(SXMMetadataService.shared)
                 .preferredColorScheme(settingsViewModel.settings.appearanceMode.colorScheme)
                 .applyTextSize(settingsViewModel.settings.textSizeMode)
         }

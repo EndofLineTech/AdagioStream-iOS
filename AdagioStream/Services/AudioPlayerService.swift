@@ -19,14 +19,17 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var listeningDuration: TimeInterval = 0
 
     let timeShiftBuffer = TimeShiftBufferService.shared
+    let sxmService = SXMMetadataService.shared
 
     private var mediaPlayer = VLCMediaPlayer()
     private let callObserver = CXCallObserver()
     private let callDelegate = CallObserverDelegate()
+    private var sxmCancellable: AnyCancellable?
     private var listeningStartDate: Date?
     private var accumulatedListeningTime: TimeInterval = 0
     private var stateTimer: Timer?
     private var currentArtwork: MPMediaItemArtwork?
+    private var sxmArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
     private var interruptedChannel: Channel?
     private var isActiveSession = false
@@ -51,6 +54,17 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         configureAudioSession()
         configureRemoteCommands()
         // Live Activity disabled — system Now Playing widget is sufficient
+
+        sxmCancellable = sxmService.$currentTrack
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] track in
+                guard let self else { return }
+                self.sxmArtwork = nil
+                if let track, let artworkURL = track.artworkURL {
+                    self.fetchSXMArtwork(url: artworkURL, trackID: track.id)
+                }
+                self.updateNowPlayingInfo()
+            }
     }
 
     // MARK: - Audio Session
@@ -304,6 +318,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
         listeningStartDate = Date()
         updateNowPlayingInfo()
+        sxmService.channelChanged(to: channel)
 
         // Debounce: each tap resets a 1.5s timer.  The stream only starts
         // once the user has stopped switching for 1.5s.  This prevents
@@ -442,6 +457,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         mediaPlayer.stop()
         isPlaying = false
         isBuffering = false
+        sxmService.stopPolling()
         updateNowPlayingInfo()
     }
 
@@ -502,6 +518,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isPlaying = false
         isBuffering = false
         currentArtwork = nil
+        sxmArtwork = nil
+        sxmService.stopPolling()
         clearNowPlayingInfo()
     }
 
@@ -807,14 +825,28 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private func updateNowPlayingInfo() {
         guard let channel = currentChannel else { return }
 
+        let title: String
+        let artist: String
+        let artwork: MPMediaItemArtwork?
+
+        if let track = sxmService.currentTrack {
+            title = track.title
+            artist = track.artistDisplay
+            artwork = sxmArtwork ?? currentArtwork
+        } else {
+            title = channel.name
+            artist = channel.group
+            artwork = currentArtwork
+        }
+
         var info: [String: Any] = [
-            MPMediaItemPropertyTitle: channel.name,
-            MPMediaItemPropertyArtist: channel.group,
+            MPMediaItemPropertyTitle: title,
+            MPMediaItemPropertyArtist: artist,
             MPNowPlayingInfoPropertyIsLiveStream: !isPlayingBufferedFile,
             MPNowPlayingInfoPropertyPlaybackRate: (isPlaying || isBuffering) ? 1.0 : 0.0,
         ]
 
-        if let artwork = currentArtwork {
+        if let artwork {
             info[MPMediaItemPropertyArtwork] = artwork
         }
 
@@ -826,6 +858,16 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             center.playbackState = .playing
         } else if currentChannel != nil {
             center.playbackState = .paused
+        }
+    }
+
+    private func fetchSXMArtwork(url: URL, trackID: String) {
+        Task {
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let image = UIImage(data: data) else { return }
+            guard self.sxmService.currentTrack?.id == trackID else { return }
+            self.sxmArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.updateNowPlayingInfo()
         }
     }
 

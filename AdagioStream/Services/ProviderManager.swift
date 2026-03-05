@@ -184,6 +184,9 @@ final class ProviderManager: ObservableObject {
         await reconcileGroupPreferences()
         applyGroupFilter()
         isLoading = false
+
+        // Match SiriusXM channels to xmplaylist stations for track metadata
+        SXMMetadataService.shared.matchChannels(channels)
     }
 
     func loadChannels(from provider: Provider) async throws -> [Channel] {
