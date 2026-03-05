@@ -53,22 +53,18 @@ struct RetryableAsyncImage: View {
     private func loadImage() async {
         hasFailed = false
 
-        do {
-            guard let uiImage = await ImageCacheService.shared.image(for: url) else {
-                hasFailed = true
-                return
-            }
-            let color = averageEdgeColor(of: uiImage)
-            // Suppress implicit animation so the list doesn't jump
-            // when images finish loading at different times
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                loadedImage = uiImage
-                backgroundColor = color
-            }
-        } catch {
+        guard let uiImage = await ImageCacheService.shared.image(for: url) else {
             hasFailed = true
+            return
+        }
+        let color = averageEdgeColor(of: uiImage)
+        // Suppress implicit animation so the list doesn't jump
+        // when images finish loading at different times
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            loadedImage = uiImage
+            backgroundColor = color
         }
     }
 

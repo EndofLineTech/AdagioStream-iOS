@@ -20,7 +20,9 @@ actor ImageCacheService {
         cacheDir = appSupport.appendingPathComponent("AdagioStream/image-cache", isDirectory: true)
         manifestURL = cacheDir.appendingPathComponent("image-cache-manifest.json")
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        loadManifest()
+        if let data = try? Data(contentsOf: manifestURL) {
+            manifest = (try? JSONDecoder().decode([String: ManifestEntry].self, from: data)) ?? [:]
+        }
     }
 
     func image(for url: URL) async -> UIImage? {
