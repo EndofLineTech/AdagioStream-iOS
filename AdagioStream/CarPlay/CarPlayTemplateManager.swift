@@ -11,6 +11,7 @@ class CarPlayTemplateManager {
     private let log = DebugLogger.shared
     private var cancellable: AnyCancellable?
     private var channelCancellable: AnyCancellable?
+    private var timeShiftCancellable: AnyCancellable?
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
@@ -61,6 +62,12 @@ class CarPlayTemplateManager {
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
             }
+
+        timeShiftCancellable = audioPlayer.timeShiftBuffer.$isTimeShifted
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
     }
 
     private func attemptStartupStream() {
@@ -100,7 +107,19 @@ class CarPlayTemplateManager {
             }
         }
 
-        nowPlaying.updateNowPlayingButtons([favButton])
+        var buttons: [CPNowPlayingButton] = [favButton]
+
+        if audioPlayer.timeShiftBuffer.isTimeShifted {
+            let liveImage = renderSFSymbol("forward.end.fill", size: buttonSize)
+            let liveButton = CPNowPlayingImageButton(image: liveImage) { [weak self] _ in
+                Task { @MainActor in
+                    self?.audioPlayer.skipToLive()
+                }
+            }
+            buttons.insert(liveButton, at: 0)
+        }
+
+        nowPlaying.updateNowPlayingButtons(buttons)
     }
 
     private func renderSFSymbol(_ name: String, size: CGSize) -> UIImage {

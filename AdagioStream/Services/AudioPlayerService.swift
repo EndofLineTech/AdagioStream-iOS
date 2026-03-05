@@ -459,10 +459,13 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Note: do NOT clear interruptedChannel here — stop() is called
         // by the interruption handler after saving the channel to resume.
         // Only pause() and play() should clear it (explicit user actions).
+        let wasPlayingBuffer = isPlayingBufferedFile
         isPlayingBufferedFile = false
         bufferedChannel = nil
-        // Don't cancel time-shift during interruption stop — capture may be starting
-        if interruptedChannel == nil {
+        // Cancel time-shift if: explicit user stop (no interruptedChannel),
+        // OR we were playing the buffer (old buffer is done, need fresh state).
+        // Don't cancel when interrupting a live stream — capture is about to start.
+        if wasPlayingBuffer || interruptedChannel == nil {
             timeShiftBuffer.cancelAndCleanup()
         }
         isActiveSession = false
