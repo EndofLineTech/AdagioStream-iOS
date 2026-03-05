@@ -18,6 +18,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var statusText: String = ""
     @Published var listeningDuration: TimeInterval = 0
 
+    let timeShiftBuffer = TimeShiftBufferService.shared
+
     private var mediaPlayer = VLCMediaPlayer()
     private let callObserver = CXCallObserver()
     private let callDelegate = CallObserverDelegate()
@@ -34,6 +36,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private let maxChannelChangeRetries = 3
     private var pendingPlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
+    private var isPlayingBufferedFile = false
+    private var bufferedChannel: Channel?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -103,8 +107,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 guard let channel = self.interruptedChannel else { return }
                 self.log.log("Secondary audio hint .end: resuming interrupted channel \"\(channel.name)\"", category: .interruption)
                 self.interruptedChannel = nil
+                let bufferFileURL = self.timeShiftBuffer.stopCapture()
+                self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.reactivateAndPlay(channel: channel)
+                    self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
                 }
             }
         }
@@ -157,8 +163,16 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 // interruptions — a fresh start on .ended is more reliable.
                 if self.isActiveSession, let channel = self.currentChannel {
                     self.interruptedChannel = channel
+                    let currentBitrate = self.streamBitrateKbps
                     self.log.log("Saving interrupted channel \"\(channel.name)\", stopping stream", category: .interruption)
                     self.stop()
+
+                    // Start capturing stream data so we can resume from
+                    // the interruption point instead of rejoining live
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        guard self.interruptedChannel?.id == channel.id else { return }
+                        self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+                    }
                 }
 
             case .ended:
@@ -173,11 +187,15 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 }
                 self.interruptedChannel = nil
 
+                // Stop time-shift capture and get buffer file if available
+                let bufferFileURL = self.timeShiftBuffer.stopCapture()
+                self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+
                 // Delay to let the audio route settle (CarPlay route transitions
                 // need time to switch back from phone/Siri to media output).
                 self.log.log("Scheduling 500ms delayed restart for \"\(channel.name)\"", category: .interruption)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.reactivateAndPlay(channel: channel)
+                    self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
                 }
 
             @unknown default:
@@ -204,10 +222,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         log.log("Session[\(context)]: cat=\(session.category.rawValue), mode=\(session.mode.rawValue), otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), carplay=\(isCarPlay), outputs=[\(outputs)], inputs=[\(inputs)], calls=[\(callInfo)]", category: .audioSession)
     }
 
-    private func reactivateAndPlay(channel: Channel) {
+    private func reactivateAndPlay(channel: Channel, bufferFileURL: URL? = nil) {
         let session = AVAudioSession.sharedInstance()
         let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
-        log.log("reactivateAndPlay: channel=\"\(channel.name)\", outputs=[\(outputs)]", category: .audioSession)
+        log.log("reactivateAndPlay: channel=\"\(channel.name)\", buffer=\(bufferFileURL != nil), outputs=[\(outputs)]", category: .audioSession)
 
         // Deactivate first to fully release the old audio route, then
         // reactivate — this resets stale hardware state that can prevent
@@ -225,7 +243,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             log.log("Session reactivate FAILED: \(error.localizedDescription)", category: .audioSession)
         }
 
-        play(channel: channel)
+        if let bufferFileURL {
+            playBufferedFile(bufferFileURL, for: channel)
+        } else {
+            play(channel: channel)
+        }
     }
 
     // MARK: - Playback
@@ -237,6 +259,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         pendingPlayWorkItem?.cancel()
         pendingPlayWorkItem = nil
         interruptedChannel = nil
+        isPlayingBufferedFile = false
+        bufferedChannel = nil
+        timeShiftBuffer.cancelAndCleanup()
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
 
@@ -326,10 +351,70 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
     }
 
+    // MARK: - Time-Shift Buffered Playback
+
+    private func playBufferedFile(_ fileURL: URL, for channel: Channel) {
+        log.log("playBufferedFile: \(fileURL.lastPathComponent) for \"\(channel.name)\"", category: .player)
+
+        pendingPlayWorkItem?.cancel()
+        pendingPlayWorkItem = nil
+        interruptedChannel = nil
+        lastLoggedVLCState = nil
+        stateTimer?.invalidate()
+
+        // Destroy old player
+        let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
+        if hadActiveMedia {
+            mediaPlayer.stop()
+            mediaPlayer.media = nil
+            mediaPlayer.delegate = nil
+            mediaPlayer = VLCMediaPlayer()
+            mediaPlayer.delegate = self
+        }
+
+        currentChannel = channel
+        isPlayingBufferedFile = true
+        bufferedChannel = channel
+        isActiveSession = false
+        isBuffering = true
+        isPlaying = false
+        error = nil
+
+        let media = VLCMedia(url: fileURL)
+        media.delegate = self
+        mediaPlayer.media = media
+        mediaPlayer.audio?.volume = 100
+        mediaPlayer.play()
+        isActiveSession = true
+        timeShiftBuffer.bufferPlaybackStarted()
+
+        log.log("Buffered playback started", category: .player)
+
+        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncState()
+            }
+        }
+    }
+
+    /// Skip buffered content and rejoin the live stream immediately.
+    func skipToLive() {
+        log.log("skipToLive: isPlayingBuffer=\(isPlayingBufferedFile)", category: .player)
+        guard isPlayingBufferedFile || timeShiftBuffer.isTimeShifted,
+              let channel = bufferedChannel ?? currentChannel else { return }
+
+        isPlayingBufferedFile = false
+        bufferedChannel = nil
+        timeShiftBuffer.goLive()
+        play(channel: channel)
+    }
 
     func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         interruptedChannel = nil
+        isPlayingBufferedFile = false
+        bufferedChannel = nil
+        timeShiftBuffer.cancelAndCleanup()
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
@@ -374,6 +459,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Note: do NOT clear interruptedChannel here — stop() is called
         // by the interruption handler after saving the channel to resume.
         // Only pause() and play() should clear it (explicit user actions).
+        isPlayingBufferedFile = false
+        bufferedChannel = nil
+        // Don't cancel time-shift during interruption stop — capture may be starting
+        if interruptedChannel == nil {
+            timeShiftBuffer.cancelAndCleanup()
+        }
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
@@ -607,6 +698,14 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             case .ended:
                 isPlaying = false
                 isBuffering = false
+                if isPlayingBufferedFile, let channel = bufferedChannel {
+                    log.log("Buffered file playback ended, transitioning to live for \"\(channel.name)\"", category: .player)
+                    isPlayingBufferedFile = false
+                    bufferedChannel = nil
+                    timeShiftBuffer.bufferPlaybackDidEnd()
+                    play(channel: channel)
+                    timeShiftBuffer.transitionToLiveComplete()
+                }
             default:
                 break
             }
@@ -644,7 +743,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             }
         }
 
-        if isBuffering {
+        if isPlayingBufferedFile {
+            let duration = String(format: "%.0f", timeShiftBuffer.capturedDuration)
+            statusText = "Catching up \u{00B7} \(duration)s behind"
+        } else if isBuffering {
             statusText = "Buffering... (cache: \(Int(bufferDuration))s)"
         } else if isPlaying {
             if streamBitrateKbps > 1 {
@@ -672,7 +774,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: channel.name,
             MPMediaItemPropertyArtist: channel.group,
-            MPNowPlayingInfoPropertyIsLiveStream: true,
+            MPNowPlayingInfoPropertyIsLiveStream: !isPlayingBufferedFile,
             MPNowPlayingInfoPropertyPlaybackRate: (isPlaying || isBuffering) ? 1.0 : 0.0,
         ]
 

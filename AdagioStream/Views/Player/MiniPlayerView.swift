@@ -39,6 +39,27 @@ struct MiniPlayerView: View {
                                 .font(.caption)
                                 .foregroundStyle(.red)
                                 .lineLimit(1)
+                        } else if audioPlayer.timeShiftBuffer.isTimeShifted {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(.orange)
+                                    .frame(width: 6, height: 6)
+                                Text(audioPlayer.statusText)
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                                    .lineLimit(1)
+                                Button {
+                                    audioPlayer.skipToLive()
+                                } label: {
+                                    Text("LIVE")
+                                        .font(.caption2.bold())
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(.red))
+                                }
+                                .buttonStyle(.plain)
+                            }
                         } else if !audioPlayer.statusText.isEmpty {
                             HStack(spacing: 4) {
                                 Text(audioPlayer.statusText)

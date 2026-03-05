@@ -62,7 +62,28 @@ struct NowPlayingView: View {
                 .glassContainer()
 
                 // Status info
-                if !audioPlayer.statusText.isEmpty {
+                if audioPlayer.timeShiftBuffer.isTimeShifted {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(.orange)
+                            .frame(width: 8, height: 8)
+                        Text(audioPlayer.statusText)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Button {
+                            audioPlayer.skipToLive()
+                        } label: {
+                            Text("LIVE")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(.red))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 8)
+                } else if !audioPlayer.statusText.isEmpty {
                     HStack(spacing: 6) {
                         if audioPlayer.isBuffering {
                             ProgressView()

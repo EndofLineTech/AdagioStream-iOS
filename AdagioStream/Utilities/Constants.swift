@@ -12,6 +12,11 @@ enum Constants {
         static let favoriteGroups = "favoriteGroups.json"
     }
 
+    enum TimeShift {
+        static let maxDuration: TimeInterval = 120
+        static let minBytes: Int = 4096
+    }
+
     enum XtreamCodes {
         static let apiPath = "/player_api.php"
         static let livePath = "/live"
