@@ -59,11 +59,6 @@ struct SavedSongRowView: View {
 
     private func searchAppleMusic() {
         guard let encoded = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return }
-        let appURL = URL(string: "music://music.apple.com/us/search?term=\(encoded)")!
-        if UIApplication.shared.canOpenURL(appURL) {
-            openURL(appURL)
-        } else {
-            openURL(URL(string: "https://music.apple.com/us/search?term=\(encoded)")!)
-        }
+        openURL(URL(string: "https://music.apple.com/us/search?term=\(encoded)")!)
     }
 }
