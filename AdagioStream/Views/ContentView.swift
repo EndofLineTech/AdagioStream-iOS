@@ -23,11 +23,17 @@ struct ContentView: View {
                     }
                     .tag(1)
 
+                SavedSongsView()
+                    .tabItem {
+                        Label("Loved", systemImage: "heart.fill")
+                    }
+                    .tag(2)
+
                 SettingsView()
                     .tabItem {
                         Label("Settings", systemImage: "gear")
                     }
-                    .tag(2)
+                    .tag(3)
             }
 
             if audioPlayer.currentChannel != nil {

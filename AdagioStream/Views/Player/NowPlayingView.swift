@@ -4,6 +4,7 @@ struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var sxmService: SXMMetadataService
+    @EnvironmentObject var savedSongsManager: SavedSongsManager
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -147,6 +148,16 @@ struct NowPlayingView: View {
             .navigationTitle("Now Playing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if let track = sxmService.currentTrack {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            savedSongsManager.toggleSave(track: track, channel: audioPlayer.currentChannel)
+                        } label: {
+                            Image(systemName: savedSongsManager.isSaved(trackID: track.id) ? "heart.fill" : "heart")
+                                .foregroundStyle(savedSongsManager.isSaved(trackID: track.id) ? .red : .secondary)
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }

@@ -9,9 +9,11 @@ class CarPlayTemplateManager {
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
     private let log = DebugLogger.shared
+    let savedSongsManager = SavedSongsManager.shared
     private var cancellable: AnyCancellable?
     private var channelCancellable: AnyCancellable?
     private var timeShiftCancellable: AnyCancellable?
+    private var trackCancellable: AnyCancellable?
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
@@ -68,6 +70,12 @@ class CarPlayTemplateManager {
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
             }
+
+        trackCancellable = SXMMetadataService.shared.$currentTrack
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
     }
 
     private func attemptStartupStream() {
@@ -108,6 +116,19 @@ class CarPlayTemplateManager {
         }
 
         var buttons: [CPNowPlayingButton] = [favButton]
+
+        if let currentTrack = SXMMetadataService.shared.currentTrack {
+            let isLoved = savedSongsManager.isSaved(trackID: currentTrack.id)
+            let heartImage = renderSFSymbol(isLoved ? "heart.fill" : "heart", size: buttonSize)
+            let heartButton = CPNowPlayingImageButton(image: heartImage) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.savedSongsManager.toggleSave(track: currentTrack, channel: self.audioPlayer.currentChannel)
+                    self.updateNowPlayingButtons()
+                }
+            }
+            buttons.append(heartButton)
+        }
 
         if audioPlayer.timeShiftBuffer.isTimeShifted {
             let liveImage = renderSFSymbol("forward.end.fill", size: buttonSize)
