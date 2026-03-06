@@ -3,7 +3,7 @@ options:
   bundleIdPrefix: com.adagiostream
   deploymentTarget:
     iOS: "16.0"
-  xcodeVersion: "15.0"
+  xcodeVersion: "16.3"
   generateEmptyDirectories: true
 
 settings:
@@ -39,6 +39,7 @@ settings:
     GCC_WARN_UNUSED_VARIABLE: YES
     SWIFT_EMIT_LOC_STRINGS: YES
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
 
 packages:
   VLCKitSPM:
