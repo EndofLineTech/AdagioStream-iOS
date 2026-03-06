@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var showClearFavoritesAlert = false
     @State private var showClearLogsAlert = false
     @State private var showShareSheet = false
+    @State private var showShareWarning = false
     @State private var logSize = DebugLogger.shared.logFileSize()
     @State private var newPrefix = ""
 
@@ -198,7 +199,7 @@ struct SettingsView: View {
                     Toggle("Enable Debug Logging", isOn: debugLoggingBinding)
 
                     Button {
-                        showShareSheet = true
+                        showShareWarning = true
                     } label: {
                         HStack {
                             Label("Share Logs", systemImage: "square.and.arrow.up")
@@ -265,6 +266,12 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("Delete all debug log files?")
+            }
+            .alert("Share Debug Logs", isPresented: $showShareWarning) {
+                Button("Share") { showShareSheet = true }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Log files may contain channel names, server addresses, and connection details. Review the file before sharing publicly.")
             }
             .sheet(isPresented: $showShareSheet) {
                 logSize = DebugLogger.shared.logFileSize()

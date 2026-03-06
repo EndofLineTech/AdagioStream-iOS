@@ -138,12 +138,20 @@ struct AddProviderView: View {
         }
     }
 
+    private static let allowedSchemes: Set<String> = ["http", "https"]
+
     private var isValid: Bool {
         guard !name.isEmpty else { return false }
         if providerType == 0 {
-            return URL(string: m3uURL) != nil
+            guard let url = URL(string: m3uURL),
+                  let scheme = url.scheme?.lowercased(),
+                  Self.allowedSchemes.contains(scheme) else { return false }
+            return true
         } else {
-            return URL(string: xcHost) != nil && !xcUsername.isEmpty && !xcPassword.isEmpty
+            guard let url = URL(string: xcHost),
+                  let scheme = url.scheme?.lowercased(),
+                  Self.allowedSchemes.contains(scheme) else { return false }
+            return !xcUsername.isEmpty && !xcPassword.isEmpty
         }
     }
 
@@ -174,7 +182,12 @@ struct AddProviderView: View {
                 isSaving = false
                 return
             }
-            let epg = URL(string: epgURL)
+            let epg: URL? = {
+                guard let u = URL(string: epgURL),
+                      let s = u.scheme?.lowercased(),
+                      Self.allowedSchemes.contains(s) else { return nil }
+                return u
+            }()
             type = .m3u(url: url, epgURL: epg)
         } else {
             guard let host = URL(string: xcHost) else {

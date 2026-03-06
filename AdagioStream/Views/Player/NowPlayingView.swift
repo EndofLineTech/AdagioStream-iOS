@@ -116,8 +116,8 @@ struct NowPlayingView: View {
                 }
 
                 // Listening timer
-                if audioPlayer.listeningDuration >= 1 {
-                    Text(formattedDuration(audioPlayer.listeningDuration))
+                if let start = audioPlayer.listeningStartDate {
+                    Text(start.addingTimeInterval(-audioPlayer.accumulatedListeningTime), style: .timer)
                         .font(.caption)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -174,17 +174,6 @@ struct NowPlayingView: View {
                     .font(.system(size: 60))
                     .foregroundStyle(.secondary)
             }
-    }
-
-    private func formattedDuration(_ duration: TimeInterval) -> String {
-        let total = Int(duration)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let seconds = total % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%d:%02d", minutes, seconds)
     }
 
     private var currentEPG: EPGEntry? {

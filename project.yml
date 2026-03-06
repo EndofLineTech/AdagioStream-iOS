@@ -14,7 +14,7 @@ settings:
 packages:
   VLCKitSPM:
     url: https://github.com/tylerjonesio/vlckit-spm
-    from: "3.6.0"
+    exactVersion: "3.6.0"
 
 targets:
   AdagioStream:
@@ -37,7 +37,7 @@ targets:
         LSApplicationQueriesSchemes:
           - spotify
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
+          NSAllowsArbitraryLoadsForMedia: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
           UISceneConfigurations:
@@ -51,7 +51,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "53"
+        CURRENT_PROJECT_VERSION: "55"
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true

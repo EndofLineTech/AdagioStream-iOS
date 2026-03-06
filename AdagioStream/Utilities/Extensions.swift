@@ -38,6 +38,35 @@ extension String {
 }
 
 extension URL {
+    /// Returns a redacted version of this URL safe for logging.
+    /// Strips Xtream Codes credentials from both path (`/live/user/pass/`) and query parameters.
+    var redactedForLog: String {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
+            return "***"
+        }
+
+        // Redact path credentials: /live/user/pass/id.ext → /live/***/***//id.ext
+        if let path = components.path.range(of: #"^/live/[^/]+/[^/]+/"#, options: .regularExpression) {
+            let remainder = components.path[path.upperBound...]
+            components.path = "/live/***/***/\(remainder)"
+        }
+
+        // Redact hostname for Xtream Codes API paths
+        if components.path.contains(Constants.XtreamCodes.apiPath) {
+            components.host = "***"
+        }
+
+        // Redact query params
+        components.queryItems = components.queryItems?.map { item in
+            if item.name == "username" || item.name == "password" {
+                return URLQueryItem(name: item.name, value: "***")
+            }
+            return item
+        }
+
+        return components.string ?? "***"
+    }
+
     /// Builds an Xtream Codes API URL with the given action and optional extra parameters.
     func xtreamCodesURL(username: String, password: String, action: String, params: [String: String] = [:]) -> URL? {
         var components = URLComponents(url: self, resolvingAgainstBaseURL: false)

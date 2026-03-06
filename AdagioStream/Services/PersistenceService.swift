@@ -22,7 +22,7 @@ actor PersistenceService {
     func save<T: Codable>(_ value: T, to filename: String) throws {
         let url = baseDirectory.appendingPathComponent(filename)
         let data = try JSONEncoder().encode(value)
-        try data.write(to: url, options: .atomic)
+        try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
     func load<T: Codable>(from filename: String) throws -> T {

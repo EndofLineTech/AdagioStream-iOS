@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var settingsViewModel: SettingsViewModel
+    @EnvironmentObject var sxmService: SXMMetadataService
     @State private var selectedTab = 0
     @State private var hasAttemptedStartupStream = false
 
@@ -43,6 +44,13 @@ struct ContentView: View {
         }
         .glassContainer()
         .task { await performStartupStream() }
+        .onChange(of: selectedTab) { newTab in
+            // Only poll SXM feed when channel list or favorites are visible
+            sxmService.setFeedPollingEnabled(newTab == 0 || newTab == 1)
+        }
+        .onAppear {
+            sxmService.setFeedPollingEnabled(selectedTab == 0 || selectedTab == 1)
+        }
     }
 
     private func performStartupStream() async {

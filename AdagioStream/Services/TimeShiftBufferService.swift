@@ -80,7 +80,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
         capturedDuration = 0
 
         // Timer to update estimated duration
-        durationTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateEstimatedDuration()
             }

@@ -14,6 +14,8 @@ actor ImageCacheService {
     private let cacheDir: URL
     private let manifestURL: URL
     private let logger = DebugLogger.shared
+    /// Skip revalidation for images cached within this window.
+    private let freshnessTTL: TimeInterval = 3600 // 1 hour
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -32,6 +34,11 @@ actor ImageCacheService {
         let entry = manifest[key]
 
         if hasCached {
+            // Skip revalidation if cached recently
+            if let cachedAt = entry?.cachedAt, Date().timeIntervalSince(cachedAt) < freshnessTTL {
+                return loadFromDisk(fileURL)
+            }
+
             // Conditional revalidation
             var request = URLRequest(url: url)
             if let etag = entry?.etag {

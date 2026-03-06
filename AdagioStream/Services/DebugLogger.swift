@@ -35,11 +35,11 @@ final class DebugLogger: @unchecked Sendable {
 
     // MARK: - Public API
 
-    func log(_ message: String, category: Category = .general, file: String = #fileID, line: Int = #line) {
+    func log(_ message: @autoclosure () -> String, category: Category = .general, file: String = #fileID, line: Int = #line) {
         guard isEnabled else { return }
         let timestamp = dateFormatter.string(from: Date())
         let fileName = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
-        let redacted = Self.redactXtreamCodesCredentials(message)
+        let redacted = Self.redactXtreamCodesCredentials(message())
         let entry = "[\(timestamp)] [\(category.rawValue)] [\(fileName):\(line)] \(redacted)\n"
 
         queue.async { [self] in
@@ -118,6 +118,11 @@ final class DebugLogger: @unchecked Sendable {
         let url = logFileURL
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
+            // Exclude log files from iCloud/iTunes backups
+            var resourceURL = url
+            var resourceValues = URLResourceValues()
+            resourceValues.isExcludedFromBackup = true
+            try? resourceURL.setResourceValues(resourceValues)
             // Write a header with build info
             let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
             let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"

@@ -20,6 +20,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 @main
 struct AdagioStreamApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @StateObject private var providerManager = ProviderManager.shared
     @StateObject private var settingsViewModel = SettingsViewModel(audioPlayer: AudioPlayerService.shared)
@@ -34,6 +35,11 @@ struct AdagioStreamApp: App {
                 .environmentObject(SavedSongsManager.shared)
                 .preferredColorScheme(settingsViewModel.settings.appearanceMode.colorScheme)
                 .applyTextSize(settingsViewModel.settings.textSizeMode)
+        }
+        .onChange(of: scenePhase) { phase in
+            let isBackground = phase != .active
+            audioPlayer.setBackgroundMode(isBackground)
+            SXMMetadataService.shared.setBackgroundMode(isBackground)
         }
     }
 }

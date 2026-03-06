@@ -28,7 +28,7 @@
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
+		<key>NSAllowsArbitraryLoadsForMedia</key>
 		<true/>
 	</dict>
 	<key>NSSupportsLiveActivities</key>

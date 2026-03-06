@@ -14,10 +14,12 @@ final class SXMMetadataService: ObservableObject {
     private var currentDeeplink: String?
     private var pollTimer: Timer?
     private var inFlightTask: Task<Void, Never>?
-    private let pollInterval: TimeInterval = 5
+    private let pollInterval: TimeInterval = 15
+    private let backgroundPollInterval: TimeInterval = 45
     private var feedTimer: Timer?
     private var feedTask: Task<Void, Never>?
     private let feedPollInterval: TimeInterval = 30
+    private var isInBackground = false
 
     /// Timestamped track history from API responses, sorted newest-first.
     private var trackHistory: [SXMTrack] = []
@@ -26,12 +28,7 @@ final class SXMMetadataService: ObservableObject {
     /// When true, polls continue but currentTrack is driven by showTrack(at:) instead of live data.
     private var isDisplaySuspended = false
 
-    private let session: URLSession = {
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
-        config.httpAdditionalHeaders = ["User-Agent": "AdagioStream/1.0"]
-        return URLSession(configuration: config)
-    }()
+    private let session = PinnedURLSession.xmplaylist
 
     private init() {}
 
@@ -127,7 +124,10 @@ final class SXMMetadataService: ObservableObject {
             log.log("Unmatched channels: \(unmatched.joined(separator: ", "))", category: .sxm)
         }
 
-        startFeedPolling()
+        hasSXMChannels = true
+        if feedWanted {
+            startFeedPolling()
+        }
     }
 
     // MARK: - Feed Polling
@@ -139,6 +139,49 @@ final class SXMMetadataService: ObservableObject {
             map[deeplink, default: []].append(channelID)
         }
         return map
+    }
+
+    /// Whether the channel list UI is currently visible and wants feed updates.
+    private var feedWanted = false
+    private var hasSXMChannels = false
+
+    /// Call when channel list becomes visible/hidden to start/stop feed polling.
+    func setFeedPollingEnabled(_ enabled: Bool) {
+        feedWanted = enabled
+        if enabled && hasSXMChannels && feedTimer == nil && !isInBackground {
+            startFeedPolling()
+        } else if !enabled {
+            stopFeedPolling()
+        }
+    }
+
+    /// Called when the app enters/leaves the background.
+    func setBackgroundMode(_ background: Bool) {
+        isInBackground = background
+        if background {
+            // Stop feed polling entirely — no visible channel list
+            stopFeedPolling()
+            // Slow track polling for Lock Screen metadata
+            restartTrackPollingIfActive(interval: backgroundPollInterval)
+        } else {
+            // Restore normal track poll rate
+            restartTrackPollingIfActive(interval: pollInterval)
+            // Resume feed if the channel list wants it
+            if feedWanted && hasSXMChannels {
+                startFeedPolling()
+            }
+        }
+    }
+
+    private func restartTrackPollingIfActive(interval: TimeInterval) {
+        guard let deeplink = currentDeeplink else { return }
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.currentDeeplink == deeplink else { return }
+                self.fetchCurrentTrack(deeplink: deeplink)
+            }
+        }
     }
 
     private func startFeedPolling() {
@@ -194,7 +237,7 @@ final class SXMMetadataService: ObservableObject {
                     }
                 }
 
-                feedTracks = newFeedTracks
+                if feedTracks != newFeedTracks { feedTracks = newFeedTracks }
                 log.log("Feed updated: \(newFeedTracks.count) channels with tracks (from \(response.results.count) entries)", category: .sxm)
             } catch {
                 guard !Task.isCancelled else { return }
@@ -277,7 +320,8 @@ final class SXMMetadataService: ObservableObject {
     private func fetchCurrentTrack(deeplink: String) {
         inFlightTask?.cancel()
         inFlightTask = Task {
-            guard let url = URL(string: "https://xmplaylist.com/api/station/\(deeplink)") else { return }
+            guard let encoded = deeplink.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+                  let url = URL(string: "https://xmplaylist.com/api/station/\(encoded)") else { return }
             do {
                 let (data, _) = try await session.data(from: url)
                 guard !Task.isCancelled else { return }

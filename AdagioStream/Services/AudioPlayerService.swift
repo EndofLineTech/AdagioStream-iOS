@@ -16,7 +16,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var error: String?
     @Published var streamBitrateKbps: Double = 0
     @Published var statusText: String = ""
-    @Published var listeningDuration: TimeInterval = 0
+    /// Use `listeningStartDate` and `accumulatedListeningTime` to compute duration in views.
+    private(set) var listeningStartDate: Date?
+    private(set) var accumulatedListeningTime: TimeInterval = 0
 
     let timeShiftBuffer = TimeShiftBufferService.shared
     let sxmService = SXMMetadataService.shared
@@ -25,9 +27,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private let callObserver = CXCallObserver()
     private let callDelegate = CallObserverDelegate()
     private var sxmCancellable: AnyCancellable?
-    private var listeningStartDate: Date?
-    private var accumulatedListeningTime: TimeInterval = 0
     private var stateTimer: Timer?
+    private let fastPollInterval: TimeInterval = 0.5
+    private let slowPollInterval: TimeInterval = 3.0
+    private let backgroundPollInterval: TimeInterval = 10.0
+    private var currentPollInterval: TimeInterval = 0.5
+    private var isInBackground = false
     private var currentArtwork: MPMediaItemArtwork?
     private var sxmArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
@@ -40,6 +45,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var pendingPlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
+    private var lastNowPlayingTitle: String?
+    private var lastNowPlayingArtist: String?
+    private var lastNowPlayingIsLive: Bool?
+    private var lastNowPlayingRate: Double?
+    private var lastNowPlayingState: MPNowPlayingPlaybackState?
     private var bufferedChannel: Channel?
     private var currentBufferFileURL: URL?
     private var interruptionTime: Date?
@@ -270,7 +280,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     // MARK: - Playback
 
     func play(channel: Channel) {
-        log.log("play() channel=\"\(channel.name)\" group=\"\(channel.group)\" url=\(channel.streamURL.absoluteString)", category: .player)
+        log.log("play() channel=\"\(channel.name)\" group=\"\(channel.group)\" url=\(channel.streamURL.redactedForLog)", category: .player)
 
         // Cancel any pending stream start from a previous rapid channel tap
         pendingPlayWorkItem?.cancel()
@@ -317,7 +327,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         if channelChanged {
             channelChangeRetryCount = 0
             accumulatedListeningTime = 0
-            listeningDuration = 0
             currentArtwork = nil
             fetchArtwork(for: channel)
         }
@@ -369,7 +378,32 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         // Poll state as a reliable fallback since VLC delegate
         // fires on a background thread that can miss MainActor updates
-        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        currentPollInterval = fastPollInterval
+        stateTimer = Timer.scheduledTimer(withTimeInterval: fastPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncState()
+            }
+        }
+    }
+
+    /// Called when the app enters/leaves the background.
+    func setBackgroundMode(_ background: Bool) {
+        isInBackground = background
+        if background {
+            adjustPollRate(to: backgroundPollInterval)
+        } else if isPlaying && !isBuffering && error == nil {
+            adjustPollRate(to: slowPollInterval)
+        } else {
+            adjustPollRate(to: fastPollInterval)
+        }
+    }
+
+    /// Reschedule the state timer at a new interval if it differs from the current one.
+    private func adjustPollRate(to interval: TimeInterval) {
+        guard abs(currentPollInterval - interval) > 0.1 else { return }
+        currentPollInterval = interval
+        stateTimer?.invalidate()
+        stateTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.syncState()
             }
@@ -420,7 +454,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // the old buffer — this chains seamlessly when the buffer ends.
         timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: streamBitrateKbps)
 
-        stateTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        currentPollInterval = fastPollInterval
+        stateTimer = Timer.scheduledTimer(withTimeInterval: fastPollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.syncState()
             }
@@ -465,6 +500,14 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isBuffering = false
         sxmService.stopPolling()
         updateNowPlayingInfo()
+
+        // Release audio hardware when explicitly paused
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            log.log("Audio session deactivated on pause", category: .audioSession)
+        } catch {
+            log.log("Audio session deactivate on pause failed: \(error.localizedDescription)", category: .audioSession)
+        }
     }
 
     func resume() {
@@ -516,7 +559,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         stateTimer = nil
         listeningStartDate = nil
         accumulatedListeningTime = 0
-        listeningDuration = 0
         mediaPlayer.stop()
         mediaPlayer.media = nil
         lastPlayedChannel = currentChannel
@@ -660,7 +702,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             default: parsedName = "unknown(\(parsed.rawValue))"
             }
             let tracks = aMedia.tracksInformation as? [[String: Any]] ?? []
-            DebugLogger.shared.log("Media parsed: status=\(parsedName), tracks=\(tracks.count), url=\(aMedia.url?.absoluteString ?? "nil")", category: .vlcState)
+            DebugLogger.shared.log("Media parsed: status=\(parsedName), tracks=\(tracks.count), url=\(aMedia.url?.redactedForLog ?? "nil")", category: .vlcState)
             if parsed.rawValue == 2 || parsed.rawValue == 3 { // failed or timeout
                 DebugLogger.shared.log("MEDIA PARSE FAILURE: This may explain why playback didn't start", category: .vlcState)
             }
@@ -779,10 +821,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             }
         }
 
-        if let start = listeningStartDate {
-            listeningDuration = accumulatedListeningTime + Date().timeIntervalSince(start)
-        }
-
         // During buffer playback, estimate what time the audio is from
         // and show the matching SXM track from history
         if isPlayingBufferedFile, let intTime = interruptionTime, let pbStart = bufferPlaybackStartedAt {
@@ -793,14 +831,23 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         updateStreamStats()
         updateNowPlayingInfo()
+
+        // Adaptive timer: background → very slow, stable play → slow, transitions → fast
+        if isInBackground {
+            adjustPollRate(to: backgroundPollInterval)
+        } else if isPlaying && !isBuffering && error == nil {
+            adjustPollRate(to: slowPollInterval)
+        } else {
+            adjustPollRate(to: fastPollInterval)
+        }
     }
 
     // MARK: - Stream Stats
 
     private func updateStreamStats() {
         guard currentChannel != nil else {
-            statusText = ""
-            streamBitrateKbps = 0
+            if !statusText.isEmpty { statusText = "" }
+            if streamBitrateKbps != 0 { streamBitrateKbps = 0 }
             return
         }
 
@@ -809,33 +856,40 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             let currentKbps = Double(stats.demuxBitrate) * 1000
 
             if currentKbps > 1 {
-                // Smooth with EMA (~5s window at 0.5s poll) so initial
-                // buffer-fill spikes settle to the sustained rate
+                // Smooth with EMA so initial buffer-fill spikes settle.
+                // Round to integer to avoid publishing micro-changes.
+                let newKbps: Double
                 if streamBitrateKbps < 1 {
-                    streamBitrateKbps = currentKbps
+                    newKbps = currentKbps
                 } else {
-                    streamBitrateKbps = streamBitrateKbps * 0.8 + currentKbps * 0.2
+                    newKbps = streamBitrateKbps * 0.8 + currentKbps * 0.2
+                }
+                let rounded = (newKbps * 10).rounded() / 10
+                if abs(rounded - streamBitrateKbps) >= 0.5 {
+                    streamBitrateKbps = rounded
                 }
             }
         }
 
+        let newText: String
         if isPlayingBufferedFile {
             let duration = String(format: "%.0f", timeShiftBuffer.capturedDuration)
-            statusText = "Catching up \u{00B7} \(duration)s behind"
+            newText = "Catching up \u{00B7} \(duration)s behind"
         } else if isBuffering {
-            statusText = "Buffering... (cache: \(Int(bufferDuration))s)"
+            newText = "Buffering... (cache: \(Int(bufferDuration))s)"
         } else if isPlaying {
             if streamBitrateKbps > 1 {
                 let formatted = streamBitrateKbps >= 1000
                     ? String(format: "%.1f Mbps", streamBitrateKbps / 1000)
                     : "\(Int(streamBitrateKbps)) kbps"
-                statusText = "Live \u{00B7} \(formatted)"
+                newText = "Live \u{00B7} \(formatted)"
             } else {
-                statusText = "Live"
+                newText = "Live"
             }
         } else {
-            statusText = ""
+            newText = ""
         }
+        if statusText != newText { statusText = newText }
     }
 
     // MARK: - Now Playing Info
@@ -861,11 +915,29 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             artwork = currentArtwork
         }
 
+        let isLive = !isPlayingBufferedFile
+        let rate: Double = (isPlaying || isBuffering) ? 1.0 : 0.0
+        let state: MPNowPlayingPlaybackState = (isPlaying || isBuffering) ? .playing : .paused
+
+        // Skip IPC call if nothing changed
+        let changed = title != lastNowPlayingTitle
+            || artist != lastNowPlayingArtist
+            || isLive != lastNowPlayingIsLive
+            || rate != lastNowPlayingRate
+            || state != lastNowPlayingState
+        guard changed else { return }
+
+        lastNowPlayingTitle = title
+        lastNowPlayingArtist = artist
+        lastNowPlayingIsLive = isLive
+        lastNowPlayingRate = rate
+        lastNowPlayingState = state
+
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyArtist: artist,
-            MPNowPlayingInfoPropertyIsLiveStream: !isPlayingBufferedFile,
-            MPNowPlayingInfoPropertyPlaybackRate: (isPlaying || isBuffering) ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyIsLiveStream: isLive,
+            MPNowPlayingInfoPropertyPlaybackRate: rate,
         ]
 
         if let artwork {
@@ -874,13 +946,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = info
-        if isPlaying {
-            center.playbackState = .playing
-        } else if isBuffering {
-            center.playbackState = .playing
-        } else if currentChannel != nil {
-            center.playbackState = .paused
-        }
+        center.playbackState = state
     }
 
     private func fetchSXMArtwork(url: URL, trackID: String) {
@@ -904,6 +970,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     private func clearNowPlayingInfo() {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        lastNowPlayingTitle = nil
+        lastNowPlayingArtist = nil
+        lastNowPlayingIsLive = nil
+        lastNowPlayingRate = nil
+        lastNowPlayingState = nil
     }
 
     // MARK: - Remote Commands
