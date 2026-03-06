@@ -73,3 +73,22 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  AdagioStream:
+    build:
+      targets:
+        AdagioStream: all
+        AdagioStreamTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AdagioStreamTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
