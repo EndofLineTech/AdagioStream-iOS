@@ -33,7 +33,8 @@ extension String {
         guard let range = range(of: "\(key)=\"") else { return nil }
         let start = range.upperBound
         guard let endRange = self[start...].range(of: "\"") else { return nil }
-        return String(self[start..<endRange.lowerBound])
+        let value = String(self[start..<endRange.lowerBound])
+        return value.isEmpty ? nil : value
     }
 }
 

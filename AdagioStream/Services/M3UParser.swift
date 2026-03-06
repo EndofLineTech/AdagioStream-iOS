@@ -39,19 +39,23 @@ struct M3UParser {
 
             if line.hasPrefix("#EXTINF:") {
                 let info = line
+                var extgrp: String?
 
                 // Find the next non-empty, non-comment line for the URL
                 i += 1
                 while i < lines.count {
-                    let urlLine = lines[i].trimmingCharacters(in: .whitespaces)
-                    if !urlLine.isEmpty && !urlLine.hasPrefix("#") {
-                        if let streamURL = URL(string: urlLine),
+                    let nextLine = lines[i].trimmingCharacters(in: .whitespaces)
+                    if !nextLine.isEmpty && !nextLine.hasPrefix("#") {
+                        if let streamURL = URL(string: nextLine),
                            let scheme = streamURL.scheme?.lowercased(),
                            ["http", "https", "rtsp", "rtmp", "mms"].contains(scheme) {
-                            let channel = parseChannel(from: info, streamURL: streamURL)
+                            let channel = parseChannel(from: info, streamURL: streamURL, extgrp: extgrp)
                             channels.append(channel)
                         }
                         break
+                    }
+                    if nextLine.hasPrefix("#EXTGRP:") {
+                        extgrp = String(nextLine.dropFirst("#EXTGRP:".count)).trimmingCharacters(in: .whitespaces)
                     }
                     i += 1
                 }
@@ -62,7 +66,7 @@ struct M3UParser {
         return channels
     }
 
-    private static func parseChannel(from extinf: String, streamURL: URL) -> Channel {
+    private static func parseChannel(from extinf: String, streamURL: URL, extgrp: String? = nil) -> Channel {
         let tvgID = extinf.extractAttribute("tvg-id")
         let tvgName = extinf.extractAttribute("tvg-name")
         let tvgLogo = extinf.extractAttribute("tvg-logo")
@@ -83,7 +87,7 @@ struct M3UParser {
             name: displayName,
             streamURL: streamURL,
             logoURL: logoURL,
-            group: groupTitle ?? "Uncategorized",
+            group: groupTitle ?? extgrp ?? "Uncategorized",
             epgChannelID: tvgID
         )
     }

@@ -93,6 +93,43 @@ final class M3UParserTests: XCTestCase {
         XCTAssertEqual(channels[2].name, "Jazz Radio")
     }
 
+    func testEmptyTvgIdGeneratesUniqueIDs() {
+        let content = """
+        #EXTM3U
+        #EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="https://example.com/a.png",Channel A
+        http://stream.example.com/1
+        #EXTINF:-1 tvg-id="" tvg-name="" tvg-logo="https://example.com/b.png",Channel B
+        http://stream.example.com/2
+        """
+
+        let channels = M3UParser.parse(content: content)
+
+        XCTAssertEqual(channels.count, 2)
+        XCTAssertEqual(channels[0].name, "Channel A")
+        XCTAssertEqual(channels[1].name, "Channel B")
+        XCTAssertNotEqual(channels[0].id, channels[1].id, "Channels with empty tvg-id should get unique IDs")
+        XCTAssertNil(channels[0].epgChannelID)
+        XCTAssertNil(channels[1].epgChannelID)
+    }
+
+    func testEXTGRPUsedForGroup() {
+        let content = """
+        #EXTM3U
+        #EXTINF:-1 tvg-id="ch1",Station One
+        #EXTGRP:Radio
+        http://stream.example.com/1
+        #EXTINF:-1 tvg-id="ch2" group-title="Music",Station Two
+        #EXTGRP:Radio
+        http://stream.example.com/2
+        """
+
+        let channels = M3UParser.parse(content: content)
+
+        XCTAssertEqual(channels.count, 2)
+        XCTAssertEqual(channels[0].group, "Radio", "EXTGRP should be used when group-title is missing")
+        XCTAssertEqual(channels[1].group, "Music", "group-title attribute should take precedence over EXTGRP")
+    }
+
     func testRTMPAndMMSSchemesAccepted() {
         let content = """
         #EXTM3U
