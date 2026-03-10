@@ -45,6 +45,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var pendingPlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
+    private var streamStartTime: Date?
+    private var hasReceivedData = false
+    private var isReducedBufferRetry = false
+    private let bufferingTimeoutInterval: TimeInterval = 20
+    private let reducedBufferDuration: TimeInterval = 3
     private var lastNowPlayingTitle: String?
     private var lastNowPlayingArtist: String?
     private var lastNowPlayingIsLive: Bool?
@@ -328,6 +333,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         statusText = ""
         if channelChanged {
             channelChangeRetryCount = 0
+            isReducedBufferRetry = false
             accumulatedListeningTime = 0
             currentArtwork = nil
             fetchArtwork(for: channel)
@@ -362,8 +368,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     private func startStream(for channel: Channel) {
+        streamStartTime = Date()
+        hasReceivedData = false
         let media = VLCMedia(url: channel.streamURL)
-        let cacheMs = Int(bufferDuration * 1000)
+        let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
+        let cacheMs = Int(effectiveBuffer * 1000)
         log.log("VLC media options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
         media.addOptions([
             "network-caching": cacheMs,
@@ -746,6 +755,38 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             switch vlcState {
             case .buffering, .opening:
                 isBuffering = true
+                // Track when data first arrives
+                let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
+                if bytesRead > 0 { hasReceivedData = true }
+
+                // Timeout: if buffering too long with no meaningful data, retry with smaller buffer
+                if let start = streamStartTime, !hasReceivedData,
+                   Date().timeIntervalSince(start) > bufferingTimeoutInterval,
+                   !isReducedBufferRetry,
+                   let channel = currentChannel {
+                    log.log("Buffering timeout (\(Int(bufferingTimeoutInterval))s with no data) — retrying with reduced buffer (\(Int(reducedBufferDuration))s), channel=\"\(channel.name)\"", category: .player)
+                    isReducedBufferRetry = true
+                    mediaPlayer.stop()
+                    mediaPlayer.media = nil
+                    mediaPlayer.delegate = nil
+                    mediaPlayer = VLCMediaPlayer()
+                    mediaPlayer.delegate = self
+                    lastLoggedVLCState = nil
+                    startStream(for: channel)
+                } else if let start = streamStartTime, !hasReceivedData,
+                          isReducedBufferRetry,
+                          Date().timeIntervalSince(start) > bufferingTimeoutInterval,
+                          currentChannel != nil {
+                    log.log("Reduced-buffer retry also timed out — giving up, channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
+                    isActiveSession = false
+                    stateTimer?.invalidate()
+                    stateTimer = nil
+                    mediaPlayer.stop()
+                    mediaPlayer.media = nil
+                    isPlaying = false
+                    isBuffering = false
+                    error = "Unable to connect — slow or no network. Try again."
+                }
             case .paused:
                 isPlaying = false
                 isBuffering = false
