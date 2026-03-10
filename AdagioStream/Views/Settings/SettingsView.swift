@@ -43,6 +43,19 @@ struct SettingsView: View {
                     Text("System follows your device's text size setting.")
                 }
 
+                Section {
+                    Picker("Artwork Display", selection: artworkDisplayBinding) {
+                        ForEach(ArtworkDisplayMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Artwork")
+                } footer: {
+                    Text("Choose whether to display track cover art or the channel logo in the player and CarPlay.")
+                }
+
                 Section("Playback") {
                     HStack {
                         Text("Stream Quality")
@@ -305,6 +318,15 @@ struct SettingsView: View {
             get: { viewModel.settings.startupStreamID },
             set: { newValue in
                 Task { await viewModel.updateStartupStream(newValue) }
+            }
+        )
+    }
+
+    private var artworkDisplayBinding: Binding<ArtworkDisplayMode> {
+        Binding(
+            get: { viewModel.settings.artworkDisplayMode },
+            set: { newValue in
+                Task { await viewModel.updateArtworkDisplayMode(newValue) }
             }
         )
     }

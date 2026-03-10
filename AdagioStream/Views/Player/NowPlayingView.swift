@@ -5,6 +5,7 @@ struct NowPlayingView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var sxmService: SXMMetadataService
     @EnvironmentObject var savedSongsManager: SavedSongsManager
+    @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -13,7 +14,8 @@ struct NowPlayingView: View {
                 Spacer()
 
                 // Artwork
-                if let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
+                if settingsViewModel.settings.artworkDisplayMode == .coverArt,
+                   let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
                     RetryableAsyncImage(url: artworkURL, width: 200, height: 200, cornerRadius: 20)
                         .shadow(radius: 10)
                         .id(track.id)

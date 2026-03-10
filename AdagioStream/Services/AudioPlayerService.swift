@@ -50,6 +50,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastNowPlayingIsLive: Bool?
     private var lastNowPlayingRate: Double?
     private var lastNowPlayingState: MPNowPlayingPlaybackState?
+    private var lastNowPlayingArtwork: MPMediaItemArtwork?
     private var bufferedChannel: Channel?
     private var currentBufferFileURL: URL?
     private var interruptionTime: Date?
@@ -57,6 +58,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
+    var artworkDisplayMode: ArtworkDisplayMode = .coverArt
 
     private override init() {
         super.init()
@@ -895,6 +897,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     // MARK: - Now Playing Info
 
     func refreshNowPlayingInfo() {
+        lastNowPlayingArtwork = nil
         updateNowPlayingInfo()
     }
 
@@ -908,7 +911,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         if let track = sxmService.currentTrack {
             title = track.title
             artist = track.artistDisplay
-            artwork = sxmArtwork ?? currentArtwork
+            artwork = artworkDisplayMode == .coverArt ? (sxmArtwork ?? currentArtwork) : currentArtwork
         } else {
             title = channel.name
             artist = channel.group
@@ -925,6 +928,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             || isLive != lastNowPlayingIsLive
             || rate != lastNowPlayingRate
             || state != lastNowPlayingState
+            || artwork !== lastNowPlayingArtwork
         guard changed else { return }
 
         lastNowPlayingTitle = title
@@ -932,6 +936,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         lastNowPlayingIsLive = isLive
         lastNowPlayingRate = rate
         lastNowPlayingState = state
+        lastNowPlayingArtwork = artwork
 
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
@@ -975,6 +980,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         lastNowPlayingIsLive = nil
         lastNowPlayingRate = nil
         lastNowPlayingState = nil
+        lastNowPlayingArtwork = nil
     }
 
     // MARK: - Remote Commands

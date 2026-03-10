@@ -58,9 +58,7 @@ struct ContentView: View {
         hasAttemptedStartupStream = true
 
         await settingsViewModel.loadSettings()
-        let startupID = settingsViewModel.settings.startupStreamID
-            ?? UserDefaults.standard.string(forKey: "lastPlayedChannelID")
-        guard let startupID else { return }
+        guard let startupID = settingsViewModel.settings.startupStreamID else { return }
         guard audioPlayer.currentChannel == nil else { return }
 
         // If channels are already loaded, play immediately

@@ -69,6 +69,18 @@ enum TextSizeMode: String, Codable, CaseIterable {
     }
 }
 
+enum ArtworkDisplayMode: String, Codable, CaseIterable {
+    case coverArt
+    case channelLogo
+
+    var label: String {
+        switch self {
+        case .coverArt: "Cover Art"
+        case .channelLogo: "Channel Logo"
+        }
+    }
+}
+
 enum ChannelSortOrder: String, Codable, CaseIterable {
     case providerOrder
     case natural
@@ -92,6 +104,7 @@ struct AppSettings: Codable {
     var channelSortOrder: ChannelSortOrder
     var groupSortOrder: ChannelSortOrder
     var debugLoggingEnabled: Bool
+    var artworkDisplayMode: ArtworkDisplayMode
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -101,7 +114,8 @@ struct AppSettings: Codable {
         startupStreamID: String? = nil,
         channelSortOrder: ChannelSortOrder = .providerOrder,
         groupSortOrder: ChannelSortOrder = .providerOrder,
-        debugLoggingEnabled: Bool = false
+        debugLoggingEnabled: Bool = false,
+        artworkDisplayMode: ArtworkDisplayMode = .coverArt
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -111,9 +125,23 @@ struct AppSettings: Codable {
         self.channelSortOrder = channelSortOrder
         self.groupSortOrder = groupSortOrder
         self.debugLoggingEnabled = debugLoggingEnabled
+        self.artworkDisplayMode = artworkDisplayMode
     }
 
     static let `default` = AppSettings()
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        bufferDuration = try container.decode(TimeInterval.self, forKey: .bufferDuration)
+        appearanceMode = try container.decode(AppearanceMode.self, forKey: .appearanceMode)
+        textSizeMode = try container.decode(TextSizeMode.self, forKey: .textSizeMode)
+        sortPrefixes = try container.decode([String].self, forKey: .sortPrefixes)
+        startupStreamID = try container.decodeIfPresent(String.self, forKey: .startupStreamID)
+        channelSortOrder = try container.decode(ChannelSortOrder.self, forKey: .channelSortOrder)
+        groupSortOrder = try container.decode(ChannelSortOrder.self, forKey: .groupSortOrder)
+        debugLoggingEnabled = try container.decode(Bool.self, forKey: .debugLoggingEnabled)
+        artworkDisplayMode = try container.decodeIfPresent(ArtworkDisplayMode.self, forKey: .artworkDisplayMode) ?? .coverArt
+    }
 }
 
 private struct TextSizeModifier: ViewModifier {

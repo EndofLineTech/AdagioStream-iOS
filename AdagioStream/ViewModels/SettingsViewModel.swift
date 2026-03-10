@@ -21,6 +21,7 @@ final class SettingsViewModel: ObservableObject {
             try? await persistence.save(settings, to: Constants.StorageKeys.settings)
         }
         audioPlayer.updateBufferDuration(settings.bufferDuration)
+        audioPlayer.artworkDisplayMode = settings.artworkDisplayMode
         DebugLogger.shared.isEnabled = settings.debugLoggingEnabled
     }
 
@@ -61,6 +62,13 @@ final class SettingsViewModel: ObservableObject {
         await saveSettings()
         providerManager.groupSortOrder = order
         providerManager.rebuildVisibleGroups()
+    }
+
+    func updateArtworkDisplayMode(_ mode: ArtworkDisplayMode) async {
+        settings.artworkDisplayMode = mode
+        audioPlayer.artworkDisplayMode = mode
+        audioPlayer.refreshNowPlayingInfo()
+        await saveSettings()
     }
 
     func updateDebugLogging(_ enabled: Bool) async {

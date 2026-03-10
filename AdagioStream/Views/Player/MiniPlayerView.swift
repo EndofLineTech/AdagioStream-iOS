@@ -3,6 +3,7 @@ import SwiftUI
 struct MiniPlayerView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var sxmService: SXMMetadataService
+    @EnvironmentObject var settingsViewModel: SettingsViewModel
     @State private var showNowPlaying = false
 
     var body: some View {
@@ -13,7 +14,8 @@ struct MiniPlayerView: View {
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
-                        if let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
+                        if settingsViewModel.settings.artworkDisplayMode == .coverArt,
+                           let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
                             RetryableAsyncImage(url: artworkURL, width: 36, height: 36, cornerRadius: 6)
                         } else if let logoURL = audioPlayer.currentChannel?.logoURL {
                             RetryableAsyncImage(url: logoURL, width: 36, height: 36, cornerRadius: 6)
