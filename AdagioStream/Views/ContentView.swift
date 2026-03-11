@@ -8,48 +8,62 @@ struct ContentView: View {
     @EnvironmentObject var sxmService: SXMMetadataService
     @State private var selectedTab = 0
     @State private var hasAttemptedStartupStream = false
+    @State private var splashOpacity: Double = 1
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            TabView(selection: $selectedTab) {
-                ChannelListView()
-                    .tabItem {
-                        Label("Channels", systemImage: "radio")
-                    }
-                    .tag(0)
+        ZStack {
+            ZStack(alignment: .bottom) {
+                TabView(selection: $selectedTab) {
+                    ChannelListView()
+                        .tabItem {
+                            Label("Channels", systemImage: "radio")
+                        }
+                        .tag(0)
 
-                FavoritesView()
-                    .tabItem {
-                        Label("Favorites", systemImage: "star.fill")
-                    }
-                    .tag(1)
+                    FavoritesView()
+                        .tabItem {
+                            Label("Favorites", systemImage: "star.fill")
+                        }
+                        .tag(1)
 
-                SavedSongsView()
-                    .tabItem {
-                        Label("Loved", systemImage: "heart.fill")
-                    }
-                    .tag(2)
+                    SavedSongsView()
+                        .tabItem {
+                            Label("Loved", systemImage: "heart.fill")
+                        }
+                        .tag(2)
 
-                SettingsView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gear")
-                    }
-                    .tag(3)
+                    SettingsView()
+                        .tabItem {
+                            Label("Settings", systemImage: "gear")
+                        }
+                        .tag(3)
+                }
+
+                if audioPlayer.currentChannel != nil {
+                    MiniPlayerView()
+                        .padding(.bottom, 49) // TabBar height offset
+                }
+            }
+            .glassContainer()
+            .task { await performStartupStream() }
+            .onChange(of: selectedTab) { newTab in
+                // Only poll SXM feed when channel list or favorites are visible
+                sxmService.setFeedPollingEnabled(newTab == 0 || newTab == 1)
+            }
+            .onAppear {
+                sxmService.setFeedPollingEnabled(selectedTab == 0 || selectedTab == 1)
             }
 
-            if audioPlayer.currentChannel != nil {
-                MiniPlayerView()
-                    .padding(.bottom, 49) // TabBar height offset
-            }
-        }
-        .glassContainer()
-        .task { await performStartupStream() }
-        .onChange(of: selectedTab) { newTab in
-            // Only poll SXM feed when channel list or favorites are visible
-            sxmService.setFeedPollingEnabled(newTab == 0 || newTab == 1)
+            AdagioStartupView()
+                .opacity(splashOpacity)
+                .allowsHitTesting(splashOpacity > 0)
         }
         .onAppear {
-            sxmService.setFeedPollingEnabled(selectedTab == 0 || selectedTab == 1)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                withAnimation(.easeOut(duration: 0.8)) {
+                    splashOpacity = 0
+                }
+            }
         }
     }
 
