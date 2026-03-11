@@ -34,43 +34,21 @@ actor ImageCacheService {
         let entry = manifest[key]
 
         if hasCached {
+            // Always return cached image immediately
+            let cachedImage = loadFromDisk(fileURL)
+
             // Skip revalidation if cached recently
             if let cachedAt = entry?.cachedAt, Date().timeIntervalSince(cachedAt) < freshnessTTL {
-                return loadFromDisk(fileURL)
+                logger.log("HIT (fresh) \(url.lastPathComponent)", category: .imageCache)
+                return cachedImage
             }
 
-            // Conditional revalidation
-            var request = URLRequest(url: url)
-            if let etag = entry?.etag {
-                request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+            // Revalidate in background — don't block the caller
+            logger.log("HIT (stale, revalidating) \(url.lastPathComponent)", category: .imageCache)
+            Task { [entry] in
+                await revalidate(url: url, key: key, fileURL: fileURL, entry: entry)
             }
-            if let lastModified = entry?.lastModified {
-                request.setValue(lastModified, forHTTPHeaderField: "If-Modified-Since")
-            }
-
-            do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                let httpResponse = response as? HTTPURLResponse
-
-                if httpResponse?.statusCode == 304 {
-                    logger.log("HIT (304) \(url.lastPathComponent)", category: .imageCache)
-                    return loadFromDisk(fileURL)
-                }
-
-                if httpResponse?.statusCode == 200, let img = UIImage(data: data) {
-                    logger.log("REVALIDATED \(url.lastPathComponent)", category: .imageCache)
-                    saveToDisk(data: data, fileURL: fileURL, key: key, response: httpResponse)
-                    return img
-                }
-
-                // Unexpected status — fall back to cached
-                logger.log("HIT (fallback, status \(httpResponse?.statusCode ?? 0)) \(url.lastPathComponent)", category: .imageCache)
-                return loadFromDisk(fileURL)
-            } catch {
-                // Network error — return cached image (offline-friendly)
-                logger.log("HIT (offline) \(url.lastPathComponent)", category: .imageCache)
-                return loadFromDisk(fileURL)
-            }
+            return cachedImage
         }
 
         // No cache — fresh fetch
@@ -89,6 +67,34 @@ actor ImageCacheService {
         } catch {
             logger.log("MISS (error) \(url.lastPathComponent): \(error.localizedDescription)", category: .imageCache)
             return nil
+        }
+    }
+
+    /// Background revalidation — updates the cache without blocking the UI.
+    private func revalidate(url: URL, key: String, fileURL: URL, entry: ManifestEntry?) async {
+        var request = URLRequest(url: url)
+        if let etag = entry?.etag {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
+        if let lastModified = entry?.lastModified {
+            request.setValue(lastModified, forHTTPHeaderField: "If-Modified-Since")
+        }
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let httpResponse = response as? HTTPURLResponse
+
+            if httpResponse?.statusCode == 304 {
+                // Still valid — just refresh the timestamp
+                logger.log("REVALIDATED (304) \(url.lastPathComponent)", category: .imageCache)
+                manifest[key]?.cachedAt = Date()
+                saveManifest()
+            } else if httpResponse?.statusCode == 200 {
+                logger.log("REVALIDATED (updated) \(url.lastPathComponent)", category: .imageCache)
+                saveToDisk(data: data, fileURL: fileURL, key: key, response: httpResponse)
+            }
+        } catch {
+            logger.log("REVALIDATE failed \(url.lastPathComponent): \(error.localizedDescription)", category: .imageCache)
         }
     }
 
