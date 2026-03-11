@@ -63,6 +63,7 @@
 		E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */; };
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
+		E6770E028819F7C202725955 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
 		F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20796E24826A70D504E871C4 /* PersistenceService.swift */; };
 		F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */; };
 		F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
@@ -136,6 +137,7 @@
 		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
 		DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParser.swift; sourceTree = "<group>"; };
 		DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeShiftBufferService.swift; sourceTree = "<group>"; };
+		DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListViewModel.swift; sourceTree = "<group>"; };
 		EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParser.swift; sourceTree = "<group>"; };
@@ -339,6 +341,7 @@
 				2591A7C2156E83DA1F2F30CE /* Assets.xcassets */,
 				09037EC9D6025B184F4A718E /* Info.plist */,
 				9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */,
+				DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */,
 				A3DDF9D70932BE3F2F65D4D1 /* CarPlay */,
 				9EFBDF60AA9723373E93EFE1 /* Models */,
 				466ABA381A1500008474A837 /* Resources */,
@@ -475,6 +478,7 @@
 				1CC9AC317E17D1AD301D41B8 /* Assets.xcassets in Resources */,
 				840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */,
 				CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */,
+				E6770E028819F7C202725955 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
