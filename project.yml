@@ -2,7 +2,7 @@ name: AdagioStream
 options:
   bundleIdPrefix: com.adagiostream
   deploymentTarget:
-    iOS: "16.0"
+    iOS: "17.0"
   xcodeVersion: "16.3"
   generateEmptyDirectories: true
 
