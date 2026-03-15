@@ -27,6 +27,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private let callObserver = CXCallObserver()
     private let callDelegate = CallObserverDelegate()
     private var sxmCancellable: AnyCancellable?
+    private var espnCancellable: AnyCancellable?
     private var stateTimer: Timer?
     private let fastPollInterval: TimeInterval = 0.5
     private let slowPollInterval: TimeInterval = 3.0
@@ -83,6 +84,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                     self.fetchSXMArtwork(url: artworkURL, trackID: track.id)
                 }
                 self.updateNowPlayingInfo()
+            }
+
+        espnCancellable = ESPNScoreService.shared.$gamesByChannel
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingInfo()
             }
     }
 
@@ -953,6 +960,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             title = track.title
             artist = track.artistDisplay
             artwork = artworkDisplayMode == .coverArt ? (sxmArtwork ?? currentArtwork) : currentArtwork
+        } else if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
+            title = game.nowPlayingTitle
+            artist = game.nowPlayingSubtitle
+            artwork = currentArtwork
         } else {
             title = channel.name
             artist = channel.group

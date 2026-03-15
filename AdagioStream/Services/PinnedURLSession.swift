@@ -13,6 +13,13 @@ enum PinnedURLSession {
         return URLSession(configuration: config)
     }()
 
+    /// Session for ESPN API calls.
+    static let espn: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        return URLSession(configuration: config)
+    }()
+
     /// Session for iTunes Search API calls.
     static let itunes: URLSession = {
         let config = URLSessionConfiguration.default

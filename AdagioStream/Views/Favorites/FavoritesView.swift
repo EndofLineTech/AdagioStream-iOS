@@ -18,7 +18,7 @@ struct FavoritesView: View {
                 } else {
                     List {
                         ForEach(providerManager.favoriteChannels) { channel in
-                            ChannelRowView(channel: channel, nowPlayingTrack: sxmService.feedTracks[channel.id]) {
+                            ChannelRowView(channel: channel, nowPlayingTrack: sxmService.feedTracks[channel.id], espnGame: ESPNScoreService.shared.gamesByChannel[channel.id]) {
                                 audioPlayer.channels = providerManager.favoriteChannels
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {

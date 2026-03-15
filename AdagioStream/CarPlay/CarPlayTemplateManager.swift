@@ -15,6 +15,7 @@ class CarPlayTemplateManager {
     private var timeShiftCancellable: AnyCancellable?
     private var trackCancellable: AnyCancellable?
     private var feedTracksCancellable: AnyCancellable?
+    private var espnCancellable: AnyCancellable?
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
@@ -81,6 +82,12 @@ class CarPlayTemplateManager {
             }
 
         feedTracksCancellable = SXMMetadataService.shared.$feedTracks
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshChannelListDetailText()
+            }
+
+        espnCancellable = ESPNScoreService.shared.$gamesByChannel
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshChannelListDetailText()
@@ -278,8 +285,13 @@ class CarPlayTemplateManager {
     }
 
     private func trackDetailText(for channel: Channel) -> String? {
-        guard let track = SXMMetadataService.shared.feedTracks[channel.id] else { return nil }
-        return "\(track.artistDisplay) — \(track.title)"
+        if let track = SXMMetadataService.shared.feedTracks[channel.id] {
+            return "\(track.artistDisplay) — \(track.title)"
+        }
+        if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
+            return game.displayText
+        }
+        return nil
     }
 
     private func pushFavorites() {
@@ -337,8 +349,13 @@ class CarPlayTemplateManager {
     }
 
     private func trackDetailTextByID(_ channelID: String) -> String? {
-        guard let track = SXMMetadataService.shared.feedTracks[channelID] else { return nil }
-        return "\(track.artistDisplay) — \(track.title)"
+        if let track = SXMMetadataService.shared.feedTracks[channelID] {
+            return "\(track.artistDisplay) — \(track.title)"
+        }
+        if let game = ESPNScoreService.shared.gamesByChannel[channelID] {
+            return game.displayText
+        }
+        return nil
     }
 
     private func pushChannelList(title: String, channels: [Channel]) {

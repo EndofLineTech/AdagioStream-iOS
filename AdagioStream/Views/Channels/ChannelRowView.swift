@@ -3,6 +3,8 @@ import SwiftUI
 struct ChannelRowView: View {
     let channel: Channel
     var nowPlayingTrack: SXMTrack? = nil
+    var currentProgram: EPGEntry? = nil
+    var espnGame: ESPNGameInfo? = nil
     let onTap: () -> Void
     let onToggleFavorite: () -> Void
 
@@ -24,6 +26,16 @@ struct ChannelRowView: View {
                     .foregroundStyle(.primary)
                 if let track = nowPlayingTrack {
                     Text("\(track.artistDisplay) — \(track.title)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else if let game = espnGame {
+                    Text(game.displayText)
+                        .font(.caption)
+                        .foregroundStyle(game.state == .live ? .primary : .secondary)
+                        .lineLimit(1)
+                } else if let program = currentProgram {
+                    Text(program.title)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)

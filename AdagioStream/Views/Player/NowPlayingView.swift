@@ -41,6 +41,13 @@ struct NowPlayingView: View {
                         Text(track.artistDisplay)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                    } else if let game = currentGame {
+                        Text(game.nowPlayingTitle)
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                        Text(game.nowPlayingSubtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     } else {
                         Text(audioPlayer.currentChannel?.group ?? "")
                             .font(.subheadline)
@@ -176,6 +183,11 @@ struct NowPlayingView: View {
                     .font(.system(size: 60))
                     .foregroundStyle(.secondary)
             }
+    }
+
+    private var currentGame: ESPNGameInfo? {
+        guard let channelID = audioPlayer.currentChannel?.id else { return nil }
+        return ESPNScoreService.shared.gamesByChannel[channelID]
     }
 
     private var currentEPG: EPGEntry? {

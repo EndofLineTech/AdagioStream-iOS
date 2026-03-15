@@ -4,6 +4,7 @@ struct ChannelListView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var sxmService: SXMMetadataService
+    @ObservedObject var espnService = ESPNScoreService.shared
     @State private var searchText = ""
 
     var body: some View {
@@ -86,7 +87,12 @@ struct ChannelListView: View {
                 Section {
                     if !providerManager.collapsedGroups.contains(group.name) {
                         ForEach(group.channels) { channel in
-                            ChannelRowView(channel: channel, nowPlayingTrack: sxmService.feedTracks[channel.id]) {
+                            ChannelRowView(
+                                channel: channel,
+                                nowPlayingTrack: sxmService.feedTracks[channel.id],
+                                currentProgram: currentSportsProgram(for: channel),
+                                espnGame: espnService.gamesByChannel[channel.id]
+                            ) {
                                 audioPlayer.channels = group.channels
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {
@@ -143,6 +149,15 @@ struct ChannelListView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
+
+    private func currentSportsProgram(for channel: Channel) -> EPGEntry? {
+        let upperGroup = channel.group.uppercased()
+        guard Self.sportsLeagues.contains(where: { upperGroup.contains($0) }),
+              let epgID = channel.epgChannelID else { return nil }
+        return providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring)
     }
 
     private var groups: [ChannelGroup] {

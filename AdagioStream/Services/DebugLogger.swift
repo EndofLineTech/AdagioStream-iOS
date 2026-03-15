@@ -78,6 +78,7 @@ final class DebugLogger: @unchecked Sendable {
         case timeShift = "TIMESHIFT"
         case sxm = "SXM"
         case imageCache = "IMGCACHE"
+        case espn = "ESPN"
     }
 
     // MARK: - Redaction

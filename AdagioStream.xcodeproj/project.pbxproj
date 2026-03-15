@@ -46,6 +46,7 @@
 		9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */; };
 		A260CCCD1191957DE0C6739E /* AdagioStartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5007C81620324434051842F8 /* AdagioStartupView.swift */; };
 		A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
+		ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */; };
 		B87BC6F49DF0702DA8B0E033 /* ChannelListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */; };
 		BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
@@ -69,6 +70,7 @@
 		F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
 		FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5186F218805196281702F1A /* FavoritesView.swift */; };
 		FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */; };
+		FFF3BD50FC5A7ACD91C7DE7E /* ESPNModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB6CC077DE7865648EC949C /* ESPNModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,7 +87,9 @@
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongRowView.swift; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
+		128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNScoreService.swift; sourceTree = "<group>"; };
 		1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowView.swift; sourceTree = "<group>"; };
+		1CB6CC077DE7865648EC949C /* ESPNModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNModels.swift; sourceTree = "<group>"; };
 		1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserTests.swift; sourceTree = "<group>"; };
 		20796E24826A70D504E871C4 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheService.swift; sourceTree = "<group>"; };
@@ -272,6 +276,7 @@
 				9CCAE274A593BD7364C5F6FD /* Channel.swift */,
 				F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */,
 				BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */,
+				1CB6CC077DE7865648EC949C /* ESPNModels.swift */,
 				70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */,
 				4253D682909B25CB052AED9C /* Provider.swift */,
 				C7713A3C47F3B23E57849347 /* SavedSong.swift */,
@@ -377,6 +382,7 @@
 				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
 				765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */,
 				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
+				128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */,
 				23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */,
 				B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */,
 				759D39578A2906EC0C071E9A /* LiveActivityManager.swift */,
@@ -520,6 +526,8 @@
 				49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */,
 				C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */,
 				C0814BA417A9237B8348F95F /* EPGView.swift in Sources */,
+				FFF3BD50FC5A7ACD91C7DE7E /* ESPNModels.swift in Sources */,
+				ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */,
 				E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */,
 				77F34E2524DD6C89196F2C6D /* Extensions.swift in Sources */,
 				FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */,

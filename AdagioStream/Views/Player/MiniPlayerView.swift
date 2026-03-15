@@ -44,6 +44,11 @@ struct MiniPlayerView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
+                        } else if let game = audioPlayer.currentChannel.flatMap({ ESPNScoreService.shared.gamesByChannel[$0.id] }) {
+                            Text(game.displayText)
+                                .font(.caption)
+                                .foregroundStyle(game.state == .live ? .primary : .secondary)
+                                .lineLimit(1)
                         } else if let error = audioPlayer.error {
                             Text(error)
                                 .font(.caption)

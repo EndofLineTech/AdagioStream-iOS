@@ -47,11 +47,14 @@ struct ContentView: View {
             .glassContainer()
             .task { await performStartupStream() }
             .onChange(of: selectedTab) { newTab in
-                // Only poll SXM feed when channel list or favorites are visible
-                sxmService.setFeedPollingEnabled(newTab == 0 || newTab == 1)
+                let channelsVisible = newTab == 0 || newTab == 1
+                sxmService.setFeedPollingEnabled(channelsVisible)
+                ESPNScoreService.shared.setPollingEnabled(channelsVisible)
             }
             .onAppear {
-                sxmService.setFeedPollingEnabled(selectedTab == 0 || selectedTab == 1)
+                let channelsVisible = selectedTab == 0 || selectedTab == 1
+                sxmService.setFeedPollingEnabled(channelsVisible)
+                ESPNScoreService.shared.setPollingEnabled(channelsVisible)
             }
 
             AdagioStartupView()

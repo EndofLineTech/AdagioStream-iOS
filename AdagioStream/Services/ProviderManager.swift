@@ -187,6 +187,9 @@ final class ProviderManager: ObservableObject {
 
         // Match SiriusXM channels to xmplaylist stations for track metadata
         SXMMetadataService.shared.matchChannels(channels)
+
+        // Match sports channels to ESPN scoreboard for live scores
+        ESPNScoreService.shared.matchChannels(channels)
     }
 
     func loadChannels(from provider: Provider) async throws -> [Channel] {
