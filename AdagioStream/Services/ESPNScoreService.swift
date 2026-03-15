@@ -24,6 +24,7 @@ final class ESPNScoreService: ObservableObject {
 
     private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
     private static let channelPrefixes = ["Radio: ", "TV: "]
+    private static let allLeagues: [ESPNLeague] = [.mlb, .nba, .nhl, .nfl]
 
     private init() {}
 
@@ -85,10 +86,10 @@ final class ESPNScoreService: ObservableObject {
         stopPolling()
         let interval = currentPollInterval
         log.log("Starting ESPN score polling (interval=\(interval)s, live=\(hasLiveGame))", category: .espn)
-        fetchScoreboard()
+        fetchAllScoreboards()
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.fetchScoreboard()
+                self?.fetchAllScoreboards()
             }
         }
     }
@@ -111,34 +112,59 @@ final class ESPNScoreService: ObservableObject {
 
     // MARK: - Fetch & Match
 
-    private func fetchScoreboard() {
+    private func fetchAllScoreboards() {
         pollTask?.cancel()
         pollTask = Task {
-            // For now, MLB only
-            guard let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard") else { return }
-            do {
-                let (data, _) = try await session.data(from: url)
-                guard !Task.isCancelled else { return }
-                let response = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
-                matchEvents(response.events)
-                adjustPollRateIfNeeded()
-                log.log("ESPN scoreboard: \(response.events.count) events, \(gamesByChannel.count) matched to channels", category: .espn)
-            } catch {
-                guard !Task.isCancelled else { return }
-                log.log("ESPN fetch failed: \(error.localizedDescription)", category: .espn)
+            var allEvents: [(ESPNLeague, [ESPNEvent])] = []
+
+            await withTaskGroup(of: (ESPNLeague, [ESPNEvent])?.self) { group in
+                for league in Self.allLeagues {
+                    group.addTask { [session] in
+                        guard let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/\(league.sportPath)/scoreboard") else { return nil }
+                        do {
+                            let (data, _) = try await session.data(from: url)
+                            let response = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
+                            return (league, response.events)
+                        } catch {
+                            return nil
+                        }
+                    }
+                }
+                for await result in group {
+                    if let result { allEvents.append(result) }
+                }
             }
+
+            guard !Task.isCancelled else { return }
+
+            var newGames: [String: ESPNGameInfo] = [:]
+            var totalEvents = 0
+            for (league, events) in allEvents {
+                totalEvents += events.count
+                matchEvents(events, league: league, into: &newGames)
+            }
+
+            if gamesByChannel != newGames { gamesByChannel = newGames }
+            adjustPollRateIfNeeded()
+            log.log("ESPN scoreboard: \(totalEvents) events across \(allEvents.count) leagues, \(newGames.count) matched to channels", category: .espn)
         }
     }
 
-    private func matchEvents(_ events: [ESPNEvent]) {
-        var newGames: [String: ESPNGameInfo] = [:]
-
+    private func matchEvents(_ events: [ESPNEvent], league: ESPNLeague, into games: inout [String: ESPNGameInfo]) {
         for event in events {
             guard let comp = event.competition,
                   let home = comp.homeTeam,
                   let away = comp.awayTeam else { continue }
 
+            // Resolve NFL possession to team abbreviation
+            var possessionAbbr: String?
+            if league == .nfl, let possID = comp.situation?.possession {
+                if home.team.id == possID { possessionAbbr = home.team.abbreviation }
+                else if away.team.id == possID { possessionAbbr = away.team.abbreviation }
+            }
+
             let gameInfo = ESPNGameInfo(
+                league: league,
                 awayAbbr: away.team.abbreviation,
                 homeAbbr: home.team.abbreviation,
                 awayScore: away.score,
@@ -147,22 +173,24 @@ final class ESPNScoreService: ObservableObject {
                 homeRecord: home.overallRecord,
                 state: ESPNGameInfo.GameState(rawValue: comp.status.type.state) ?? .pre,
                 statusDetail: comp.status.type.shortDetail,
-                outs: comp.situation?.outs
+                displayClock: comp.status.displayClock,
+                period: comp.status.period,
+                outs: comp.situation?.outs,
+                possessionTeamAbbr: possessionAbbr,
+                downDistanceText: comp.situation?.shortDownDistanceText ?? comp.situation?.downDistanceText
             )
 
             // Match home team
             let homeKey = home.team.displayName.lowercased()
             if let channelIDs = teamToChannelIDs[homeKey] {
-                for id in channelIDs { newGames[id] = gameInfo }
+                for id in channelIDs { games[id] = gameInfo }
             }
 
             // Match away team
             let awayKey = away.team.displayName.lowercased()
             if let channelIDs = teamToChannelIDs[awayKey] {
-                for id in channelIDs { newGames[id] = gameInfo }
+                for id in channelIDs { games[id] = gameInfo }
             }
         }
-
-        if gamesByChannel != newGames { gamesByChannel = newGames }
     }
 }
