@@ -46,8 +46,8 @@ struct ContentView: View {
             }
             .glassContainer()
             .task { await performStartupStream() }
-            .onChange(of: selectedTab) { newTab in
-                let channelsVisible = newTab == 0 || newTab == 1
+            .onChange(of: selectedTab) {
+                let channelsVisible = selectedTab == 0 || selectedTab == 1
                 sxmService.setFeedPollingEnabled(channelsVisible)
                 ESPNScoreService.shared.setPollingEnabled(channelsVisible)
             }

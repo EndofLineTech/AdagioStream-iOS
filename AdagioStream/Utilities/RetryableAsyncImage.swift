@@ -40,7 +40,7 @@ struct RetryableAsyncImage: View {
         .task(id: retryID) {
             await loadImage()
         }
-        .onChange(of: url) { _ in
+        .onChange(of: url) {
             retryID += 1
         }
     }

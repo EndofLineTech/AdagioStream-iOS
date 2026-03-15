@@ -36,8 +36,8 @@ struct AdagioStreamApp: App {
                 .preferredColorScheme(settingsViewModel.settings.appearanceMode.colorScheme)
                 .applyTextSize(settingsViewModel.settings.textSizeMode)
         }
-        .onChange(of: scenePhase) { phase in
-            let isBackground = phase != .active
+        .onChange(of: scenePhase) {
+            let isBackground = scenePhase != .active
             audioPlayer.setBackgroundMode(isBackground)
             SXMMetadataService.shared.setBackgroundMode(isBackground)
         }
