@@ -78,7 +78,7 @@ struct ESPNGameInfo: Equatable {
 
     enum GameState: String, Equatable {
         case pre
-        case live
+        case live = "in"
         case post
     }
 
