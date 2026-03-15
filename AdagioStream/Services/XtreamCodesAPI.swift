@@ -141,6 +141,17 @@ struct XtreamCodesAPI {
         return response.epgListings ?? []
     }
 
+    /// Full XMLTV EPG URL exposed by most Xtream Codes panels.
+    var xmltvURL: URL? {
+        var components = URLComponents(url: host, resolvingAgainstBaseURL: false)
+        components?.path = "/xmltv.php"
+        components?.queryItems = [
+            URLQueryItem(name: "username", value: username),
+            URLQueryItem(name: "password", value: password),
+        ]
+        return components?.url
+    }
+
     var streamExtension: String = Constants.XtreamCodes.defaultStreamExtension
 
     mutating func applyAuthFormats(_ response: AuthResponse) {

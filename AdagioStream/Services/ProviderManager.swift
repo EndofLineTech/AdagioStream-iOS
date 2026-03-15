@@ -210,6 +210,19 @@ final class ProviderManager: ObservableObject {
             api.applyAuthFormats(authResponse)
             let categories = try await api.getLiveCategories()
             let streams = try await api.getLiveStreams()
+
+            // Load EPG in background — non-fatal, mirrors M3U behavior
+            if let xmltvURL = api.xmltvURL {
+                Task {
+                    do {
+                        let epg = try await EPGParser.parse(from: xmltvURL)
+                        await MainActor.run { self.epgData.merge(epg) { _, new in new } }
+                    } catch {
+                        // EPG failure is non-fatal
+                    }
+                }
+            }
+
             return api.convertToChannels(streams: streams, categories: categories)
         }
     }
