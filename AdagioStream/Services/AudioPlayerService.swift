@@ -42,7 +42,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastToggleTime: Date = .distantPast
     private var lastLoggedVLCState: VLCMediaPlayerState?
     private var channelChangeRetryCount = 0
-    private let maxChannelChangeRetries = 3
+    private let maxChannelChangeRetries = 5
     private var pendingPlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
@@ -806,7 +806,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                         let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
                         if bytesRead == 0 && channelChangeRetryCount < maxChannelChangeRetries {
                             channelChangeRetryCount += 1
-                            let retryDelay = Double(channelChangeRetryCount) * 1.5
+                            let retryDelay = Double(channelChangeRetryCount) * 2.0
                             log.log("VLC stopped with 0 bytes (server likely rejected) — retry \(channelChangeRetryCount)/\(maxChannelChangeRetries) in \(retryDelay)s, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
                             isActiveSession = false
                             stateTimer?.invalidate()
