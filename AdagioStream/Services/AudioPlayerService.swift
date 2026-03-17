@@ -42,7 +42,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastToggleTime: Date = .distantPast
     private var lastLoggedVLCState: VLCMediaPlayerState?
     private var channelChangeRetryCount = 0
-    private let maxChannelChangeRetries = 5
+    private var streamProbeTask: URLSessionDataTask?
+    private var probeStartTime: Date?
+    private let probeTimeout: TimeInterval = 45
     private var pendingPlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
@@ -299,6 +301,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Cancel any pending stream start from a previous rapid channel tap
         pendingPlayWorkItem?.cancel()
         pendingPlayWorkItem = nil
+        streamProbeTask?.cancel()
+        streamProbeTask = nil
+        probeStartTime = nil
         interruptedChannel = nil
         if let oldURL = currentBufferFileURL {
             timeShiftBuffer.deleteBufferFile(at: oldURL)
@@ -402,6 +407,57 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 self?.syncState()
             }
         }
+    }
+
+    /// Probes the stream server with a HEAD request before retrying VLC.
+    /// Keeps probing every 2s until the server responds or the total timeout
+    /// (probeTimeout) elapses.  Only starts VLC once the server is reachable,
+    /// avoiding wasted player tear-down/create cycles on a dead network.
+    private func probeAndRetryStream(for channel: Channel) {
+        guard currentChannel?.id == channel.id else { return }
+
+        let elapsed = Date().timeIntervalSince(probeStartTime ?? Date())
+        if elapsed > probeTimeout {
+            log.log("Connection timeout (\(Int(probeTimeout))s) — unable to reach stream server, channel=\"\(channel.name)\"", category: .player)
+            probeStartTime = nil
+            isBuffering = false
+            error = "Unable to connect — check your network connection."
+            return
+        }
+
+        channelChangeRetryCount += 1
+        log.log("Probing stream server (attempt \(channelChangeRetryCount), \(String(format: "%.0f", elapsed))s elapsed), channel=\"\(channel.name)\"", category: .player)
+
+        var request = URLRequest(url: channel.streamURL)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        request.setValue("AdagioStream/1.0", forHTTPHeaderField: "User-Agent")
+
+        streamProbeTask = URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            Task { @MainActor in
+                guard let self, self.currentChannel?.id == channel.id else { return }
+                if let error {
+                    // Server unreachable — wait and probe again
+                    self.log.log("Stream probe failed: \(error.localizedDescription)", category: .player)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        self.probeAndRetryStream(for: channel)
+                    }
+                } else {
+                    // Server responded — start VLC
+                    let totalElapsed = Date().timeIntervalSince(self.probeStartTime ?? Date())
+                    self.log.log("Stream server reachable after \(String(format: "%.0f", totalElapsed))s, starting VLC", category: .player)
+                    self.probeStartTime = nil
+                    self.mediaPlayer.stop()
+                    self.mediaPlayer.media = nil
+                    self.mediaPlayer.delegate = nil
+                    self.mediaPlayer = VLCMediaPlayer()
+                    self.mediaPlayer.delegate = self
+                    self.lastLoggedVLCState = nil
+                    self.startStream(for: channel)
+                }
+            }
+        }
+        streamProbeTask?.resume()
     }
 
     /// Called when the app enters/leaves the background.
@@ -575,6 +631,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
+        streamProbeTask?.cancel()
+        streamProbeTask = nil
+        probeStartTime = nil
         listeningStartDate = nil
         accumulatedListeningTime = 0
         mediaPlayer.stop()
@@ -800,42 +859,33 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             case .stopped:
                 if currentChannel != nil {
                     isPlaying = false
-                    isBuffering = false
                     if isActiveSession {
-                        // Check if this is a server rejection (0 bytes read)
                         let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
-                        if bytesRead == 0 && channelChangeRetryCount < maxChannelChangeRetries {
-                            channelChangeRetryCount += 1
-                            let retryDelay = Double(channelChangeRetryCount) * 2.0
-                            log.log("VLC stopped with 0 bytes (server likely rejected) — retry \(channelChangeRetryCount)/\(maxChannelChangeRetries) in \(retryDelay)s, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
+                        if bytesRead == 0 {
+                            // Connection failed before receiving any data — could be
+                            // network unreachable, DNS failure, or server not ready.
+                            // Probe the server with a lightweight HTTP request before
+                            // retrying VLC, so we don't burn attempts on a dead network.
+                            log.log("VLC stopped with 0 bytes — probing server reachability, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
                             isActiveSession = false
                             stateTimer?.invalidate()
                             stateTimer = nil
+                            isBuffering = true
+                            if probeStartTime == nil {
+                                probeStartTime = Date()
+                            }
                             if let channel = currentChannel {
-                                let workItem = DispatchWorkItem { [weak self] in
-                                    guard let self, self.currentChannel?.id == channel.id else { return }
-                                    self.log.log("Retrying channel \"\(channel.name)\" (attempt \(self.channelChangeRetryCount))", category: .player)
-                                    self.mediaPlayer.stop()
-                                    self.mediaPlayer.media = nil
-                                    self.mediaPlayer.delegate = nil
-                                    self.mediaPlayer = VLCMediaPlayer()
-                                    self.mediaPlayer.delegate = self
-                                    self.lastLoggedVLCState = nil
-                                    self.isBuffering = true
-                                    self.startStream(for: channel)
-                                }
-                                pendingPlayWorkItem = workItem
-                                DispatchQueue.main.asyncAfter(deadline: .now() + retryDelay, execute: workItem)
+                                probeAndRetryStream(for: channel)
                             }
                         } else {
-                            log.log("VLC stopped unexpectedly, channel=\"\(currentChannel?.name ?? "nil")\", bytesRead=\(bytesRead), retries=\(channelChangeRetryCount)", category: .vlcState)
+                            isBuffering = false
+                            log.log("VLC stopped unexpectedly after \(bytesRead) bytes, channel=\"\(currentChannel?.name ?? "nil")\"", category: .vlcState)
                             isActiveSession = false
                             stateTimer?.invalidate()
                             stateTimer = nil
-                            if channelChangeRetryCount >= maxChannelChangeRetries {
-                                error = "Unable to connect — server may be limiting connections. Try again in a moment."
-                            }
                         }
+                    } else {
+                        isBuffering = false
                     }
                 }
             case .error:
