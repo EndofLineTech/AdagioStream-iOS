@@ -97,15 +97,16 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
             return nil
         }
 
-        log.log("Stopping capture: \(capturedBytes) bytes, ~\(String(format: "%.1f", capturedDuration))s", category: .timeShift)
+        let finalBytes = capturedBytes
+        log.log("Stopping capture: \(finalBytes) bytes, ~\(String(format: "%.1f", capturedDuration))s", category: .timeShift)
         stopSession()
 
-        if capturedBytes >= Constants.TimeShift.minBytes, let url = bufferFileURL {
-            log.log("Buffer ready: \(capturedBytes) bytes at \(url.lastPathComponent)", category: .timeShift)
+        if finalBytes >= Constants.TimeShift.minBytes, let url = bufferFileURL {
+            log.log("Buffer ready: \(finalBytes) bytes at \(url.lastPathComponent)", category: .timeShift)
             bufferFileURL = nil  // Caller owns this URL now
             return url
         } else {
-            log.log("Buffer too small (\(capturedBytes) bytes < \(Constants.TimeShift.minBytes)), discarding", category: .timeShift)
+            log.log("Buffer too small (\(finalBytes) bytes < \(Constants.TimeShift.minBytes)), discarding", category: .timeShift)
             if let url = bufferFileURL {
                 try? FileManager.default.removeItem(at: url)
                 bufferFileURL = nil

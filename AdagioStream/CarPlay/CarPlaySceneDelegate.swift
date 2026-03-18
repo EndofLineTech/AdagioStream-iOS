@@ -16,11 +16,13 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
             providerManager: ProviderManager.shared
         )
         templateManager?.configure()
+        SXMMetadataService.shared.setFeedPollingEnabled(true)
     }
 
     func templateApplicationScene(_ templateApplicationScene: CPTemplateApplicationScene,
                                   didDisconnectInterfaceController interfaceController: CPInterfaceController) {
         log.log("CarPlay DISCONNECTED", category: .carplay)
+        SXMMetadataService.shared.setFeedPollingEnabled(false)
         self.interfaceController = nil
         self.templateManager = nil
         AudioPlayerService.shared.stop()
