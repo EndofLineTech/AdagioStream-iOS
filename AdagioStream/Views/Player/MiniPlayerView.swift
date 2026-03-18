@@ -16,7 +16,7 @@ struct MiniPlayerView: View {
                     ZStack {
                         if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                            let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
-                            RetryableAsyncImage(url: artworkURL, width: 36, height: 36, cornerRadius: 6)
+                            RetryableAsyncImage(url: artworkURL, width: 36, height: 36, cornerRadius: 6, persistent: false)
                         } else if let logoURL = audioPlayer.currentChannel?.logoURL {
                             RetryableAsyncImage(url: logoURL, width: 36, height: 36, cornerRadius: 6)
                         } else {

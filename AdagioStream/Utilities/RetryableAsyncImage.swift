@@ -6,6 +6,8 @@ struct RetryableAsyncImage: View {
     let width: CGFloat
     let height: CGFloat
     let cornerRadius: CGFloat
+    /// When false, uses memory-only caching (for ephemeral images like album art).
+    var persistent: Bool = true
 
     @State private var retryID = 0
     @State private var loadedImage: UIImage?
@@ -53,7 +55,8 @@ struct RetryableAsyncImage: View {
     private func loadImage() async {
         hasFailed = false
 
-        guard let uiImage = await ImageCacheService.shared.image(for: url) else {
+        let cache = ImageCacheService.shared
+        guard let uiImage = await (persistent ? cache.image(for: url) : cache.ephemeralImage(for: url)) else {
             hasFailed = true
             return
         }

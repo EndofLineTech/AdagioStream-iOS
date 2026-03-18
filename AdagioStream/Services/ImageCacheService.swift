@@ -22,6 +22,7 @@ actor ImageCacheService {
         memoryCache.countLimit = 200
     }
 
+    /// Persistent cache (disk + memory) for stable images like channel logos.
     func image(for url: URL) async -> UIImage? {
         let key = cacheKey(for: url)
         let nsKey = key as NSString
@@ -55,6 +56,26 @@ actor ImageCacheService {
             return img
         } catch {
             logger.log("MISS (error) \(url.lastPathComponent): \(error.localizedDescription)", category: .imageCache)
+            return nil
+        }
+    }
+
+    /// Memory-only cache for ephemeral images like album art that rotate frequently.
+    /// Avoids unbounded disk growth from track artwork that won't be viewed again.
+    func ephemeralImage(for url: URL) async -> UIImage? {
+        let nsKey = cacheKey(for: url) as NSString
+
+        if let memImage = memoryCache.object(forKey: nsKey) {
+            return memImage
+        }
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard let img = UIImage(data: data) else { return nil }
+            memoryCache.setObject(img, forKey: nsKey)
+            return img
+        } catch {
+            logger.log("MISS (error) \(url.lastPathComponent)", category: .imageCache)
             return nil
         }
     }

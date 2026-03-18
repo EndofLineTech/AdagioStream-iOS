@@ -16,7 +16,7 @@ struct NowPlayingView: View {
                 // Artwork
                 if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                    let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
-                    RetryableAsyncImage(url: artworkURL, width: 200, height: 200, cornerRadius: 20)
+                    RetryableAsyncImage(url: artworkURL, width: 200, height: 200, cornerRadius: 20, persistent: false)
                         .shadow(radius: 10)
                         .id(track.id)
                 } else if let logoURL = audioPlayer.currentChannel?.logoURL {

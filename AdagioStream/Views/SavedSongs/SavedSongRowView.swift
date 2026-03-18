@@ -11,7 +11,7 @@ struct SavedSongRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             if let artworkURL = song.artworkURL {
-                RetryableAsyncImage(url: artworkURL, width: 40, height: 40, cornerRadius: 8)
+                RetryableAsyncImage(url: artworkURL, width: 40, height: 40, cornerRadius: 8, persistent: false)
             } else if let logoURL = song.channelLogoURL {
                 RetryableAsyncImage(url: logoURL, width: 40, height: 40, cornerRadius: 8)
             } else {

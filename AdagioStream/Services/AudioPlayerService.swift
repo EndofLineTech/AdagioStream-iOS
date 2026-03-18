@@ -1081,7 +1081,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     private func fetchSXMArtwork(url: URL, trackID: String) {
         Task {
-            guard let image = await ImageCacheService.shared.image(for: url) else { return }
+            guard let image = await ImageCacheService.shared.ephemeralImage(for: url) else { return }
             guard self.sxmService.currentTrack?.id == trackID else { return }
             self.sxmArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             self.updateNowPlayingInfo()
