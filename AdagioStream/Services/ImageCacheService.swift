@@ -8,34 +8,58 @@ actor ImageCacheService {
         var etag: String?
         var lastModified: String?
         var cachedAt: Date
+        var immutable: Bool?
     }
 
     private var manifest: [String: ManifestEntry] = [:]
     private let cacheDir: URL
     private let manifestURL: URL
     private let logger = DebugLogger.shared
-    /// Skip revalidation for images cached within this window.
-    private let freshnessTTL: TimeInterval = 3600 // 1 hour
+    /// Skip revalidation for non-immutable images cached within this window.
+    private let freshnessTTL: TimeInterval = 86400 // 24 hours
+    /// In-memory LRU cache to avoid repeated disk I/O.
+    private let memoryCache = NSCache<NSString, UIImage>()
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         cacheDir = appSupport.appendingPathComponent("AdagioStream/image-cache", isDirectory: true)
         manifestURL = cacheDir.appendingPathComponent("image-cache-manifest.json")
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         if let data = try? Data(contentsOf: manifestURL) {
-            manifest = (try? JSONDecoder().decode([String: ManifestEntry].self, from: data)) ?? [:]
+            manifest = (try? decoder.decode([String: ManifestEntry].self, from: data)) ?? [:]
         }
+        memoryCache.countLimit = 200
     }
 
     func image(for url: URL) async -> UIImage? {
         let key = cacheKey(for: url)
+        let nsKey = key as NSString
+
+        // 1. Check in-memory cache first
+        if let memImage = memoryCache.object(forKey: nsKey) {
+            return memImage
+        }
+
         let fileURL = cacheDir.appendingPathComponent("\(key).dat")
         let hasCached = FileManager.default.fileExists(atPath: fileURL.path)
         let entry = manifest[key]
 
         if hasCached {
-            // Always return cached image immediately
             let cachedImage = loadFromDisk(fileURL)
+            if let cachedImage { memoryCache.setObject(cachedImage, forKey: nsKey) }
+
+            // Content-addressed URLs (e.g. Spotify CDN) are immutable —
+            // if the content changes, the URL changes. Never revalidate.
+            if entry?.immutable == true || isImmutableURL(url) {
+                if entry?.immutable != true {
+                    manifest[key]?.immutable = true
+                    saveManifest()
+                }
+                logger.log("HIT (immutable) \(url.lastPathComponent)", category: .imageCache)
+                return cachedImage
+            }
 
             // Skip revalidation if cached recently
             if let cachedAt = entry?.cachedAt, Date().timeIntervalSince(cachedAt) < freshnessTTL {
@@ -62,7 +86,8 @@ actor ImageCacheService {
             }
 
             logger.log("MISS (fetched) \(url.lastPathComponent)", category: .imageCache)
-            saveToDisk(data: data, fileURL: fileURL, key: key, response: httpResponse)
+            memoryCache.setObject(img, forKey: nsKey)
+            saveToDisk(data: data, fileURL: fileURL, key: key, response: httpResponse, immutable: isImmutableURL(url))
             return img
         } catch {
             logger.log("MISS (error) \(url.lastPathComponent): \(error.localizedDescription)", category: .imageCache)
@@ -91,7 +116,11 @@ actor ImageCacheService {
                 saveManifest()
             } else if httpResponse?.statusCode == 200 {
                 logger.log("REVALIDATED (updated) \(url.lastPathComponent)", category: .imageCache)
-                saveToDisk(data: data, fileURL: fileURL, key: key, response: httpResponse)
+                saveToDisk(data: data, fileURL: fileURL, key: key, response: httpResponse, immutable: false)
+                // Update in-memory cache too
+                if let img = UIImage(data: data) {
+                    memoryCache.setObject(img, forKey: key as NSString)
+                }
             }
         } catch {
             logger.log("REVALIDATE failed \(url.lastPathComponent): \(error.localizedDescription)", category: .imageCache)
@@ -99,6 +128,14 @@ actor ImageCacheService {
     }
 
     // MARK: - Private
+
+    /// Spotify CDN URLs are content-addressed: the hash in the path IS
+    /// the content identifier.  If the artwork changes, a new URL is issued.
+    /// These never need revalidation.
+    private func isImmutableURL(_ url: URL) -> Bool {
+        let host = url.host ?? ""
+        return host.contains("scdn.co") || host.contains("spotifycdn.com")
+    }
 
     private func cacheKey(for url: URL) -> String {
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8))
@@ -110,19 +147,22 @@ actor ImageCacheService {
         return UIImage(data: data)
     }
 
-    private func saveToDisk(data: Data, fileURL: URL, key: String, response: HTTPURLResponse?) {
+    private func saveToDisk(data: Data, fileURL: URL, key: String, response: HTTPURLResponse?, immutable: Bool) {
         try? data.write(to: fileURL)
         manifest[key] = ManifestEntry(
             etag: response?.value(forHTTPHeaderField: "Etag"),
             lastModified: response?.value(forHTTPHeaderField: "Last-Modified"),
-            cachedAt: Date()
+            cachedAt: Date(),
+            immutable: immutable
         )
         saveManifest()
     }
 
     private func loadManifest() {
         guard let data = try? Data(contentsOf: manifestURL) else { return }
-        manifest = (try? JSONDecoder().decode([String: ManifestEntry].self, from: data)) ?? [:]
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        manifest = (try? decoder.decode([String: ManifestEntry].self, from: data)) ?? [:]
     }
 
     private func saveManifest() {

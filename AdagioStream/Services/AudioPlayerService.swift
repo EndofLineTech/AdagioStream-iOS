@@ -42,6 +42,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastToggleTime: Date = .distantPast
     private var lastLoggedVLCState: VLCMediaPlayerState?
     private var channelChangeRetryCount = 0
+    private var vlcZeroByteRetryCount = 0
+    private let maxVLCZeroByteRetries = 5
     private var streamProbeTask: URLSessionDataTask?
     private var probeStartTime: Date?
     private let probeTimeout: TimeInterval = 45
@@ -343,6 +345,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         error = nil
         streamBitrateKbps = 0
         statusText = ""
+        vlcZeroByteRetryCount = 0
         if channelChanged {
             channelChangeRetryCount = 0
             isReducedBufferRetry = false
@@ -420,8 +423,20 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         if elapsed > probeTimeout {
             log.log("Connection timeout (\(Int(probeTimeout))s) — unable to reach stream server, channel=\"\(channel.name)\"", category: .player)
             probeStartTime = nil
+            vlcZeroByteRetryCount = 0
             isBuffering = false
             error = "Unable to connect — check your network connection."
+            return
+        }
+
+        // Cap VLC-level retries: if the server is reachable but VLC
+        // repeatedly gets 0 bytes, the stream itself is broken.
+        if vlcZeroByteRetryCount >= maxVLCZeroByteRetries {
+            log.log("VLC failed \(vlcZeroByteRetryCount) times with 0 bytes despite server being reachable — giving up, channel=\"\(channel.name)\"", category: .player)
+            probeStartTime = nil
+            vlcZeroByteRetryCount = 0
+            isBuffering = false
+            error = "Stream unavailable — try again or switch channels."
             return
         }
 
@@ -443,17 +458,24 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                         self.probeAndRetryStream(for: channel)
                     }
                 } else {
-                    // Server responded — start VLC
+                    // Server responded — wait with exponential backoff before
+                    // retrying VLC, so we don't spin in a tight loop when the
+                    // server accepts connections but the stream has no data.
+                    self.vlcZeroByteRetryCount += 1
+                    let backoff = min(Double(1 << (self.vlcZeroByteRetryCount - 1)), 8.0) // 1s, 2s, 4s, 8s, 8s
                     let totalElapsed = Date().timeIntervalSince(self.probeStartTime ?? Date())
-                    self.log.log("Stream server reachable after \(String(format: "%.0f", totalElapsed))s, starting VLC", category: .player)
-                    self.probeStartTime = nil
-                    self.mediaPlayer.stop()
-                    self.mediaPlayer.media = nil
-                    self.mediaPlayer.delegate = nil
-                    self.mediaPlayer = VLCMediaPlayer()
-                    self.mediaPlayer.delegate = self
-                    self.lastLoggedVLCState = nil
-                    self.startStream(for: channel)
+                    self.log.log("Stream server reachable after \(String(format: "%.0f", totalElapsed))s, retrying VLC in \(String(format: "%.0f", backoff))s (attempt \(self.vlcZeroByteRetryCount)/\(self.maxVLCZeroByteRetries)), channel=\"\(channel.name)\"", category: .player)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + backoff) { [weak self] in
+                        guard let self, self.currentChannel?.id == channel.id else { return }
+                        self.probeStartTime = nil
+                        self.mediaPlayer.stop()
+                        self.mediaPlayer.media = nil
+                        self.mediaPlayer.delegate = nil
+                        self.mediaPlayer = VLCMediaPlayer()
+                        self.mediaPlayer.delegate = self
+                        self.lastLoggedVLCState = nil
+                        self.startStream(for: channel)
+                    }
                 }
             }
         }
@@ -634,6 +656,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         streamProbeTask?.cancel()
         streamProbeTask = nil
         probeStartTime = nil
+        vlcZeroByteRetryCount = 0
         listeningStartDate = nil
         accumulatedListeningTime = 0
         mediaPlayer.stop()
@@ -823,7 +846,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 isBuffering = true
                 // Track when data first arrives
                 let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
-                if bytesRead > 0 { hasReceivedData = true }
+                if bytesRead > 0 { hasReceivedData = true; vlcZeroByteRetryCount = 0 }
 
                 // Timeout: if buffering too long with no meaningful data, retry with smaller buffer
                 if let start = streamStartTime, !hasReceivedData,
