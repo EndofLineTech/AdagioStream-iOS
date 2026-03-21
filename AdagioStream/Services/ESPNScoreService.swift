@@ -21,6 +21,7 @@ final class ESPNScoreService: ObservableObject {
     private var hasChannels = false
     private var pollingWanted = false
     private var hasLiveGame = false
+    private var lastScoreboardLogLine: String?
 
     private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
     private static let channelPrefixes = ["Radio: ", "TV: "]
@@ -116,6 +117,7 @@ final class ESPNScoreService: ObservableObject {
         pollTask?.cancel()
         pollTask = Task {
             var allEvents: [(ESPNLeague, [ESPNEvent])] = []
+            var fetchedLeagues: Set<ESPNLeague> = []
 
             await withTaskGroup(of: (ESPNLeague, [ESPNEvent])?.self) { group in
                 for league in Self.allLeagues {
@@ -137,7 +139,16 @@ final class ESPNScoreService: ObservableObject {
 
             guard !Task.isCancelled else { return }
 
-            var newGames: [String: ESPNGameInfo] = [:]
+            // Only update data for leagues that responded successfully.
+            // Keep existing entries for leagues that failed, so a transient
+            // network blip on one league doesn't wipe live-game state and
+            // cause poll-rate thrashing between 15s ↔ 60s.
+            var newGames = gamesByChannel
+            for (league, _) in allEvents { fetchedLeagues.insert(league) }
+            // Clear entries for leagues that responded (will be re-populated below)
+            for (channelID, info) in newGames where fetchedLeagues.contains(info.league) {
+                newGames.removeValue(forKey: channelID)
+            }
             var totalEvents = 0
             for (league, events) in allEvents {
                 totalEvents += events.count
@@ -146,7 +157,11 @@ final class ESPNScoreService: ObservableObject {
 
             if gamesByChannel != newGames { gamesByChannel = newGames }
             adjustPollRateIfNeeded()
-            log.log("ESPN scoreboard: \(totalEvents) events across \(allEvents.count) leagues, \(newGames.count) matched to channels", category: .espn)
+            let scoreLogLine = "ESPN scoreboard: \(totalEvents) events across \(allEvents.count) leagues, \(newGames.count) matched to channels"
+            if scoreLogLine != lastScoreboardLogLine {
+                lastScoreboardLogLine = scoreLogLine
+                log.log(scoreLogLine, category: .espn)
+            }
         }
     }
 

@@ -144,6 +144,7 @@ final class SXMMetadataService: ObservableObject {
     /// Whether the channel list UI is currently visible and wants feed updates.
     private var feedWanted = false
     private var hasSXMChannels = false
+    private var lastFeedLogLine: String?
 
     /// Call when channel list becomes visible/hidden to start/stop feed polling.
     func setFeedPollingEnabled(_ enabled: Bool) {
@@ -238,7 +239,11 @@ final class SXMMetadataService: ObservableObject {
                 }
 
                 if feedTracks != newFeedTracks { feedTracks = newFeedTracks }
-                log.log("Feed updated: \(newFeedTracks.count) channels with tracks (from \(response.results.count) entries)", category: .sxm)
+                let feedLogLine = "Feed updated: \(newFeedTracks.count) channels with tracks (from \(response.results.count) entries)"
+                if feedLogLine != lastFeedLogLine {
+                    lastFeedLogLine = feedLogLine
+                    log.log(feedLogLine, category: .sxm)
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 log.log("Feed fetch failed: \(error.localizedDescription)", category: .sxm)

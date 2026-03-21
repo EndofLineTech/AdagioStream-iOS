@@ -298,6 +298,15 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     // MARK: - Playback
 
     func play(channel: Channel) {
+        // Don't tear down an active stream to restart the same channel.
+        // During CarPlay reconnect, multiple PLAY commands and channel
+        // selections can fire within seconds — each would needlessly
+        // destroy and recreate the VLC player for no benefit.
+        if channel.id == currentChannel?.id, isActiveSession {
+            log.log("play() skipped: \"\(channel.name)\" already active", category: .player)
+            return
+        }
+
         log.log("play() channel=\"\(channel.name)\" group=\"\(channel.group)\" url=\(channel.streamURL.redactedForLog)", category: .player)
 
         // Cancel any pending stream start from a previous rapid channel tap
@@ -385,6 +394,20 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private func startStream(for channel: Channel) {
         streamStartTime = Date()
         hasReceivedData = false
+
+        // Always create a fresh VLC player right before use.  During rapid
+        // next/prev switching the player pre-created in play() may carry
+        // stale libvlc state — it was allocated while the previous player's
+        // async teardown was still in progress.  Deferring creation to here
+        // (after the debounce) maximises the gap between old socket close
+        // and new connection open, avoiding Xtream Codes connection-limit
+        // rejections that leave VLC stuck in buffering with 0 bytes.
+        mediaPlayer.stop()
+        mediaPlayer.media = nil
+        mediaPlayer.delegate = nil
+        mediaPlayer = VLCMediaPlayer()
+        mediaPlayer.delegate = self
+
         let media = VLCMedia(url: channel.streamURL)
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
         let cacheMs = Int(effectiveBuffer * 1000)
@@ -468,11 +491,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                     DispatchQueue.main.asyncAfter(deadline: .now() + backoff) { [weak self] in
                         guard let self, self.currentChannel?.id == channel.id else { return }
                         self.probeStartTime = nil
-                        self.mediaPlayer.stop()
-                        self.mediaPlayer.media = nil
-                        self.mediaPlayer.delegate = nil
-                        self.mediaPlayer = VLCMediaPlayer()
-                        self.mediaPlayer.delegate = self
                         self.lastLoggedVLCState = nil
                         self.startStream(for: channel)
                     }
@@ -855,11 +873,6 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                    let channel = currentChannel {
                     log.log("Buffering timeout (\(Int(bufferingTimeoutInterval))s with no data) — retrying with reduced buffer (\(Int(reducedBufferDuration))s), channel=\"\(channel.name)\"", category: .player)
                     isReducedBufferRetry = true
-                    mediaPlayer.stop()
-                    mediaPlayer.media = nil
-                    mediaPlayer.delegate = nil
-                    mediaPlayer = VLCMediaPlayer()
-                    mediaPlayer.delegate = self
                     lastLoggedVLCState = nil
                     startStream(for: channel)
                 } else if let start = streamStartTime, !hasReceivedData,
@@ -1029,6 +1042,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         let artist: String
         let artwork: MPMediaItemArtwork?
 
+        let stillLoading = isBuffering && !isPlaying
+
         if let track = sxmService.currentTrack {
             title = track.title
             artist = track.artistDisplay
@@ -1039,7 +1054,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             artwork = currentArtwork
         } else {
             title = channel.name
-            artist = channel.group
+            artist = stillLoading ? "Loading..." : channel.group
             artwork = currentArtwork
         }
 
