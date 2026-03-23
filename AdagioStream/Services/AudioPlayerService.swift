@@ -55,6 +55,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var isReducedBufferRetry = false
     private let bufferingTimeoutInterval: TimeInterval = 20
     private let reducedBufferDuration: TimeInterval = 3
+    private var bufferingBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var lastNowPlayingTitle: String?
     private var lastNowPlayingArtist: String?
     private var lastNowPlayingIsLive: Bool?
@@ -190,6 +191,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
 
         DebugLogger.shared.log("Route change: reason=\(reasonName), carplay=\(isCarPlayOutput), outputs=[\(outputs)], inputs=[\(inputs)], prev=[\(prevRouteDesc)], otherAudio=\(session.isOtherAudioPlaying)", category: .audioSession)
+
+        // Route changes can wake the app from suspension — check for any
+        // buffering timeouts that expired while the process was suspended.
+        Task { @MainActor in
+            self.syncState()
+        }
     }
 
     @objc nonisolated private func handleAudioInterruption(_ notification: Notification) {
@@ -327,6 +334,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         timeShiftBuffer.cancelAndCleanup()
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
+        endBufferingBackgroundTask()
 
         // Destroy the old VLCMediaPlayer entirely and create a fresh one.
         // VLC's stop() is async — the HTTP socket can linger for seconds.
@@ -391,9 +399,25 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
     }
 
+    /// End any active background task requested for buffering timeout.
+    private func endBufferingBackgroundTask() {
+        if bufferingBackgroundTaskID != .invalid {
+            UIApplication.shared.endBackgroundTask(bufferingBackgroundTaskID)
+            bufferingBackgroundTaskID = .invalid
+        }
+    }
+
     private func startStream(for channel: Channel) {
         streamStartTime = Date()
         hasReceivedData = false
+
+        // Request background execution time so the 20s buffering timeout
+        // can fire even when iOS would otherwise suspend the process
+        // (e.g., CarPlay with phone locked and VLC not yet producing audio).
+        endBufferingBackgroundTask()
+        bufferingBackgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "StreamBuffering") { [weak self] in
+            self?.endBufferingBackgroundTask()
+        }
 
         // Always create a fresh VLC player right before use.  During rapid
         // next/prev switching the player pre-created in play() may carry
@@ -671,6 +695,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isActiveSession = false
         stateTimer?.invalidate()
         stateTimer = nil
+        endBufferingBackgroundTask()
         streamProbeTask?.cancel()
         streamProbeTask = nil
         probeStartTime = nil
@@ -853,11 +878,13 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             isPlaying = true
             isBuffering = false
             error = nil
+            endBufferingBackgroundTask()
         } else if hasDataFlow && (vlcState == .buffering || vlcState == .opening) {
             // VLC says buffering but data is flowing — audio is actually playing
             isPlaying = true
             isBuffering = false
             error = nil
+            endBufferingBackgroundTask()
         } else {
             switch vlcState {
             case .buffering, .opening:
@@ -883,6 +910,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                     isActiveSession = false
                     stateTimer?.invalidate()
                     stateTimer = nil
+                    endBufferingBackgroundTask()
                     mediaPlayer.stop()
                     mediaPlayer.media = nil
                     isPlaying = false
