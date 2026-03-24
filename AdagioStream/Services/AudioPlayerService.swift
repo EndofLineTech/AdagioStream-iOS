@@ -66,6 +66,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var currentBufferFileURL: URL?
     private var interruptionTime: Date?
     private var bufferPlaybackStartedAt: Date?
+    /// True while an audio session interruption is active and VLC is being
+    /// kept alive (short-interruption path).  Suppresses syncState reactions.
+    private var isRidingOutInterruption = false
+    /// Fires when a short interruption exceeds bufferDuration, falling back
+    /// to the old stop-and-capture path.
+    private var interruptionFallbackWorkItem: DispatchWorkItem?
 
     var channels: [Channel] = []
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -210,44 +216,100 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 self.log.log("Interruption BEGAN: isActive=\(self.isActiveSession), channel=\"\(self.currentChannel?.name ?? "nil")\", vlcState=\(self.mediaPlayer.state.rawValue)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.began")
 
-                // Remember what was playing, then stop the stream cleanly.
-                // VLC's state becomes unpredictable after audio session
-                // interruptions — a fresh start on .ended is more reliable.
+                // Keep VLC alive during short interruptions — its internal
+                // network-caching buffer (typically 8s) bridges the gap
+                // without needing a cold restart.  Only fall back to
+                // stop-and-capture if the interruption exceeds bufferDuration.
                 if self.isActiveSession, let channel = self.currentChannel {
                     self.interruptedChannel = channel
+                    self.isRidingOutInterruption = true
                     let currentBitrate = self.streamBitrateKbps
-                    self.log.log("Saving interrupted channel \"\(channel.name)\", stopping stream", category: .interruption)
-                    self.stop()
+                    self.log.log("Riding out interruption for \"\(channel.name)\" (VLC cache \(Int(self.bufferDuration))s)", category: .interruption)
 
-                    // Start capturing stream data so we can resume from
-                    // the interruption point instead of rejoining live
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        guard self.interruptedChannel?.id == channel.id else { return }
-                        self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+                    // Safety net: if the interruption runs longer than VLC's
+                    // cache, fall back to the old stop+capture path.
+                    let fallback = DispatchWorkItem { [weak self] in
+                        guard let self, self.isRidingOutInterruption,
+                              self.interruptedChannel?.id == channel.id else { return }
+                        self.log.log("Interruption exceeded VLC cache (\(Int(self.bufferDuration))s) — falling back to stop+capture", category: .interruption)
+                        self.isRidingOutInterruption = false
+                        self.stop()
+                        self.interruptedChannel = channel
+                        // Give the stream URL a moment to become connectable
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            guard self.interruptedChannel?.id == channel.id else { return }
+                            self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+                        }
                     }
+                    self.interruptionFallbackWorkItem = fallback
+                    DispatchQueue.main.asyncAfter(deadline: .now() + self.bufferDuration, execute: fallback)
                 }
 
             case .ended:
                 let options = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
                 let shouldResume = AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume)
-                self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume)", category: .interruption)
+                self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume), ridingOut=\(self.isRidingOutInterruption)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.ended")
+
+                // Cancel the fallback timer — interruption ended in time
+                self.interruptionFallbackWorkItem?.cancel()
+                self.interruptionFallbackWorkItem = nil
 
                 guard let channel = self.interruptedChannel else {
                     self.log.log("Interruption ended but no interrupted channel, skipping resume", category: .interruption)
+                    self.isRidingOutInterruption = false
                     return
                 }
-                self.interruptedChannel = nil
 
-                // Stop time-shift capture and get buffer file if available
-                let bufferFileURL = self.timeShiftBuffer.stopCapture()
-                self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+                if self.isRidingOutInterruption {
+                    // Short interruption — VLC stayed alive with its internal cache.
+                    // Just reactivate the audio session so VLC can output again.
+                    self.isRidingOutInterruption = false
+                    self.interruptedChannel = nil
+                    self.log.log("Short interruption ended — reactivating audio session for \"\(channel.name)\"", category: .interruption)
 
-                // Delay to let the audio route settle (CarPlay route transitions
-                // need time to switch back from phone/Siri to media output).
-                self.log.log("Scheduling 500ms delayed restart for \"\(channel.name)\"", category: .interruption)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
+                    // Delay to let the audio route settle (CarPlay route transitions
+                    // need time to switch back from phone/Siri to media output).
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        let session = AVAudioSession.sharedInstance()
+                        do {
+                            try session.setActive(false, options: .notifyOthersOnDeactivation)
+                            self.log.log("Session deactivated OK (short interruption)", category: .audioSession)
+                        } catch {
+                            self.log.log("Session deactivate FAILED (short interruption): \(error.localizedDescription)", category: .audioSession)
+                        }
+                        do {
+                            try session.setActive(true)
+                            self.log.log("Session reactivated OK (short interruption)", category: .audioSession)
+                        } catch {
+                            self.log.log("Session reactivate FAILED (short interruption): \(error.localizedDescription)", category: .audioSession)
+                        }
+
+                        // Check if VLC survived the interruption
+                        let vlcAlive = self.isActiveSession && (self.mediaPlayer.isPlaying || self.mediaPlayer.state == .buffering || self.mediaPlayer.state == .opening)
+                        self.log.log("VLC post-interruption: alive=\(vlcAlive), state=\(self.vlcStateName(self.mediaPlayer.state)), isPlaying=\(self.mediaPlayer.isPlaying)", category: .interruption)
+
+                        if vlcAlive {
+                            // VLC is fine — nothing else to do, audio resumes from cache
+                            self.log.log("VLC survived interruption — seamless resume", category: .interruption)
+                        } else {
+                            // VLC died during the interruption — cold restart
+                            self.log.log("VLC died during interruption — cold restarting \"\(channel.name)\"", category: .interruption)
+                            self.play(channel: channel)
+                        }
+                    }
+                } else {
+                    // Long interruption — fallback already stopped VLC and started capture.
+                    // Use the existing time-shift buffer path.
+                    self.interruptedChannel = nil
+
+                    let bufferFileURL = self.timeShiftBuffer.stopCapture()
+                    self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+
+                    self.log.log("Scheduling 500ms delayed restart for \"\(channel.name)\"", category: .interruption)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
+                    }
                 }
 
             @unknown default:
@@ -323,6 +385,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         streamProbeTask = nil
         probeStartTime = nil
         interruptedChannel = nil
+        isRidingOutInterruption = false
+        interruptionFallbackWorkItem?.cancel()
+        interruptionFallbackWorkItem = nil
         if let oldURL = currentBufferFileURL {
             timeShiftBuffer.deleteBufferFile(at: oldURL)
             currentBufferFileURL = nil
@@ -619,6 +684,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         interruptedChannel = nil
+        isRidingOutInterruption = false
+        interruptionFallbackWorkItem?.cancel()
+        interruptionFallbackWorkItem = nil
         if let oldURL = currentBufferFileURL {
             timeShiftBuffer.deleteBufferFile(at: oldURL)
             currentBufferFileURL = nil
@@ -679,6 +747,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Note: do NOT clear interruptedChannel here — stop() is called
         // by the interruption handler after saving the channel to resume.
         // Only pause() and play() should clear it (explicit user actions).
+        isRidingOutInterruption = false
+        interruptionFallbackWorkItem?.cancel()
+        interruptionFallbackWorkItem = nil
         let wasPlayingBuffer = isPlayingBufferedFile
         if let oldURL = currentBufferFileURL {
             timeShiftBuffer.deleteBufferFile(at: oldURL)
@@ -862,6 +933,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private func syncState() {
         guard isActiveSession else { return }
 
+        // While riding out a short interruption, VLC's state may fluctuate
+        // as iOS silences its audio output.  Don't react to state changes
+        // (no probing, no retries, no error handling) until the interruption
+        // ends and we can assess VLC's actual health.
+        if isRidingOutInterruption { return }
+
         let vlcIsPlaying = mediaPlayer.isPlaying
         let vlcState = mediaPlayer.state
 
@@ -874,17 +951,32 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             return stats.demuxBitrate > 0 || stats.inputBitrate > 0
         }()
 
-        if vlcIsPlaying || vlcState == .playing {
+        // During the initial buffer fill, VLC reports isPlaying=true after
+        // ~1.3s when it identifies the stream format, but zero audio frames
+        // have been decoded — the 8s network-caching is still filling.
+        // Don't declare "playing" until audio frames are actually decoded.
+        let audioDecoded = mediaPlayer.media?.statistics.decodedAudio ?? 0
+        let awaitingInitialBuffer = streamStartTime != nil && audioDecoded == 0
+            && !isPlayingBufferedFile
+
+        if (vlcIsPlaying || vlcState == .playing) && !awaitingInitialBuffer {
             isPlaying = true
             isBuffering = false
             error = nil
             endBufferingBackgroundTask()
-        } else if hasDataFlow && (vlcState == .buffering || vlcState == .opening) {
+        } else if hasDataFlow && !awaitingInitialBuffer && (vlcState == .buffering || vlcState == .opening) {
             // VLC says buffering but data is flowing — audio is actually playing
             isPlaying = true
             isBuffering = false
             error = nil
             endBufferingBackgroundTask()
+        } else if awaitingInitialBuffer && (vlcIsPlaying || hasDataFlow) {
+            // VLC engine is running but no audio decoded yet — still filling
+            // the network-caching buffer.  Keep showing buffering state.
+            isBuffering = true
+            isPlaying = false
+            let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
+            if bytesRead > 0 { hasReceivedData = true; vlcZeroByteRetryCount = 0 }
         } else {
             switch vlcState {
             case .buffering, .opening:
@@ -976,6 +1068,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                         log.log("Buffer ended, caught up to live for \"\(channel.name)\"", category: .player)
                         isPlayingBufferedFile = false
                         bufferedChannel = nil
+                        // Reset isActiveSession so play() doesn't skip with
+                        // "already active" — VLC just finished the buffer file
+                        // and has no data; it needs a fresh live connection.
+                        isActiveSession = false
+                        stateTimer?.invalidate()
+                        stateTimer = nil
                         timeShiftBuffer.cancelAndCleanup()
                         play(channel: channel)
                     }
