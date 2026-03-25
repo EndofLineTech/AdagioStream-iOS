@@ -20,7 +20,8 @@ final class ExtensionsTests: XCTestCase {
 
     func testExtractAttributeHandlesEmptyValue() {
         let line = #"#EXTINF:-1 tvg-id="" tvg-name="Test",Channel"#
-        XCTAssertEqual(line.extractAttribute("tvg-id"), "")
+        // Empty quoted values are treated as missing (nil)
+        XCTAssertNil(line.extractAttribute("tvg-id"))
     }
 
     // MARK: - URL.xtreamCodesURL
