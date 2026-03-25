@@ -3,7 +3,7 @@ import CallKit
 import Combine
 import MediaPlayer
 import SwiftUI
-import VLCKitSPM
+@preconcurrency import VLCKitSPM
 
 @MainActor
 final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelegate, VLCMediaDelegate {
@@ -100,7 +100,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
         mediaPlayer.delegate = self
         // Release on a background thread so pthread_join can't block main
-        DispatchQueue.global(qos: .utility).async { [old] in
+        DispatchQueue.global(qos: .utility).async { @Sendable [old] in
             _ = old
         }
     }
