@@ -83,12 +83,21 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     /// instead of blocking the main thread.  Without this, a stalled network
     /// read in VLC's stream thread can block the join for >10 s, triggering
     /// the iOS 0x8BADF00D watchdog kill.
-    private func retirePlayer() {
+    ///
+    /// - Parameter options: VLC instance-level options (e.g. `--network-caching=8000`).
+    ///   Caching options MUST be set here — VLCKit's per-media `addOptions` uses
+    ///   `libvlc_media_add_option` which silently rejects `network-caching` and
+    ///   `live-caching` as "unsafe" options.  Instance-level options are always trusted.
+    private func retirePlayer(options: [String]? = nil) {
         let old = mediaPlayer
         old.stop()
         old.media = nil
         old.delegate = nil
-        mediaPlayer = VLCMediaPlayer()
+        if let options {
+            mediaPlayer = VLCMediaPlayer(options: options)
+        } else {
+            mediaPlayer = VLCMediaPlayer()
+        }
         mediaPlayer.delegate = self
         // Release on a background thread so pthread_join can't block main
         DispatchQueue.global(qos: .utility).async { [old] in
@@ -516,15 +525,20 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // (after the debounce) maximises the gap between old socket close
         // and new connection open, avoiding Xtream Codes connection-limit
         // rejections that leave VLC stuck in buffering with 0 bytes.
-        retirePlayer()
-
-        let media = VLCMedia(url: channel.streamURL)
+        //
+        // Caching options are set at the instance level because VLCKit's
+        // per-media addOptions uses libvlc_media_add_option which silently
+        // rejects network-caching and live-caching as "unsafe" options.
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
         let cacheMs = Int(effectiveBuffer * 1000)
-        log.log("VLC media options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
+        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
+        retirePlayer(options: [
+            "--network-caching=\(cacheMs)",
+            "--live-caching=\(cacheMs)",
+        ])
+
+        let media = VLCMedia(url: channel.streamURL)
         media.addOptions([
-            "network-caching": cacheMs,
-            "live-caching": cacheMs,
             "http-user-agent": "AdagioStream/1.0",
         ])
 
