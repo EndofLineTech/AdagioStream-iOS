@@ -77,6 +77,25 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     var bufferDuration: TimeInterval = Constants.defaultBufferDuration
     var artworkDisplayMode: ArtworkDisplayMode = .coverArt
 
+    /// Replace the current VLCMediaPlayer with a fresh instance, retiring the
+    /// old one so that its `libvlc_media_player_destroy` (which calls
+    /// `pthread_join` on VLC's internal threads) runs on a background queue
+    /// instead of blocking the main thread.  Without this, a stalled network
+    /// read in VLC's stream thread can block the join for >10 s, triggering
+    /// the iOS 0x8BADF00D watchdog kill.
+    private func retirePlayer() {
+        let old = mediaPlayer
+        old.stop()
+        old.media = nil
+        old.delegate = nil
+        mediaPlayer = VLCMediaPlayer()
+        mediaPlayer.delegate = self
+        // Release on a background thread so pthread_join can't block main
+        DispatchQueue.global(qos: .utility).async { [old] in
+            _ = old
+        }
+    }
+
     private override init() {
         super.init()
         log.log("AudioPlayerService init", category: .player)
@@ -228,17 +247,27 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
                     // Safety net: if the interruption runs longer than VLC's
                     // cache, fall back to the old stop+capture path.
+                    let interruptionStarted = Date()
                     let fallback = DispatchWorkItem { [weak self] in
                         guard let self, self.isRidingOutInterruption,
                               self.interruptedChannel?.id == channel.id else { return }
-                        self.log.log("Interruption exceeded VLC cache (\(Int(self.bufferDuration))s) — falling back to stop+capture", category: .interruption)
+                        let elapsed = Date().timeIntervalSince(interruptionStarted)
+                        self.log.log("Interruption exceeded VLC cache (\(Int(self.bufferDuration))s) — elapsed \(Int(elapsed))s, falling back to stop+capture", category: .interruption)
                         self.isRidingOutInterruption = false
                         self.stop()
                         self.interruptedChannel = channel
-                        // Give the stream URL a moment to become connectable
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            guard self.interruptedChannel?.id == channel.id else { return }
-                            self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+                        // Only attempt time-shift capture if the interruption
+                        // is recent enough that the stream URL is likely still
+                        // connectable.  If the app was suspended for minutes,
+                        // the server has long closed the connection — capturing
+                        // would just get 0 bytes.
+                        if elapsed <= 30 {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                guard self.interruptedChannel?.id == channel.id else { return }
+                                self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+                            }
+                        } else {
+                            self.log.log("Skipping time-shift capture — interruption too stale (\(Int(elapsed))s)", category: .interruption)
                         }
                     }
                     self.interruptionFallbackWorkItem = fallback
@@ -410,11 +439,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
         if hadActiveMedia {
             log.log("Destroying old VLCMediaPlayer to release connection", category: .player)
-            mediaPlayer.stop()
-            mediaPlayer.media = nil
-            mediaPlayer.delegate = nil
-            mediaPlayer = VLCMediaPlayer()
-            mediaPlayer.delegate = self
+            retirePlayer()
             lastTeardownTime = Date()
         }
 
@@ -491,11 +516,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // (after the debounce) maximises the gap between old socket close
         // and new connection open, avoiding Xtream Codes connection-limit
         // rejections that leave VLC stuck in buffering with 0 bytes.
-        mediaPlayer.stop()
-        mediaPlayer.media = nil
-        mediaPlayer.delegate = nil
-        mediaPlayer = VLCMediaPlayer()
-        mediaPlayer.delegate = self
+        retirePlayer()
 
         let media = VLCMedia(url: channel.streamURL)
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
@@ -594,11 +615,38 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         isInBackground = background
         if background {
             adjustPollRate(to: backgroundPollInterval)
-        } else if isPlaying && !isBuffering && error == nil {
-            adjustPollRate(to: slowPollInterval)
         } else {
-            adjustPollRate(to: fastPollInterval)
+            if isPlaying && !isBuffering && error == nil {
+                adjustPollRate(to: slowPollInterval)
+            } else {
+                adjustPollRate(to: fastPollInterval)
+            }
+            recoverStaleInterruption()
         }
+    }
+
+    /// Recover from an interruption whose ENDED event was never delivered.
+    /// Called when the app returns to foreground or CarPlay reconnects.
+    /// If `interruptedChannel` has been set for longer than 30 s with no
+    /// active playback, the interruption handler clearly missed the resume
+    /// event — force-clear and restart.
+    func recoverStaleInterruption() {
+        guard let channel = interruptedChannel,
+              let elapsed = interruptionTime.map({ Date().timeIntervalSince($0) }),
+              elapsed > 30,
+              !isPlaying, !isBuffering else { return }
+
+        log.log("Stale interruption detected (\(Int(elapsed))s) for \"\(channel.name)\" — force-recovering", category: .interruption)
+
+        // Clean up orphaned state
+        isRidingOutInterruption = false
+        interruptionFallbackWorkItem?.cancel()
+        interruptionFallbackWorkItem = nil
+        interruptedChannel = nil
+        interruptionTime = nil
+        timeShiftBuffer.cancelAndCleanup()
+
+        play(channel: channel)
     }
 
     /// Reschedule the state timer at a new interval if it differs from the current one.
@@ -627,11 +675,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Destroy old player
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
         if hadActiveMedia {
-            mediaPlayer.stop()
-            mediaPlayer.media = nil
-            mediaPlayer.delegate = nil
-            mediaPlayer = VLCMediaPlayer()
-            mediaPlayer.delegate = self
+            retirePlayer()
         }
 
         currentChannel = channel

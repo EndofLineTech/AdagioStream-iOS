@@ -18,6 +18,9 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         templateManager?.configure()
         SXMMetadataService.shared.setFeedPollingEnabled(true)
         ESPNScoreService.shared.setPollingEnabled(true)
+        // Recover from interruptions whose ENDED event was never delivered
+        // (common when CarPlay disconnects during an active interruption).
+        AudioPlayerService.shared.recoverStaleInterruption()
     }
 
     func templateApplicationScene(_ templateApplicationScene: CPTemplateApplicationScene,
