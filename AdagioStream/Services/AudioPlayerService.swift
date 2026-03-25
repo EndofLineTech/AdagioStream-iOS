@@ -440,15 +440,17 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         endBufferingBackgroundTask()
 
         // Destroy the old VLCMediaPlayer entirely and create a fresh one.
-        // VLC's stop() is async — the HTTP socket can linger for seconds.
-        // Xtream Codes servers enforce a per-account connection limit and
-        // 403 new requests while the old one is still open.  Deallocating
-        // the player guarantees all internal threads and sockets are torn
-        // down before we open a new connection.
+        // Stop the current player so Xtream Codes' per-account connection
+        // limit isn't hit when the new stream opens.  Don't replace the
+        // VLCMediaPlayer here — startStream() will call retirePlayer(options:)
+        // with the correct caching args.  Creating an intermediate player
+        // without options poisons VLCKit's shared VLCLibrary instance,
+        // causing all subsequent players to lose their caching settings.
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
         if hadActiveMedia {
-            log.log("Destroying old VLCMediaPlayer to release connection", category: .player)
-            retirePlayer()
+            log.log("Stopping old VLCMediaPlayer to release connection", category: .player)
+            mediaPlayer.stop()
+            mediaPlayer.media = nil
             lastTeardownTime = Date()
         }
 
@@ -686,10 +688,15 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
 
-        // Destroy old player
+        // Destroy old player — always pass caching options to avoid
+        // poisoning VLCKit's shared VLCLibrary with option-less defaults.
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
         if hadActiveMedia {
-            retirePlayer()
+            let cacheMs = Int(bufferDuration * 1000)
+            retirePlayer(options: [
+                "--network-caching=\(cacheMs)",
+                "--live-caching=\(cacheMs)",
+            ])
         }
 
         currentChannel = channel
