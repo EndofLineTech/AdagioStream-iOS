@@ -1272,6 +1272,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyArtist: artist,
+            MPMediaItemPropertyAlbumTitle: channel.name,
             MPNowPlayingInfoPropertyIsLiveStream: isLive,
             MPNowPlayingInfoPropertyPlaybackRate: rate,
         ]
