@@ -12,34 +12,40 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            TabView(selection: $selectedTab) {
-                ChannelListView()
-                    .tabItem {
-                        Label("Channels", systemImage: "radio")
-                    }
-                    .tag(0)
+            ZStack(alignment: .bottom) {
+                TabView(selection: $selectedTab) {
+                    ChannelListView()
+                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .tabItem {
+                            Label("Channels", systemImage: "radio")
+                        }
+                        .tag(0)
 
-                FavoritesView()
-                    .tabItem {
-                        Label("Favorites", systemImage: "star.fill")
-                    }
-                    .tag(1)
+                    FavoritesView()
+                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .tabItem {
+                            Label("Favorites", systemImage: "star.fill")
+                        }
+                        .tag(1)
 
-                SavedSongsView()
-                    .tabItem {
-                        Label("Loved", systemImage: "heart.fill")
-                    }
-                    .tag(2)
+                    SavedSongsView()
+                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .tabItem {
+                            Label("Loved", systemImage: "heart.fill")
+                        }
+                        .tag(2)
 
-                SettingsView()
-                    .tabItem {
-                        Label("Settings", systemImage: "gear")
-                    }
-                    .tag(3)
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+                    SettingsView()
+                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .tabItem {
+                            Label("Settings", systemImage: "gear")
+                        }
+                        .tag(3)
+                }
+
                 if audioPlayer.currentChannel != nil {
                     MiniPlayerView()
+                        .padding(.bottom, 49)
                 }
             }
             .glassContainer()
@@ -65,6 +71,13 @@ struct ContentView: View {
                     splashOpacity = 0
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var miniPlayerSpacer: some View {
+        if audioPlayer.currentChannel != nil {
+            Color.clear.frame(height: 60)
         }
     }
 
