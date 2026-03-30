@@ -12,36 +12,34 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            ZStack(alignment: .bottom) {
-                TabView(selection: $selectedTab) {
-                    ChannelListView()
-                        .tabItem {
-                            Label("Channels", systemImage: "radio")
-                        }
-                        .tag(0)
+            TabView(selection: $selectedTab) {
+                ChannelListView()
+                    .tabItem {
+                        Label("Channels", systemImage: "radio")
+                    }
+                    .tag(0)
 
-                    FavoritesView()
-                        .tabItem {
-                            Label("Favorites", systemImage: "star.fill")
-                        }
-                        .tag(1)
+                FavoritesView()
+                    .tabItem {
+                        Label("Favorites", systemImage: "star.fill")
+                    }
+                    .tag(1)
 
-                    SavedSongsView()
-                        .tabItem {
-                            Label("Loved", systemImage: "heart.fill")
-                        }
-                        .tag(2)
+                SavedSongsView()
+                    .tabItem {
+                        Label("Loved", systemImage: "heart.fill")
+                    }
+                    .tag(2)
 
-                    SettingsView()
-                        .tabItem {
-                            Label("Settings", systemImage: "gear")
-                        }
-                        .tag(3)
-                }
-
+                SettingsView()
+                    .tabItem {
+                        Label("Settings", systemImage: "gear")
+                    }
+                    .tag(3)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 if audioPlayer.currentChannel != nil {
                     MiniPlayerView()
-                        .padding(.bottom, 49) // TabBar height offset
                 }
             }
             .glassContainer()
