@@ -118,6 +118,8 @@ struct ESPNGameInfo: Equatable {
     let period: Int?                   // 1-4
     // MLB
     let outs: Int?                     // 0-3 during live game
+    let balls: Int?                    // 0-3 during live at-bat
+    let strikes: Int?                  // 0-2 during live at-bat
     // NFL
     let possessionTeamAbbr: String?    // "GB" — team with the ball
     let downDistanceText: String?      // "1st & 10"
@@ -180,7 +182,7 @@ struct ESPNGameInfo: Equatable {
     private var liveDetail: String {
         switch league {
         case .mlb:
-            return "\(statusDetail)\(outsText)"
+            return "\(statusDetail)\(countText)\(outsText)"
         case .nba, .nhl:
             let clock = displayClock ?? ""
             let periodStr = period.map { ordinal($0) + " " + league.periodName } ?? ""
@@ -193,6 +195,11 @@ struct ESPNGameInfo: Equatable {
             if let clock = displayClock, !clock.isEmpty { parts.append(clock) }
             return parts.joined(separator: ", ")
         }
+    }
+
+    private var countText: String {
+        guard let balls, let strikes else { return "" }
+        return ", \(balls)-\(strikes)"
     }
 
     private var outsText: String {

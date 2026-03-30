@@ -119,21 +119,28 @@ final class ESPNScoreService: ObservableObject {
             var allEvents: [(ESPNLeague, [ESPNEvent])] = []
             var fetchedLeagues: Set<ESPNLeague> = []
 
-            await withTaskGroup(of: (ESPNLeague, [ESPNEvent])?.self) { group in
+            await withTaskGroup(of: (ESPNLeague, Result<[ESPNEvent], Error>).self) { group in
                 for league in Self.allLeagues {
                     group.addTask { [session] in
-                        guard let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/\(league.sportPath)/scoreboard") else { return nil }
+                        guard let url = URL(string: "https://site.api.espn.com/apis/site/v2/sports/\(league.sportPath)/scoreboard") else {
+                            return (league, .failure(URLError(.badURL)))
+                        }
                         do {
                             let (data, _) = try await session.data(from: url)
                             let response = try JSONDecoder().decode(ESPNScoreboardResponse.self, from: data)
-                            return (league, response.events)
+                            return (league, .success(response.events))
                         } catch {
-                            return nil
+                            return (league, .failure(error))
                         }
                     }
                 }
-                for await result in group {
-                    if let result { allEvents.append(result) }
+                for await (league, result) in group {
+                    switch result {
+                    case .success(let events):
+                        allEvents.append((league, events))
+                    case .failure(let error):
+                        self.log.log("ESPN \(league.rawValue.uppercased()) fetch failed: \(error.localizedDescription)", category: .espn)
+                    }
                 }
             }
 
@@ -155,7 +162,10 @@ final class ESPNScoreService: ObservableObject {
                 matchEvents(events, league: league, into: &newGames)
             }
 
-            if gamesByChannel != newGames { gamesByChannel = newGames }
+            if gamesByChannel != newGames {
+                logGameChanges(old: gamesByChannel, new: newGames)
+                gamesByChannel = newGames
+            }
             adjustPollRateIfNeeded()
             let scoreLogLine = "ESPN scoreboard: \(totalEvents) events across \(allEvents.count) leagues, \(newGames.count) matched to channels"
             if scoreLogLine != lastScoreboardLogLine {
@@ -191,6 +201,8 @@ final class ESPNScoreService: ObservableObject {
                 displayClock: comp.status.displayClock,
                 period: comp.status.period,
                 outs: comp.situation?.outs,
+                balls: comp.situation?.balls,
+                strikes: comp.situation?.strikes,
                 possessionTeamAbbr: possessionAbbr,
                 downDistanceText: comp.situation?.shortDownDistanceText ?? comp.situation?.downDistanceText
             )
@@ -205,6 +217,33 @@ final class ESPNScoreService: ObservableObject {
             let awayKey = away.team.displayName.lowercased()
             if let channelIDs = teamToChannelIDs[awayKey] {
                 for id in channelIDs { games[id] = gameInfo }
+            }
+        }
+    }
+
+    // MARK: - Change Logging
+
+    /// Log per-game changes so we have visibility into score/inning updates.
+    /// Only logs games we're actively displaying (matched to a channel).
+    private func logGameChanges(old: [String: ESPNGameInfo], new: [String: ESPNGameInfo]) {
+        // Deduplicate: multiple channel IDs can map to the same game.
+        // Use the game key (away-home) to avoid duplicate log lines.
+        var logged = Set<String>()
+        for (channelID, newGame) in new {
+            let gameKey = "\(newGame.awayAbbr)-\(newGame.homeAbbr)"
+            guard !logged.contains(gameKey) else { continue }
+            guard let oldGame = old[channelID] else {
+                // New game appeared
+                logged.insert(gameKey)
+                log.log("ESPN game added: \(newGame.displayText)", category: .espn)
+                continue
+            }
+            let scoreChanged = oldGame.awayScore != newGame.awayScore || oldGame.homeScore != newGame.homeScore
+            let inningChanged = oldGame.statusDetail != newGame.statusDetail
+            let stateChanged = oldGame.state != newGame.state
+            if scoreChanged || inningChanged || stateChanged {
+                logged.insert(gameKey)
+                log.log("ESPN update: \(newGame.displayText)", category: .espn)
             }
         }
     }

@@ -55,6 +55,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var isReducedBufferRetry = false
     private let bufferingTimeoutInterval: TimeInterval = 20
     private let reducedBufferDuration: TimeInterval = 3
+    /// Last decoded audio frame count observed with active data flow.
+    private var lastActiveDecodedAudio: Int32 = 0
+    /// When data flow was last seen (demux or input bitrate > 0).
+    private var lastDataFlowTime: Date?
+    /// How long data flow can be absent before triggering auto-reconnect.
+    private let dataFlowStaleTimeout: TimeInterval = 8
     private var bufferingBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
     private var lastNowPlayingTitle: String?
     private var lastNowPlayingArtist: String?
@@ -511,6 +517,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private func startStream(for channel: Channel) {
         streamStartTime = Date()
         hasReceivedData = false
+        lastDataFlowTime = nil
+        lastActiveDecodedAudio = 0
 
         // Request background execution time so the 20s buffering timeout
         // can fire even when iOS would otherwise suspend the process
@@ -1024,6 +1032,12 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         let awaitingInitialBuffer = streamStartTime != nil && audioDecoded == 0
             && !isPlayingBufferedFile
 
+        // Track data flow for the silent-dropout watchdog.
+        if hasDataFlow || vlcIsPlaying {
+            lastDataFlowTime = Date()
+            lastActiveDecodedAudio = audioDecoded
+        }
+
         if (vlcIsPlaying || vlcState == .playing) && !awaitingInitialBuffer {
             isPlaying = true
             isBuffering = false
@@ -1050,8 +1064,21 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                 let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
                 if bytesRead > 0 { hasReceivedData = true; vlcZeroByteRetryCount = 0 }
 
+                // Silent dropout watchdog: stream was previously playing
+                // (has received data, decoded audio frames) but data flow
+                // has now stopped without any VLC error or state change.
+                // Auto-reconnect after dataFlowStaleTimeout seconds.
+                if hasReceivedData, lastActiveDecodedAudio > 0,
+                   let lastFlow = lastDataFlowTime,
+                   Date().timeIntervalSince(lastFlow) > dataFlowStaleTimeout,
+                   let channel = currentChannel {
+                    log.log("Silent dropout detected — no data flow for \(Int(dataFlowStaleTimeout))s after \(lastActiveDecodedAudio) decoded frames, reconnecting channel=\"\(channel.name)\"", category: .player)
+                    lastLoggedVLCState = nil
+                    isReducedBufferRetry = false
+                    startStream(for: channel)
+                }
                 // Timeout: if buffering too long with no meaningful data, retry with smaller buffer
-                if let start = streamStartTime, !hasReceivedData,
+                else if let start = streamStartTime, !hasReceivedData,
                    Date().timeIntervalSince(start) > bufferingTimeoutInterval,
                    !isReducedBufferRetry,
                    let channel = currentChannel {
