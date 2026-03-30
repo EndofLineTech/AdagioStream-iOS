@@ -184,11 +184,14 @@ final class ESPNScoreService: ObservableObject {
         }
     }
 
-    private static let espnDateFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
+    private static func parseESPNDate(_ string: String) -> Date? {
+        let withFrac = ISO8601DateFormatter()
+        withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFrac.date(from: string) { return date }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: string)
+    }
 
     private func matchEvents(_ events: [ESPNEvent], league: ESPNLeague, into games: inout [String: ESPNGameInfo]) {
         for event in events {
@@ -203,7 +206,7 @@ final class ESPNScoreService: ObservableObject {
                 else if away.team.id == possID { possessionAbbr = away.team.abbreviation }
             }
 
-            let gameDate = Self.espnDateFormatter.date(from: event.date)
+            let gameDate = Self.parseESPNDate(event.date)
 
             let gameInfo = ESPNGameInfo(
                 league: league,
