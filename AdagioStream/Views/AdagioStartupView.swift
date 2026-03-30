@@ -40,7 +40,7 @@ struct AdagioStartupView: View {
         .overlay(alignment: .bottom) {
             Text("Adagio Stream")
                 .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .opacity(textOpacity)
                 .padding(.bottom, 120)
         }
