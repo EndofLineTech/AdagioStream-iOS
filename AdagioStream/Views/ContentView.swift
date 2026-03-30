@@ -77,7 +77,7 @@ struct ContentView: View {
     @ViewBuilder
     private var miniPlayerSpacer: some View {
         if audioPlayer.currentChannel != nil {
-            Color.clear.frame(height: 60)
+            Color.clear.frame(height: 80)
         }
     }
 
