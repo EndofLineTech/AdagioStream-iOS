@@ -8,6 +8,7 @@ struct ESPNScoreboardResponse: Decodable {
 
 struct ESPNEvent: Decodable, Identifiable {
     let id: String
+    let date: String                   // ISO-8601 UTC, e.g. "2024-03-30T17:05Z"
     let shortName: String              // "MIN @ BOS"
     let competitions: [ESPNCompetition]
 
@@ -116,6 +117,7 @@ struct ESPNGameInfo: Equatable {
     let statusDetail: String           // "Bot 7th", "8:35 - 1st", "Final"
     let displayClock: String?          // "8:35"
     let period: Int?                   // 1-4
+    let gameDate: Date?                // Parsed UTC start time from ESPN
     // MLB
     let outs: Int?                     // 0-3 during live game
     let balls: Int?                    // 0-3 during live at-bat
@@ -135,7 +137,7 @@ struct ESPNGameInfo: Equatable {
     var displayText: String {
         switch state {
         case .pre:
-            return "\(awayAbbr)\(recordText(awayRecord)) @ \(homeAbbr)\(recordText(homeRecord)) · \(statusDetail)"
+            return "\(awayAbbr)\(recordText(awayRecord)) @ \(homeAbbr)\(recordText(homeRecord)) · \(localStartTime)"
         case .live:
             return "\(scoreLine) · \(liveDetail)"
         case .post:
@@ -160,7 +162,9 @@ struct ESPNGameInfo: Equatable {
         switch state {
         case .live:
             return liveDetail
-        case .pre, .post:
+        case .pre:
+            return localStartTime
+        case .post:
             return statusDetail
         }
     }
@@ -206,6 +210,28 @@ struct ESPNGameInfo: Equatable {
         guard let outs else { return "" }
         return ", \(outs) \(outs == 1 ? "Out" : "Outs")"
     }
+
+    /// Formats the game start time in the user's local timezone.
+    /// Shows "Today, 1:05 PM" or "3/30, 1:05 PM" depending on the date.
+    private var localStartTime: String {
+        guard let date = gameDate else { return statusDetail }
+        if Calendar.current.isDateInToday(date) {
+            return "Today, \(Self.timeFormatter.string(from: date))"
+        }
+        return Self.dateTimeFormatter.string(from: date)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "M/d, h:mm a"
+        return f
+    }()
 
     private func recordText(_ record: String?) -> String {
         record.map { " (\($0))" } ?? ""
