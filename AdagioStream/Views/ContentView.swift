@@ -15,28 +15,28 @@ struct ContentView: View {
             ZStack(alignment: .bottom) {
                 TabView(selection: $selectedTab) {
                     ChannelListView()
-                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
                         .tabItem {
                             Label("Channels", systemImage: "radio")
                         }
                         .tag(0)
 
                     FavoritesView()
-                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
                         .tabItem {
                             Label("Favorites", systemImage: "star.fill")
                         }
                         .tag(1)
 
                     SavedSongsView()
-                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
                         .tabItem {
                             Label("Loved", systemImage: "heart.fill")
                         }
                         .tag(2)
 
                     SettingsView()
-                        .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayerSpacer }
+                        .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
                         .tabItem {
                             Label("Settings", systemImage: "gear")
                         }
@@ -74,11 +74,8 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var miniPlayerSpacer: some View {
-        if audioPlayer.currentChannel != nil {
-            Color.clear.frame(height: 100)
-        }
+    private var miniPlayerBottomInset: CGFloat {
+        audioPlayer.currentChannel != nil ? 60 : 0
     }
 
     private func performStartupStream() async {
