@@ -128,6 +128,7 @@ struct ChannelListView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
