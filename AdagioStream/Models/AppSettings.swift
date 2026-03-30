@@ -95,6 +95,16 @@ enum ChannelSortOrder: String, Codable, CaseIterable {
     }
 }
 
+enum ESPNLivePollInterval: Int, Codable, CaseIterable {
+    case five = 5
+    case ten = 10
+    case fifteen = 15
+    case thirty = 30
+
+    var label: String { "\(rawValue)s" }
+    var interval: TimeInterval { TimeInterval(rawValue) }
+}
+
 struct AppSettings: Codable {
     var bufferDuration: TimeInterval
     var appearanceMode: AppearanceMode
@@ -105,6 +115,7 @@ struct AppSettings: Codable {
     var groupSortOrder: ChannelSortOrder
     var debugLoggingEnabled: Bool
     var artworkDisplayMode: ArtworkDisplayMode
+    var espnLivePollInterval: ESPNLivePollInterval
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -115,7 +126,8 @@ struct AppSettings: Codable {
         channelSortOrder: ChannelSortOrder = .providerOrder,
         groupSortOrder: ChannelSortOrder = .providerOrder,
         debugLoggingEnabled: Bool = false,
-        artworkDisplayMode: ArtworkDisplayMode = .coverArt
+        artworkDisplayMode: ArtworkDisplayMode = .coverArt,
+        espnLivePollInterval: ESPNLivePollInterval = .fifteen
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -126,6 +138,7 @@ struct AppSettings: Codable {
         self.groupSortOrder = groupSortOrder
         self.debugLoggingEnabled = debugLoggingEnabled
         self.artworkDisplayMode = artworkDisplayMode
+        self.espnLivePollInterval = espnLivePollInterval
     }
 
     static let `default` = AppSettings()
@@ -141,6 +154,7 @@ struct AppSettings: Codable {
         groupSortOrder = try container.decode(ChannelSortOrder.self, forKey: .groupSortOrder)
         debugLoggingEnabled = try container.decode(Bool.self, forKey: .debugLoggingEnabled)
         artworkDisplayMode = try container.decodeIfPresent(ArtworkDisplayMode.self, forKey: .artworkDisplayMode) ?? .coverArt
+        espnLivePollInterval = try container.decodeIfPresent(ESPNLivePollInterval.self, forKey: .espnLivePollInterval) ?? .fifteen
     }
 }
 

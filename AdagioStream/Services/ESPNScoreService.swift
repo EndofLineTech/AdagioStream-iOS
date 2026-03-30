@@ -10,7 +10,7 @@ final class ESPNScoreService: ObservableObject {
 
     private let log = DebugLogger.shared
     private let session = PinnedURLSession.espn
-    private let livePollInterval: TimeInterval = 15
+    private var livePollInterval: TimeInterval = 15
     private let idlePollInterval: TimeInterval = 60
 
     private var pollTimer: Timer?
@@ -69,6 +69,15 @@ final class ESPNScoreService: ObservableObject {
     }
 
     // MARK: - Polling Control
+
+    func setLivePollInterval(_ interval: TimeInterval) {
+        guard interval != livePollInterval else { return }
+        livePollInterval = interval
+        if pollingWanted, hasLiveGame {
+            log.log("ESPN live poll interval changed to \(Int(interval))s", category: .espn)
+            startPolling()
+        }
+    }
 
     func setPollingEnabled(_ enabled: Bool) {
         pollingWanted = enabled

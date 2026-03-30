@@ -93,6 +93,11 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Picker("Live Score Updates", selection: espnLivePollBinding) {
+                        ForEach(ESPNLivePollInterval.allCases, id: \.self) { interval in
+                            Text(interval.label).tag(interval)
+                        }
+                    }
                 }
 
                 Section {
@@ -327,6 +332,15 @@ struct SettingsView: View {
             get: { viewModel.settings.artworkDisplayMode },
             set: { newValue in
                 Task { await viewModel.updateArtworkDisplayMode(newValue) }
+            }
+        )
+    }
+
+    private var espnLivePollBinding: Binding<ESPNLivePollInterval> {
+        Binding(
+            get: { viewModel.settings.espnLivePollInterval },
+            set: { newValue in
+                Task { await viewModel.updateESPNLivePollInterval(newValue) }
             }
         )
     }

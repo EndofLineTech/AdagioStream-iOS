@@ -23,6 +23,7 @@ final class SettingsViewModel: ObservableObject {
         audioPlayer.updateBufferDuration(settings.bufferDuration)
         audioPlayer.artworkDisplayMode = settings.artworkDisplayMode
         DebugLogger.shared.isEnabled = settings.debugLoggingEnabled
+        ESPNScoreService.shared.setLivePollInterval(settings.espnLivePollInterval.interval)
     }
 
     func saveSettings() async {
@@ -68,6 +69,12 @@ final class SettingsViewModel: ObservableObject {
         settings.artworkDisplayMode = mode
         audioPlayer.artworkDisplayMode = mode
         audioPlayer.refreshNowPlayingInfo()
+        await saveSettings()
+    }
+
+    func updateESPNLivePollInterval(_ interval: ESPNLivePollInterval) async {
+        settings.espnLivePollInterval = interval
+        ESPNScoreService.shared.setLivePollInterval(interval.interval)
         await saveSettings()
     }
 
