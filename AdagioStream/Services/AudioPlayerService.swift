@@ -47,6 +47,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var streamProbeTask: URLSessionDataTask?
     private var probeStartTime: Date?
     private let probeTimeout: TimeInterval = 45
+    private var lastProbeHTTPStatus: Int?
     private var pendingPlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
@@ -583,6 +584,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             log.log("Connection timeout (\(Int(probeTimeout))s) — unable to reach stream server, channel=\"\(channel.name)\"", category: .player)
             probeStartTime = nil
             vlcZeroByteRetryCount = 0
+            lastProbeHTTPStatus = nil
             isBuffering = false
             error = "Unable to connect — check your network connection."
             return
@@ -591,11 +593,14 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         // Cap VLC-level retries: if the server is reachable but VLC
         // repeatedly gets 0 bytes, the stream itself is broken.
         if vlcZeroByteRetryCount >= maxVLCZeroByteRetries {
-            log.log("VLC failed \(vlcZeroByteRetryCount) times with 0 bytes despite server being reachable — giving up, channel=\"\(channel.name)\"", category: .player)
+            let statusNote = lastProbeHTTPStatus.map { " (last HTTP \($0))" } ?? ""
+            log.log("VLC failed \(vlcZeroByteRetryCount) times with 0 bytes despite server being reachable\(statusNote) — giving up, channel=\"\(channel.name)\"", category: .player)
+            let userError = streamErrorMessage(httpStatus: lastProbeHTTPStatus)
             probeStartTime = nil
             vlcZeroByteRetryCount = 0
+            lastProbeHTTPStatus = nil
             isBuffering = false
-            error = "Stream unavailable — try again or switch channels."
+            error = userError
             return
         }
 
@@ -617,13 +622,28 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                         self.probeAndRetryStream(for: channel)
                     }
                 } else {
+                    let httpStatus = (response as? HTTPURLResponse)?.statusCode
+                    self.lastProbeHTTPStatus = httpStatus
+                    let statusTag = httpStatus.map { " (HTTP \($0))" } ?? ""
+
+                    // Auth failure — don't waste retries, fail fast
+                    if let code = httpStatus, code == 401 || code == 403 {
+                        self.log.log("Stream probe got HTTP \(code) — authentication rejected, channel=\"\(channel.name)\"", category: .player)
+                        self.probeStartTime = nil
+                        self.vlcZeroByteRetryCount = 0
+                        self.lastProbeHTTPStatus = nil
+                        self.isBuffering = false
+                        self.error = "Authentication failed — check your provider credentials."
+                        return
+                    }
+
                     // Server responded — wait with exponential backoff before
                     // retrying VLC, so we don't spin in a tight loop when the
                     // server accepts connections but the stream has no data.
                     self.vlcZeroByteRetryCount += 1
                     let backoff = min(Double(1 << (self.vlcZeroByteRetryCount - 1)), 8.0) // 1s, 2s, 4s, 8s, 8s
                     let totalElapsed = Date().timeIntervalSince(self.probeStartTime ?? Date())
-                    self.log.log("Stream server reachable after \(String(format: "%.0f", totalElapsed))s, retrying VLC in \(String(format: "%.0f", backoff))s (attempt \(self.vlcZeroByteRetryCount)/\(self.maxVLCZeroByteRetries)), channel=\"\(channel.name)\"", category: .player)
+                    self.log.log("Stream server reachable\(statusTag) after \(String(format: "%.0f", totalElapsed))s, retrying VLC in \(String(format: "%.0f", backoff))s (attempt \(self.vlcZeroByteRetryCount)/\(self.maxVLCZeroByteRetries)), channel=\"\(channel.name)\"", category: .player)
                     DispatchQueue.main.asyncAfter(deadline: .now() + backoff) { [weak self] in
                         guard let self, self.currentChannel?.id == channel.id else { return }
                         self.probeStartTime = nil
@@ -634,6 +654,25 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             }
         }
         streamProbeTask?.resume()
+    }
+
+    /// Returns a user-facing error message based on the last HTTP status from probing.
+    private func streamErrorMessage(httpStatus: Int?) -> String {
+        guard let code = httpStatus else {
+            return "Stream unavailable — try again or switch channels."
+        }
+        switch code {
+        case 200:
+            return "Server responded but sent no stream data — the source may be down. Try again later."
+        case 401, 403:
+            return "Authentication failed — check your provider credentials."
+        case 404:
+            return "Stream not found — the channel may have been removed by the provider."
+        case 500...599:
+            return "Server error (HTTP \(code)) — the provider may be having issues. Try again later."
+        default:
+            return "Stream unavailable (HTTP \(code)) — try again or switch channels."
+        }
     }
 
     /// Called when the app enters/leaves the background.
@@ -1110,7 +1149,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
                     mediaPlayer.media = nil
                     isPlaying = false
                     isBuffering = false
-                    error = "Unable to connect — slow or no network. Try again."
+                    error = "Unable to connect — no data received after multiple attempts. Check your network or provider status."
                 }
             case .paused:
                 isPlaying = false
