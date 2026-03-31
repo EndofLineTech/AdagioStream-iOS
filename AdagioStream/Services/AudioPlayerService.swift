@@ -51,6 +51,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
     private var streamStartTime: Date?
+    private var wasAwaitingInitialBuffer = false
     private var hasReceivedData = false
     private var isReducedBufferRetry = false
     private let bufferingTimeoutInterval: TimeInterval = 20
@@ -516,6 +517,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
     private func startStream(for channel: Channel) {
         streamStartTime = Date()
+        wasAwaitingInitialBuffer = false
         hasReceivedData = false
         lastDataFlowTime = nil
         lastActiveDecodedAudio = 0
@@ -1038,6 +1040,14 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             lastActiveDecodedAudio = audioDecoded
         }
 
+        // Log when the initial buffer fill completes (awaitingInitialBuffer flips true→false).
+        if wasAwaitingInitialBuffer && !awaitingInitialBuffer, let start = streamStartTime {
+            let elapsed = Date().timeIntervalSince(start)
+            let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
+            log.log("Initial buffer filled: elapsed=\(String(format: "%.1f", elapsed))s, decodedAudio=\(audioDecoded), readBytes=\(bytesRead), vlcState=\(vlcStateName(vlcState)), isPlaying=\(vlcIsPlaying)", category: .player)
+            wasAwaitingInitialBuffer = false
+        }
+
         if (vlcIsPlaying || vlcState == .playing) && !awaitingInitialBuffer {
             isPlaying = true
             isBuffering = false
@@ -1052,6 +1062,7 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         } else if awaitingInitialBuffer && (vlcIsPlaying || hasDataFlow) {
             // VLC engine is running but no audio decoded yet — still filling
             // the network-caching buffer.  Keep showing buffering state.
+            wasAwaitingInitialBuffer = true
             isBuffering = true
             isPlaying = false
             let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
