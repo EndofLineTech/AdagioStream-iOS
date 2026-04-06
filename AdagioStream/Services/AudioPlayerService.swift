@@ -861,6 +861,15 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
     }
 
+    /// Full session teardown — clears interruption state so the stream
+    /// won't auto-resume on next CarPlay connect.  Use this when the user
+    /// explicitly ends a session (e.g. CarPlay disconnect).
+    func stopAndClearInterruption() {
+        interruptedChannel = nil
+        interruptionTime = nil
+        stop()
+    }
+
     func stop() {
         log.log("stop() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         // Note: do NOT clear interruptedChannel here — stop() is called

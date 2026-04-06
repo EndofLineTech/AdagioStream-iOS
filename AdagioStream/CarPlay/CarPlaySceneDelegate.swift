@@ -30,6 +30,6 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         ESPNScoreService.shared.setPollingEnabled(false)
         self.interfaceController = nil
         self.templateManager = nil
-        AudioPlayerService.shared.stop()
+        AudioPlayerService.shared.stopAndClearInterruption()
     }
 }
