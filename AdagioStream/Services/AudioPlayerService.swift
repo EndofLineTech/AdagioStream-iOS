@@ -59,6 +59,9 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private let reducedBufferDuration: TimeInterval = 3
     /// Last decoded audio frame count observed with active data flow.
     private var lastActiveDecodedAudio: Int32 = 0
+    /// Tracked for detecting mid-stream buffer loss (audio blips).
+    private var lastLoggedLostAudioBuffers: Int32 = 0
+    private var lastLoggedDiscontinuity: Int32 = 0
     /// When data flow was last seen (demux or input bitrate > 0).
     private var lastDataFlowTime: Date?
     /// How long data flow can be absent before triggering auto-reconnect.
@@ -522,6 +525,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         hasReceivedData = false
         lastDataFlowTime = nil
         lastActiveDecodedAudio = 0
+        lastLoggedLostAudioBuffers = 0
+        lastLoggedDiscontinuity = 0
 
         // Request background execution time so the 20s buffering timeout
         // can fire even when iOS would otherwise suspend the process
@@ -1085,6 +1090,18 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             let bytesRead = mediaPlayer.media?.statistics.readBytes ?? 0
             log.log("Initial buffer filled: elapsed=\(String(format: "%.1f", elapsed))s, decodedAudio=\(audioDecoded), readBytes=\(bytesRead), vlcState=\(vlcStateName(vlcState)), isPlaying=\(vlcIsPlaying)", category: .player)
             wasAwaitingInitialBuffer = false
+        }
+
+        // Detect mid-stream audio buffer loss (causes audible blips/stutters).
+        if let media = mediaPlayer.media, !awaitingInitialBuffer {
+            let stats = media.statistics
+            let lostDelta = stats.lostAudioBuffers - lastLoggedLostAudioBuffers
+            let discDelta = stats.demuxDiscontinuity - lastLoggedDiscontinuity
+            if lostDelta > 0 || discDelta > 0 {
+                log.log("Buffer underrun: lostAudio=+\(lostDelta) (total=\(stats.lostAudioBuffers)), discontinuity=+\(discDelta) (total=\(stats.demuxDiscontinuity)), played=\(stats.playedAudioBuffers), in=\(String(format: "%.1f", stats.inputBitrate * 1000))kbps, demux=\(String(format: "%.1f", stats.demuxBitrate * 1000))kbps, read=\(stats.readBytes)B", category: .player)
+                lastLoggedLostAudioBuffers = stats.lostAudioBuffers
+                lastLoggedDiscontinuity = stats.demuxDiscontinuity
+            }
         }
 
         if (vlcIsPlaying || vlcState == .playing) && !awaitingInitialBuffer {
