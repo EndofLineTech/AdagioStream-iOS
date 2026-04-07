@@ -528,6 +528,25 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         lastLoggedLostAudioBuffers = 0
         lastLoggedDiscontinuity = 0
 
+        // Ensure the audio session is active before VLC connects.
+        // After CarPlay disconnects, iOS fires interruption .began but
+        // never sends .ended — leaving the session in an indeterminate
+        // state.  Without this, VLC can stall (20s timeout) or do a
+        // false-start play→buffering cycle.
+        if isRidingOutInterruption {
+            log.log("Clearing stale interruption state before stream start", category: .audioSession)
+            isRidingOutInterruption = false
+            interruptedChannel = nil
+            interruptionFallbackWorkItem?.cancel()
+            interruptionFallbackWorkItem = nil
+        }
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setActive(true)
+        } catch {
+            log.log("Session activate before play FAILED: \(error.localizedDescription)", category: .audioSession)
+        }
+
         // Request background execution time so the 20s buffering timeout
         // can fire even when iOS would otherwise suspend the process
         // (e.g., CarPlay with phone locked and VLC not yet producing audio).
