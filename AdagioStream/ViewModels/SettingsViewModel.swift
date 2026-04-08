@@ -65,6 +65,13 @@ final class SettingsViewModel: ObservableObject {
         providerManager.rebuildVisibleGroups()
     }
 
+    func updateChannelGroupingMode(_ mode: ChannelGroupingMode, providerManager: ProviderManager) async {
+        settings.channelGroupingMode = mode
+        await saveSettings()
+        providerManager.channelGroupingMode = mode
+        providerManager.rebuildVisibleGroups()
+    }
+
     func updateArtworkDisplayMode(_ mode: ArtworkDisplayMode) async {
         settings.artworkDisplayMode = mode
         audioPlayer.artworkDisplayMode = mode

@@ -118,6 +118,11 @@ struct SettingsView: View {
                 }
 
                 Section("Channels") {
+                    Picker("Grouping", selection: groupingModeBinding) {
+                        ForEach(ChannelGroupingMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
                     Picker("Group Sort", selection: groupSortBinding) {
                         ForEach(ChannelSortOrder.allCases, id: \.self) { order in
                             Text(order.label).tag(order)
@@ -298,6 +303,15 @@ struct SettingsView: View {
                     .presentationDetents([.medium, .large])
             }
         }
+    }
+
+    private var groupingModeBinding: Binding<ChannelGroupingMode> {
+        Binding(
+            get: { viewModel.settings.channelGroupingMode },
+            set: { newValue in
+                Task { await viewModel.updateChannelGroupingMode(newValue, providerManager: providerManager) }
+            }
+        )
     }
 
     private var channelSortBinding: Binding<ChannelSortOrder> {

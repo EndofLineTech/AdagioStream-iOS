@@ -5,6 +5,7 @@ struct FavoritesView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var sxmService: SXMMetadataService
     @State private var editMode: EditMode = .inactive
+    @State private var channelToAdd: Channel?
 
     var body: some View {
         NavigationStack {
@@ -23,6 +24,8 @@ struct FavoritesView: View {
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {
                                 Task { await providerManager.toggleFavorite(channel) }
+                            } onAddToPlaylist: {
+                                channelToAdd = channel
                             }
                         }
                         .onMove { providerManager.moveFavorite(from: $0, to: $1) }
@@ -34,6 +37,9 @@ struct FavoritesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { EditButton() }
             .environment(\.editMode, $editMode)
+            .sheet(item: $channelToAdd) { channel in
+                AddToPlaylistSheet(channel: channel)
+            }
         }
     }
 }

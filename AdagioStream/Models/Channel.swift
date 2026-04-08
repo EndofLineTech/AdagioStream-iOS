@@ -8,8 +8,9 @@ struct Channel: Codable, Identifiable, Hashable {
     let group: String
     let epgChannelID: String?
     var isFavorite: Bool
+    var providerName: String?
 
-    init(id: String, name: String, streamURL: URL, logoURL: URL? = nil, group: String = "Uncategorized", epgChannelID: String? = nil, isFavorite: Bool = false) {
+    init(id: String, name: String, streamURL: URL, logoURL: URL? = nil, group: String = "Uncategorized", epgChannelID: String? = nil, isFavorite: Bool = false, providerName: String? = nil) {
         self.id = id
         self.name = name
         self.streamURL = streamURL
@@ -17,5 +18,15 @@ struct Channel: Codable, Identifiable, Hashable {
         self.group = group
         self.epgChannelID = epgChannelID
         self.isFavorite = isFavorite
+        self.providerName = providerName
+    }
+
+    var providerGroupKey: String {
+        providerName ?? "Unknown Provider"
+    }
+
+    var sourceGroupKey: String {
+        let provider = providerName ?? "Unknown"
+        return "\(provider) — \(group)"
     }
 }

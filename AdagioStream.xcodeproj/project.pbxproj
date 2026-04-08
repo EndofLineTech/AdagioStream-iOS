@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		06D01EDA53CB232933383D28 /* NowPlayingAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */; };
+		0FA89C70038A8D734ACBE2B6 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */; };
 		107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32076461D1698393DE4F46B /* AppSettings.swift */; };
 		129D39FCB60C075DFBF45289 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
 		18545F1BF1AC67A74DF31F74 /* GroupManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */; };
@@ -16,9 +17,11 @@
 		1CC9AC317E17D1AD301D41B8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2591A7C2156E83DA1F2F30CE /* Assets.xcassets */; };
 		23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */; };
 		2B16DDBB8A24A98B6C6B2D5E /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 30FF9E502BE3A16ABFA545D6 /* VLCKitSPM */; };
+		33B81046142D5B7C9E01CA6A /* CustomPlaylistGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */; };
 		33C3578193ABE2495606970B /* CarPlayTemplateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */; };
 		34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */; };
 		3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */; };
+		403FD2102DB1357FB4DF8348 /* CustomPlaylistEntryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */; };
 		4533891205192A239243047A /* SXMTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7434EFB265DF59B08B4394B3 /* SXMTrack.swift */; };
 		45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759D39578A2906EC0C071E9A /* LiveActivityManager.swift */; };
 		462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */; };
@@ -28,7 +31,9 @@
 		52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D099586458688D813DF57122 /* SettingsView.swift */; };
 		54FED6DF6F6733D6BDC056D2 /* SavedSongsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */; };
 		573D9FD1792C3D1E63352518 /* RetryableAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */; };
+		575D753F86DFC83AEBD874E0 /* CustomPlaylistListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */; };
 		5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64EF86369F656FD2C55498D1 /* ProviderListView.swift */; };
+		5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */; };
 		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
 		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
 		6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B258B0EF620197CC9833E0 /* ChannelListView.swift */; };
@@ -44,7 +49,9 @@
 		9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */; };
 		9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */; };
 		9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */; };
+		A24C54030E71F5C2907BD1D4 /* CustomPlaylistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */; };
 		A260CCCD1191957DE0C6739E /* AdagioStartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5007C81620324434051842F8 /* AdagioStartupView.swift */; };
+		A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */; };
 		A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
 		ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */; };
@@ -57,7 +64,9 @@
 		C49FDC073B2434235202F075 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E40BDCF80A62A32C499B93B /* Constants.swift */; };
 		C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */; };
 		CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */; };
+		D3E64054FDAF984ADC9B424A /* CustomPlaylist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF95CAE631C108797282E82 /* CustomPlaylist.swift */; };
 		D9A0AB716D1C358EFD4BEA13 /* SXMMetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */; };
+		DB6E448BE506EEB225B8C176 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
 		E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
 		E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */; };
@@ -66,14 +75,25 @@
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
 		E6770E028819F7C202725955 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
 		F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20796E24826A70D504E871C4 /* PersistenceService.swift */; };
+		F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */; };
 		F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */; };
 		F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
+		FB623925315D5AAE757A30EE /* CustomPlaylistManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */; };
 		FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5186F218805196281702F1A /* FavoritesView.swift */; };
+		FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */; };
+		FF289466EAF3E3A99B8177FC /* AddManualEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D903CA55661DD9736AA33128 /* AddManualEntryView.swift */; };
 		FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */; };
 		FFF3BD50FC5A7ACD91C7DE7E /* ESPNModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB6CC077DE7865648EC949C /* ESPNModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0DFF0788FFEFC90973DBEFED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0C491AA48FB5EFE41DEFBA97 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C17E869021DD65C8DA520AAD;
+			remoteInfo = ShareExtension;
+		};
 		1B82872307F0A66CBC7A4DF1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0C491AA48FB5EFE41DEFBA97 /* Project object */;
@@ -83,20 +103,38 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		2E1C115EC7AEAF8BEB569CA3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DB6E448BE506EEB225B8C176 /* ShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongRowView.swift; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
 		128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNScoreService.swift; sourceTree = "<group>"; };
+		177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistGroup.swift; sourceTree = "<group>"; };
 		1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowView.swift; sourceTree = "<group>"; };
+		1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		1CB6CC077DE7865648EC949C /* ESPNModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNModels.swift; sourceTree = "<group>"; };
 		1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserTests.swift; sourceTree = "<group>"; };
+		1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistDetailView.swift; sourceTree = "<group>"; };
 		20796E24826A70D504E871C4 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheService.swift; sourceTree = "<group>"; };
 		2591A7C2156E83DA1F2F30CE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLoggerTests.swift; sourceTree = "<group>"; };
 		29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateManager.swift; sourceTree = "<group>"; };
 		2E0773D0B4CD7353ACEADE32 /* AdagioStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AdagioStream.entitlements; sourceTree = "<group>"; };
+		2EF95CAE631C108797282E82 /* CustomPlaylist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylist.swift; sourceTree = "<group>"; };
 		2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsTests.swift; sourceTree = "<group>"; };
 		3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProviderView.swift; sourceTree = "<group>"; };
 		411FC365142BB95B070F2EEA /* PinnedURLSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedURLSession.swift; sourceTree = "<group>"; };
@@ -106,6 +144,9 @@
 		48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListViewModel.swift; sourceTree = "<group>"; };
 		4E40BDCF80A62A32C499B93B /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		5007C81620324434051842F8 /* AdagioStartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStartupView.swift; sourceTree = "<group>"; };
+		5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UExporter.swift; sourceTree = "<group>"; };
+		5D4EB311F106E7633D4C135D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
 		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingAttributes.swift; sourceTree = "<group>"; };
@@ -116,6 +157,7 @@
 		79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManager.swift; sourceTree = "<group>"; };
 		79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupManagementView.swift; sourceTree = "<group>"; };
 		818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsManager.swift; sourceTree = "<group>"; };
+		820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistManager.swift; sourceTree = "<group>"; };
 		91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsView.swift; sourceTree = "<group>"; };
 		9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesViewModel.swift; sourceTree = "<group>"; };
@@ -129,20 +171,27 @@
 		9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPITests.swift; sourceTree = "<group>"; };
 		A1CF4778448EC75225E98912 /* EPGParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParserTests.swift; sourceTree = "<group>"; };
 		A49B5499FEB06793F277174C /* ProviderManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManagementView.swift; sourceTree = "<group>"; };
+		A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntryRowView.swift; sourceTree = "<group>"; };
 		B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AdagioStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B785664AF5E9481E580421E3 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassEffect+Helpers.swift"; sourceTree = "<group>"; };
 		BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntry.swift; sourceTree = "<group>"; };
+		BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		C7713A3C47F3B23E57849347 /* SavedSong.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSong.swift; sourceTree = "<group>"; };
+		CA8FBFCBC5F7D6224976D34F /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LGPL-2.1.txt"; sourceTree = "<group>"; };
+		CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntry.swift; sourceTree = "<group>"; };
 		CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamApp.swift; sourceTree = "<group>"; };
 		D099586458688D813DF57122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
+		D903CA55661DD9736AA33128 /* AddManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddManualEntryView.swift; sourceTree = "<group>"; };
 		DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParser.swift; sourceTree = "<group>"; };
 		DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeShiftBufferService.swift; sourceTree = "<group>"; };
 		DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListViewModel.swift; sourceTree = "<group>"; };
+		E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedURLSheet.swift; sourceTree = "<group>"; };
+		E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParser.swift; sourceTree = "<group>"; };
 		F32076461D1698393DE4F46B /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
@@ -165,6 +214,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		13A7B37CDDCF294F9B52B3D0 /* ShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				5D4EB311F106E7633D4C135D /* Info.plist */,
+				CA8FBFCBC5F7D6224976D34F /* ShareExtension.entitlements */,
+				BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */,
+			);
+			path = ShareExtension;
+			sourceTree = "<group>";
+		};
 		1787FE82B04EA5A83B5335BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
@@ -211,6 +270,7 @@
 			children = (
 				F8C3BD180713EE2506F860EF /* AdagioStream.app */,
 				B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */,
+				E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -257,6 +317,7 @@
 			children = (
 				C7BB60840AEC2DE630CE1B02 /* AdagioStream */,
 				3DC32907FEBD360A10C72847 /* AdagioStreamTests */,
+				13A7B37CDDCF294F9B52B3D0 /* ShareExtension */,
 				37BE24923E1012894F65BC0D /* Products */,
 			);
 			sourceTree = "<group>";
@@ -275,6 +336,9 @@
 				F32076461D1698393DE4F46B /* AppSettings.swift */,
 				9CCAE274A593BD7364C5F6FD /* Channel.swift */,
 				F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */,
+				2EF95CAE631C108797282E82 /* CustomPlaylist.swift */,
+				CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */,
+				177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */,
 				BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */,
 				1CB6CC077DE7865648EC949C /* ESPNModels.swift */,
 				70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */,
@@ -309,6 +373,7 @@
 				9DCB0C46B512BF4D2919E11A /* ContentView.swift */,
 				74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */,
 				2DD4B792FDAF9150EF40E64C /* Channels */,
+				A97EE5CFDF1DFF2BB9D2E698 /* CustomPlaylists */,
 				A2A244448F29868096069FC2 /* EPG */,
 				6FBC5F09C97033D356ED66F5 /* Favorites */,
 				2A145E596DEF592D695C7EDE /* Player */,
@@ -328,6 +393,19 @@
 				4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */,
 			);
 			path = Utilities;
+			sourceTree = "<group>";
+		};
+		A97EE5CFDF1DFF2BB9D2E698 /* CustomPlaylists */ = {
+			isa = PBXGroup;
+			children = (
+				D903CA55661DD9736AA33128 /* AddManualEntryView.swift */,
+				1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */,
+				1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */,
+				A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */,
+				62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */,
+				E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */,
+			);
+			path = CustomPlaylists;
 			sourceTree = "<group>";
 		};
 		C76C9EDDA0BC084E53537EC3 /* Models */ = {
@@ -380,12 +458,14 @@
 			isa = PBXGroup;
 			children = (
 				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
+				820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */,
 				765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */,
 				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
 				128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */,
 				23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */,
 				B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */,
 				759D39578A2906EC0C071E9A /* LiveActivityManager.swift */,
+				5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */,
 				DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */,
 				20796E24826A70D504E871C4 /* PersistenceService.swift */,
 				411FC365142BB95B070F2EEA /* PinnedURLSession.swift */,
@@ -401,6 +481,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		C17E869021DD65C8DA520AAD /* ShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AAD0CC638294D4AF15697C91 /* Build configuration list for PBXNativeTarget "ShareExtension" */;
+			buildPhases = (
+				4F1BCE22BEC835CF2F4F84A7 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShareExtension;
+			packageProductDependencies = (
+			);
+			productName = ShareExtension;
+			productReference = E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		C4219BBA2AD1D3270C174F2D /* AdagioStream */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 796BFB25902696DAD2B97C7B /* Build configuration list for PBXNativeTarget "AdagioStream" */;
@@ -408,10 +505,12 @@
 				A1924B7912424CF28B131F74 /* Sources */,
 				E6EADF806124B23FA2ADBEDF /* Resources */,
 				616D289C3562AE68D02BBB38 /* Frameworks */,
+				2E1C115EC7AEAF8BEB569CA3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				314968692B2B0C9F18A31191 /* PBXTargetDependency */,
 			);
 			name = AdagioStream;
 			packageProductDependencies = (
@@ -448,6 +547,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
+					C17E869021DD65C8DA520AAD = {
+						DevelopmentTeam = EWT2X7Q9ZJ;
+					};
 					C4219BBA2AD1D3270C174F2D = {
 						DevelopmentTeam = EWT2X7Q9ZJ;
 					};
@@ -472,6 +574,7 @@
 			targets = (
 				C4219BBA2AD1D3270C174F2D /* AdagioStream */,
 				F3279506301FB0CF807A03E5 /* AdagioStreamTests */,
+				C17E869021DD65C8DA520AAD /* ShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -491,6 +594,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4F1BCE22BEC835CF2F4F84A7 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0FA89C70038A8D734ACBE2B6 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6B1B0E3762342E3317356402 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -510,7 +621,9 @@
 			files = (
 				A260CCCD1191957DE0C6739E /* AdagioStartupView.swift in Sources */,
 				781DB2044B7B08D363A75F59 /* AdagioStreamApp.swift in Sources */,
+				FF289466EAF3E3A99B8177FC /* AddManualEntryView.swift in Sources */,
 				34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */,
+				5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */,
 				107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */,
 				E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */,
 				9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */,
@@ -522,6 +635,13 @@
 				6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */,
 				C49FDC073B2434235202F075 /* Constants.swift in Sources */,
 				E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */,
+				D3E64054FDAF984ADC9B424A /* CustomPlaylist.swift in Sources */,
+				A24C54030E71F5C2907BD1D4 /* CustomPlaylistDetailView.swift in Sources */,
+				A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */,
+				403FD2102DB1357FB4DF8348 /* CustomPlaylistEntryRowView.swift in Sources */,
+				33B81046142D5B7C9E01CA6A /* CustomPlaylistGroup.swift in Sources */,
+				575D753F86DFC83AEBD874E0 /* CustomPlaylistListView.swift in Sources */,
+				FB623925315D5AAE757A30EE /* CustomPlaylistManager.swift in Sources */,
 				3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */,
 				49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */,
 				C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */,
@@ -538,6 +658,7 @@
 				F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */,
 				652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */,
 				45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */,
+				F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
 				06D01EDA53CB232933383D28 /* NowPlayingAttributes.swift in Sources */,
@@ -559,6 +680,7 @@
 				987AA9ADB45C60F54C55F54E /* SavedSongsView.swift in Sources */,
 				52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */,
 				DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */,
+				FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */,
 				F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */,
 				462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */,
 			);
@@ -567,6 +689,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		314968692B2B0C9F18A31191 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C17E869021DD65C8DA520AAD /* ShareExtension */;
+			targetProxy = 0DFF0788FFEFC90973DBEFED /* PBXContainerItemProxy */;
+		};
 		ABF8FA9BBD92255BE3829053 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = C4219BBA2AD1D3270C174F2D /* AdagioStream */;
@@ -668,7 +795,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 84;
+				CURRENT_PROJECT_VERSION = 86;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -692,7 +819,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 84;
+				CURRENT_PROJECT_VERSION = 86;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -709,6 +836,50 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		A641DC468DF84DB0D9781122 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 85;
+				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Adagio Stream";
+				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.share-services";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app.share;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C66143E814F7360435B81B43 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 85;
+				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Adagio Stream";
+				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.share-services";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app.share;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		C7F4BEBB9CB64C71C3466CCB /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -816,6 +987,15 @@
 			buildConfigurations = (
 				5BE4F248EF0422A0DC5817E6 /* Debug */,
 				83EA438330A0ACD406CF8E1A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AAD0CC638294D4AF15697C91 /* Build configuration list for PBXNativeTarget "ShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C66143E814F7360435B81B43 /* Debug */,
+				A641DC468DF84DB0D9781122 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -11,6 +11,7 @@ enum Constants {
         static let enabledGroups = "enabledGroups.json"
         static let favoriteGroups = "favoriteGroups.json"
         static let savedSongs = "savedSongs.json"
+        static let customPlaylists = "customPlaylists.json"
     }
 
     enum TimeShift {

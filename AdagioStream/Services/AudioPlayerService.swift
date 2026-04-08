@@ -16,6 +16,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     @Published var error: String?
     @Published var streamBitrateKbps: Double = 0
     @Published var statusText: String = ""
+    @Published var streamTitle: String?
+    @Published var streamArtist: String?
     /// Use `listeningStartDate` and `accumulatedListeningTime` to compute duration in views.
     private(set) var listeningStartDate: Date?
     private(set) var accumulatedListeningTime: TimeInterval = 0
@@ -474,6 +476,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         error = nil
         streamBitrateKbps = 0
         statusText = ""
+        streamTitle = nil
+        streamArtist = nil
         vlcZeroByteRetryCount = 0
         if channelChanged {
             channelChangeRetryCount = 0
@@ -937,6 +941,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             bufferPlaybackStartedAt = nil
             sxmService.stopPolling()
         }
+        streamTitle = nil
+        streamArtist = nil
         clearNowPlayingInfo()
     }
 
@@ -1071,8 +1077,43 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     }
 
     nonisolated func mediaMetaDataDidChange(_ aMedia: VLCMedia) {
-        // Intentionally minimal — just note it happened
-        DebugLogger.shared.log("Media metadata changed", category: .vlcState)
+        let meta = aMedia.metaData
+        let nowPlaying = meta.nowPlaying
+        let metaTitle = meta.title
+        let metaArtist = meta.artist
+
+        DebugLogger.shared.log("Media metadata changed: nowPlaying=\(nowPlaying ?? "nil"), title=\(metaTitle ?? "nil"), artist=\(metaArtist ?? "nil")", category: .vlcState)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            var title: String?
+            var artist: String?
+
+            if let nowPlaying, !nowPlaying.isEmpty {
+                // ICY streams typically send "Artist - Title"
+                let parts = nowPlaying.components(separatedBy: " - ")
+                if parts.count >= 2 {
+                    artist = parts[0].trimmingCharacters(in: .whitespaces)
+                    title = parts.dropFirst().joined(separator: " - ").trimmingCharacters(in: .whitespaces)
+                } else {
+                    title = nowPlaying
+                }
+            }
+
+            // ID3 tags take precedence if available
+            if let metaTitle, !metaTitle.isEmpty, metaTitle != self.currentChannel?.name {
+                title = metaTitle
+            }
+            if let metaArtist, !metaArtist.isEmpty {
+                artist = metaArtist
+            }
+
+            let changed = title != self.streamTitle || artist != self.streamArtist
+            guard changed else { return }
+            self.streamTitle = title
+            self.streamArtist = artist
+            self.updateNowPlayingInfo()
+        }
     }
 
     // MARK: - State Sync
@@ -1364,6 +1405,10 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         } else if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
             title = game.nowPlayingTitle
             artist = game.nowPlayingSubtitle
+            artwork = currentArtwork
+        } else if let st = streamTitle {
+            title = st
+            artist = streamArtist ?? channel.name
             artwork = currentArtwork
         } else {
             title = channel.name

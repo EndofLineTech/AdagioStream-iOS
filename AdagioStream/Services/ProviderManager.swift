@@ -27,6 +27,7 @@ final class ProviderManager: ObservableObject {
     @Published private(set) var allGroupCounts: [String: Int] = [:]
     @Published var channelSortOrder: ChannelSortOrder = .providerOrder
     @Published var groupSortOrder: ChannelSortOrder = .providerOrder
+    @Published var channelGroupingMode: ChannelGroupingMode = .allGroups
     private var rawChannels: [Channel] = []
     private var hasInitializedCollapsedGroups = false
     private var isLoadingChannels = false
@@ -40,6 +41,7 @@ final class ProviderManager: ObservableObject {
             )
             channelSortOrder = settings.channelSortOrder
             groupSortOrder = settings.groupSortOrder
+            channelGroupingMode = settings.channelGroupingMode
             await loadProviders()
             if !providers.isEmpty {
                 await loadChannels()
@@ -150,7 +152,10 @@ final class ProviderManager: ObservableObject {
 
         for provider in providers.filter(\.isEnabled) {
             do {
-                let loaded = try await loadChannels(from: provider)
+                var loaded = try await loadChannels(from: provider)
+                for i in loaded.indices {
+                    loaded[i].providerName = provider.name
+                }
                 counts[provider.id] = loaded.count
                 allChannels.append(contentsOf: loaded)
             } catch {
@@ -334,7 +339,16 @@ final class ProviderManager: ObservableObject {
     }
 
     func rebuildVisibleGroups() {
-        let grouped = Dictionary(grouping: channels, by: \.group)
+        let groupKeyPath: KeyPath<Channel, String>
+        switch channelGroupingMode {
+        case .allGroups:
+            groupKeyPath = \.group
+        case .byProvider:
+            groupKeyPath = \.providerGroupKey
+        case .bySource:
+            groupKeyPath = \.sourceGroupKey
+        }
+        let grouped = Dictionary(grouping: channels, by: { $0[keyPath: groupKeyPath] })
         let favOrder = favoriteGroupOrder
         let chanSort = channelSortOrder
         let grpSort = groupSortOrder

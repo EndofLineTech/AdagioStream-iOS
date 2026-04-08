@@ -6,9 +6,11 @@ struct ContentView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @EnvironmentObject var sxmService: SXMMetadataService
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
     @State private var hasAttemptedStartupStream = false
     @State private var splashOpacity: Double = 1
+    @State private var sharedURLEntry: SharedURLEntry?
 
     var body: some View {
         ZStack {
@@ -35,12 +37,19 @@ struct ContentView: View {
                         }
                         .tag(2)
 
+                    CustomPlaylistListView()
+                        .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
+                        .tabItem {
+                            Label("My M3Us", systemImage: "music.note.list")
+                        }
+                        .tag(3)
+
                     SettingsView()
                         .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
                         .tabItem {
                             Label("Settings", systemImage: "gear")
                         }
-                        .tag(3)
+                        .tag(4)
                 }
 
                 if audioPlayer.currentChannel != nil {
@@ -72,10 +81,39 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active {
+                checkForSharedURLs()
+            }
+        }
+        .sheet(item: $sharedURLEntry) { entry in
+            SharedURLSheet(entry: entry)
+        }
     }
 
     private var miniPlayerBottomInset: CGFloat {
         audioPlayer.currentChannel != nil ? 60 : 0
+    }
+
+    private func checkForSharedURLs() {
+        guard let defaults = UserDefaults(suiteName: "group.com.adagiostream.app") else { return }
+        guard let pending = defaults.array(forKey: "pendingSharedURLs") as? [[String: String]],
+              let first = pending.first,
+              let urlString = first["url"],
+              let url = URL(string: urlString) else { return }
+
+        let name = first["name"] ?? url.host ?? url.absoluteString
+
+        // Remove the consumed entry
+        var remaining = pending
+        remaining.removeFirst()
+        if remaining.isEmpty {
+            defaults.removeObject(forKey: "pendingSharedURLs")
+        } else {
+            defaults.set(remaining, forKey: "pendingSharedURLs")
+        }
+
+        sharedURLEntry = SharedURLEntry(name: name, url: url)
     }
 
     private func performStartupStream() async {

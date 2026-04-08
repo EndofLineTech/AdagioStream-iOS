@@ -49,6 +49,11 @@ struct MiniPlayerView: View {
                                 .font(.caption)
                                 .foregroundStyle(game.state == .live ? .primary : .secondary)
                                 .lineLimit(1)
+                        } else if let streamTitle = audioPlayer.streamTitle {
+                            Text("\(audioPlayer.streamArtist.map { "\($0) — " } ?? "")\(streamTitle)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                         } else if let error = audioPlayer.error {
                             Text(error)
                                 .font(.caption)

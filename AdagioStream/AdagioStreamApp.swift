@@ -24,6 +24,7 @@ struct AdagioStreamApp: App {
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @StateObject private var providerManager = ProviderManager.shared
     @StateObject private var settingsViewModel = SettingsViewModel(audioPlayer: AudioPlayerService.shared)
+    @StateObject private var customPlaylistManager = CustomPlaylistManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -33,6 +34,7 @@ struct AdagioStreamApp: App {
                 .environmentObject(settingsViewModel)
                 .environmentObject(SXMMetadataService.shared)
                 .environmentObject(SavedSongsManager.shared)
+                .environmentObject(customPlaylistManager)
                 .preferredColorScheme(settingsViewModel.settings.appearanceMode.colorScheme)
                 .applyTextSize(settingsViewModel.settings.textSizeMode)
         }

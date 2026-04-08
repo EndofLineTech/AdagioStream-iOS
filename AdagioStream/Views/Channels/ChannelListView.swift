@@ -6,6 +6,7 @@ struct ChannelListView: View {
     @EnvironmentObject var sxmService: SXMMetadataService
     @ObservedObject var espnService = ESPNScoreService.shared
     @State private var searchText = ""
+    @State private var channelToAdd: Channel?
 
     var body: some View {
         NavigationStack {
@@ -60,6 +61,9 @@ struct ChannelListView: View {
                     await providerManager.loadChannels()
                 }
             }
+            .sheet(item: $channelToAdd) { channel in
+                AddToPlaylistSheet(channel: channel)
+            }
         }
     }
 
@@ -97,6 +101,8 @@ struct ChannelListView: View {
                                 audioPlayer.play(channel: channel)
                             } onToggleFavorite: {
                                 Task { await providerManager.toggleFavorite(channel) }
+                            } onAddToPlaylist: {
+                                channelToAdd = channel
                             }
                         }
                     }

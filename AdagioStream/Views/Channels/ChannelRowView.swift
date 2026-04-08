@@ -7,6 +7,7 @@ struct ChannelRowView: View {
     var espnGame: ESPNGameInfo? = nil
     let onTap: () -> Void
     let onToggleFavorite: () -> Void
+    var onAddToPlaylist: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -60,5 +61,24 @@ struct ChannelRowView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
+        .contextMenu {
+            if let onAddToPlaylist {
+                Button {
+                    onAddToPlaylist()
+                } label: {
+                    Label("Add to M3U", systemImage: "music.note.list")
+                }
+            }
+        }
+        .swipeActions(edge: .leading) {
+            if let onAddToPlaylist {
+                Button {
+                    onAddToPlaylist()
+                } label: {
+                    Label("Add to M3U", systemImage: "music.note.list")
+                }
+                .tint(.purple)
+            }
+        }
     }
 }

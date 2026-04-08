@@ -48,6 +48,15 @@ struct NowPlayingView: View {
                         Text(game.nowPlayingSubtitle)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                    } else if let streamTitle = audioPlayer.streamTitle {
+                        Text(streamTitle)
+                            .font(.headline)
+                            .multilineTextAlignment(.center)
+                        if let streamArtist = audioPlayer.streamArtist {
+                            Text(streamArtist)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     } else {
                         Text(audioPlayer.currentChannel?.group ?? "")
                             .font(.subheadline)

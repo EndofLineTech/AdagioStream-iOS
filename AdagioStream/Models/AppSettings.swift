@@ -81,6 +81,20 @@ enum ArtworkDisplayMode: String, Codable, CaseIterable {
     }
 }
 
+enum ChannelGroupingMode: String, Codable, CaseIterable {
+    case allGroups
+    case byProvider
+    case bySource
+
+    var label: String {
+        switch self {
+        case .allGroups: "All Groups"
+        case .byProvider: "By Provider"
+        case .bySource: "By Source"
+        }
+    }
+}
+
 enum ChannelSortOrder: String, Codable, CaseIterable {
     case providerOrder
     case natural
@@ -116,6 +130,7 @@ struct AppSettings: Codable {
     var debugLoggingEnabled: Bool
     var artworkDisplayMode: ArtworkDisplayMode
     var espnLivePollInterval: ESPNLivePollInterval
+    var channelGroupingMode: ChannelGroupingMode
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -127,7 +142,8 @@ struct AppSettings: Codable {
         groupSortOrder: ChannelSortOrder = .providerOrder,
         debugLoggingEnabled: Bool = false,
         artworkDisplayMode: ArtworkDisplayMode = .coverArt,
-        espnLivePollInterval: ESPNLivePollInterval = .fifteen
+        espnLivePollInterval: ESPNLivePollInterval = .fifteen,
+        channelGroupingMode: ChannelGroupingMode = .allGroups
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -139,6 +155,7 @@ struct AppSettings: Codable {
         self.debugLoggingEnabled = debugLoggingEnabled
         self.artworkDisplayMode = artworkDisplayMode
         self.espnLivePollInterval = espnLivePollInterval
+        self.channelGroupingMode = channelGroupingMode
     }
 
     static let `default` = AppSettings()
@@ -155,6 +172,7 @@ struct AppSettings: Codable {
         debugLoggingEnabled = try container.decode(Bool.self, forKey: .debugLoggingEnabled)
         artworkDisplayMode = try container.decodeIfPresent(ArtworkDisplayMode.self, forKey: .artworkDisplayMode) ?? .coverArt
         espnLivePollInterval = try container.decodeIfPresent(ESPNLivePollInterval.self, forKey: .espnLivePollInterval) ?? .fifteen
+        channelGroupingMode = try container.decodeIfPresent(ChannelGroupingMode.self, forKey: .channelGroupingMode) ?? .allGroups
     }
 }
 
