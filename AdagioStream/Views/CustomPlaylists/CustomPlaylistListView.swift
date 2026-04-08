@@ -69,7 +69,7 @@ struct CustomPlaylistListView: View {
                 Button("Create") {
                     let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
                     if !name.isEmpty {
-                        playlistManager.createPlaylist(name: name)
+                        _ = playlistManager.createPlaylist(name: name)
                     }
                 }
             }

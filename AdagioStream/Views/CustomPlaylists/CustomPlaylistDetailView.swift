@@ -83,7 +83,7 @@ struct CustomPlaylistDetailView: View {
             Button("Add") {
                 let name = newGroupName.trimmingCharacters(in: .whitespaces)
                 if !name.isEmpty {
-                    playlistManager.addGroup(named: name, to: playlistID)
+                    _ = playlistManager.addGroup(named: name, to: playlistID)
                 }
             }
         }
