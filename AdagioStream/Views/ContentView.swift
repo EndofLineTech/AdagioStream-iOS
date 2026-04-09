@@ -59,8 +59,8 @@ struct ContentView: View {
             }
             .glassContainer()
             .task { await performStartupStream() }
-            .onChange(of: selectedTab) {
-                let channelsVisible = selectedTab == 0 || selectedTab == 1
+            .onChange(of: selectedTab) { _, newValue in
+                let channelsVisible = newValue == 0 || newValue == 1
                 sxmService.setFeedPollingEnabled(channelsVisible)
                 ESPNScoreService.shared.setPollingEnabled(channelsVisible)
             }
@@ -81,8 +81,8 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: scenePhase) {
-            if scenePhase == .active {
+        .onChange(of: scenePhase) { _, newValue in
+            if newValue == .active {
                 checkForSharedURLs()
             }
         }

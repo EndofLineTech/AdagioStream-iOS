@@ -21,8 +21,8 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
-                    .onChange(of: viewModel.settings.appearanceMode) {
-                        Task { await viewModel.updateAppearance(viewModel.settings.appearanceMode) }
+                    .onChange(of: viewModel.settings.appearanceMode) { _, newValue in
+                        Task { await viewModel.updateAppearance(newValue) }
                     }
                 }
 
@@ -32,8 +32,8 @@ struct SettingsView: View {
                             Text(mode.label).tag(mode)
                         }
                     }
-                    .onChange(of: viewModel.settings.textSizeMode) {
-                        Task { await viewModel.updateTextSize(viewModel.settings.textSizeMode) }
+                    .onChange(of: viewModel.settings.textSizeMode) { _, newValue in
+                        Task { await viewModel.updateTextSize(newValue) }
                     }
                     Text("Preview: The quick brown fox")
                         .font(.body)
@@ -86,8 +86,8 @@ struct SettingsView: View {
                         ) {
                             Text("Buffer Duration")
                         }
-                        .onChange(of: viewModel.settings.bufferDuration) {
-                            Task { await viewModel.updateBufferDuration(viewModel.settings.bufferDuration) }
+                        .onChange(of: viewModel.settings.bufferDuration) { _, newValue in
+                            Task { await viewModel.updateBufferDuration(newValue) }
                         }
                         Text("Higher values improve stability on slow connections but increase initial load time.")
                             .font(.caption)

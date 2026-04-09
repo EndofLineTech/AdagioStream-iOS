@@ -9,7 +9,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    TARGETED_DEVICE_FAMILY: "1"
+    TARGETED_DEVICE_FAMILY: "1,2"
     DEAD_CODE_STRIPPING: true
     ENABLE_USER_SCRIPT_SANDBOXING: true
     CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING: YES_ERROR
@@ -56,20 +56,21 @@ targets:
     dependencies:
       - package: VLCKitSPM
       - target: ShareExtension
+      - target: AdagioStreamWidget
     info:
       path: AdagioStream/Info.plist
       properties:
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Adagio Stream
-        NSSupportsLiveActivities: false
+        NSSupportsLiveActivities: true
         UILaunchStoryboardName: LaunchScreen
         LSApplicationQueriesSchemes:
           - spotify
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsForMedia: true
         UIApplicationSceneManifest:
-          UIApplicationSupportsMultipleScenes: false
+          UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
             UIWindowSceneSessionRoleApplication:
               - UISceneConfigurationName: Default Configuration
@@ -81,13 +82,14 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "86"
+        CURRENT_PROJECT_VERSION: "87"
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
-        INFOPLIST_KEY_UIRequiresFullScreen: true
+        INFOPLIST_KEY_UIRequiresFullScreen: false
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
     entitlements:
       path: AdagioStream/AdagioStream.entitlements
       properties:
@@ -105,7 +107,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "86"
+        CURRENT_PROJECT_VERSION: "87"
         MARKETING_VERSION: "1.0"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services
@@ -124,6 +126,30 @@ targets:
         com.apple.security.application-groups:
           - group.com.adagiostream.app
 
+  AdagioStreamWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - AdagioStreamWidget
+      - path: AdagioStream/Models/NowPlayingAttributes.swift
+    dependencies:
+      - sdk: SwiftUI.framework
+      - sdk: WidgetKit.framework
+      - sdk: ActivityKit.framework
+    info:
+      path: AdagioStreamWidget/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.widget
+        DEVELOPMENT_TEAM: EWT2X7Q9ZJ
+        GENERATE_INFOPLIST_FILE: true
+        CURRENT_PROJECT_VERSION: "87"
+        MARKETING_VERSION: "1.0"
+        INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
+
   AdagioStreamTests:
     type: bundle.unit-test
     platform: iOS
@@ -140,6 +166,7 @@ schemes:
     build:
       targets:
         AdagioStream: all
+        AdagioStreamWidget: all
         AdagioStreamTests: [test]
     run:
       config: Debug
