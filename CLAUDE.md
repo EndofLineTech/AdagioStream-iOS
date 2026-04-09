@@ -2,6 +2,20 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Fresh Clone Setup
+
+After cloning the repo, set up beads before doing anything else:
+
+```bash
+chmod 700 .beads
+bd bootstrap
+bd import
+bd hooks install
+git config beads.role maintainer
+```
+
+This creates the local Dolt database and loads issues from the git-tracked `.beads/issues.jsonl`.
+
 ## Before Starting Work (MANDATORY)
 
 ALWAYS run these steps before writing any code:
@@ -71,8 +85,9 @@ Bump `CURRENT_PROJECT_VERSION` in `project.yml` when making code changes, then r
 3. **Close finished issues** — `bd close <id>` for every completed issue
 4. **Sync and push** — this is MANDATORY, every step:
    ```bash
+   bd export
+   git add .beads/issues.jsonl
    git pull --rebase
-   bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
