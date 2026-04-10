@@ -63,6 +63,7 @@ struct ChannelRowView: View {
         }
         .contentShape(Rectangle())
         .hoverEffect(.highlight)
+        .draggable(channel)
         .onTapGesture { onTap() }
         .contextMenu {
             if let onAddToPlaylist {

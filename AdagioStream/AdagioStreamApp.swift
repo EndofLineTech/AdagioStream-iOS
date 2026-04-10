@@ -38,6 +38,7 @@ struct AdagioStreamApp: App {
                 .preferredColorScheme(settingsViewModel.settings.appearanceMode.colorScheme)
                 .applyTextSize(settingsViewModel.settings.textSizeMode)
         }
+        .defaultSize(width: 1024, height: 768)
         .onChange(of: scenePhase) { _, newValue in
             let isBackground = newValue != .active
             audioPlayer.setBackgroundMode(isBackground)

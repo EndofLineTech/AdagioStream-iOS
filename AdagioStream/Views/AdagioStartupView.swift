@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 struct AdagioStartupView: View {
-
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var textOpacity: Double = 0
     @State private var glowIntensity: Double = 0.0
 
@@ -39,10 +39,10 @@ struct AdagioStartupView: View {
         .ignoresSafeArea()
         .overlay(alignment: .bottom) {
             Text("Adagio Stream")
-                .font(.system(size: 34, weight: .semibold))
+                .font(.system(size: sizeClass == .regular ? 44 : 34, weight: .semibold))
                 .foregroundStyle(.primary)
                 .opacity(textOpacity)
-                .padding(.bottom, 120)
+                .padding(.bottom, sizeClass == .regular ? 160 : 120)
         }
         .onAppear {
             withAnimation(.easeOut(duration: 0.8).delay(0.5)) {

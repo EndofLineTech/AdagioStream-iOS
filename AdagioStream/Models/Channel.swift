@@ -1,4 +1,6 @@
+import CoreTransferable
 import Foundation
+import UniformTypeIdentifiers
 
 struct Channel: Codable, Identifiable, Hashable {
     let id: String
@@ -29,4 +31,15 @@ struct Channel: Codable, Identifiable, Hashable {
         let provider = providerName ?? "Unknown"
         return "\(provider) — \(group)"
     }
+}
+
+extension Channel: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .channel)
+        ProxyRepresentation(exporting: \.name)
+    }
+}
+
+extension UTType {
+    static let channel = UTType(exportedAs: "com.adagiostream.channel")
 }

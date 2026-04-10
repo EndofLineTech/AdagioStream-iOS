@@ -31,6 +31,12 @@ struct FavoritesView: View {
                         .onMove { providerManager.moveFavorite(from: $0, to: $1) }
                         .onDelete { providerManager.removeFavorite(at: $0) }
                     }
+                    .dropDestination(for: Channel.self) { channels, _ in
+                        for channel in channels where !channel.isFavorite {
+                            Task { await providerManager.toggleFavorite(channel) }
+                        }
+                        return !channels.isEmpty
+                    }
                 }
             }
             .navigationTitle("Favorites")
