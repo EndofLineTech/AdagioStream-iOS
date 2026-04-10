@@ -9,18 +9,21 @@ struct ChannelRowView: View {
     let onToggleFavorite: () -> Void
     var onAddToPlaylist: (() -> Void)? = nil
 
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var logoSize: CGFloat { sizeClass == .regular ? 52 : 40 }
+    private var logoRadius: CGFloat { sizeClass == .regular ? 10 : 8 }
+
     var body: some View {
         HStack(spacing: 12) {
-            // Channel logo
             if let logoURL = channel.logoURL {
-                RetryableAsyncImage(url: logoURL, width: 40, height: 40, cornerRadius: 8)
+                RetryableAsyncImage(url: logoURL, width: logoSize, height: logoSize, cornerRadius: logoRadius)
             } else {
                 Image(systemName: "radio")
-                    .frame(width: 40, height: 40)
+                    .frame(width: logoSize, height: logoSize)
                     .foregroundStyle(.secondary)
             }
 
-            // Channel name + subtitle
             VStack(alignment: .leading, spacing: 2) {
                 Text(channel.name)
                     .font(.body)
@@ -49,7 +52,6 @@ struct ChannelRowView: View {
 
             Spacer()
 
-            // Favorite button
             Button {
                 onToggleFavorite()
             } label: {
@@ -60,6 +62,7 @@ struct ChannelRowView: View {
             .buttonStyle(.plain)
         }
         .contentShape(Rectangle())
+        .hoverEffect(.highlight)
         .onTapGesture { onTap() }
         .contextMenu {
             if let onAddToPlaylist {

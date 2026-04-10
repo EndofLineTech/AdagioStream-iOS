@@ -7,6 +7,12 @@ struct NowPlayingView: View {
     @EnvironmentObject var savedSongsManager: SavedSongsManager
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var artworkSize: CGFloat { sizeClass == .regular ? 300 : 200 }
+    private var artworkRadius: CGFloat { sizeClass == .regular ? 24 : 20 }
+    private var playButtonSize: CGFloat { sizeClass == .regular ? 80 : 64 }
+    private var controlSpacing: CGFloat { sizeClass == .regular ? 56 : 40 }
 
     var body: some View {
         NavigationStack {
@@ -16,11 +22,11 @@ struct NowPlayingView: View {
                 // Artwork
                 if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                    let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
-                    RetryableAsyncImage(url: artworkURL, width: 200, height: 200, cornerRadius: 20, persistent: false)
+                    RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
                         .shadow(radius: 10)
                         .id(track.id)
                 } else if let logoURL = audioPlayer.currentChannel?.logoURL {
-                    RetryableAsyncImage(url: logoURL, width: 200, height: 200, cornerRadius: 20)
+                    RetryableAsyncImage(url: logoURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius)
                         .shadow(radius: 10)
                         .id(audioPlayer.currentChannel?.id)
                 } else {
@@ -72,7 +78,7 @@ struct NowPlayingView: View {
                 }
 
                 // Playback controls
-                HStack(spacing: 40) {
+                HStack(spacing: controlSpacing) {
                     Button { audioPlayer.playPrevious() } label: {
                         Image(systemName: "backward.fill")
                             .font(.title)
@@ -81,7 +87,7 @@ struct NowPlayingView: View {
 
                     Button { audioPlayer.togglePlayPause() } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 64))
+                            .font(.system(size: playButtonSize))
                     }
                     .buttonStyle(.plain)
 
@@ -184,12 +190,12 @@ struct NowPlayingView: View {
     }
 
     private var channelPlaceholder: some View {
-        RoundedRectangle(cornerRadius: 20)
+        RoundedRectangle(cornerRadius: artworkRadius)
             .fill(.quaternary)
-            .frame(width: 200, height: 200)
+            .frame(width: artworkSize, height: artworkSize)
             .overlay {
                 Image(systemName: "radio")
-                    .font(.system(size: 60))
+                    .font(.system(size: artworkSize * 0.3))
                     .foregroundStyle(.secondary)
             }
     }

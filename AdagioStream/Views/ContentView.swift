@@ -76,6 +76,19 @@ struct ContentView: View {
         .sheet(item: $sharedURLEntry) { entry in
             SharedURLSheet(entry: entry)
         }
+        .focusable()
+        .onKeyPress(characters: .init(charactersIn: " ")) { _ in
+            audioPlayer.togglePlayPause()
+            return .handled
+        }
+        .onKeyPress(.rightArrow) {
+            audioPlayer.playNext()
+            return .handled
+        }
+        .onKeyPress(.leftArrow) {
+            audioPlayer.playPrevious()
+            return .handled
+        }
     }
 
     // MARK: - iPad Layout

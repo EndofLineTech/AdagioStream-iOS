@@ -4,7 +4,12 @@ struct MiniPlayerView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var sxmService: SXMMetadataService
     @EnvironmentObject var settingsViewModel: SettingsViewModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showNowPlaying = false
+
+    private var logoSize: CGFloat { sizeClass == .regular ? 44 : 36 }
+    private var logoRadius: CGFloat { sizeClass == .regular ? 8 : 6 }
+    private var buttonSize: CGFloat { sizeClass == .regular ? 48 : 44 }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -16,19 +21,19 @@ struct MiniPlayerView: View {
                     ZStack {
                         if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                            let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
-                            RetryableAsyncImage(url: artworkURL, width: 36, height: 36, cornerRadius: 6, persistent: false)
+                            RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
                         } else if let logoURL = audioPlayer.currentChannel?.logoURL {
-                            RetryableAsyncImage(url: logoURL, width: 36, height: 36, cornerRadius: 6)
+                            RetryableAsyncImage(url: logoURL, width: logoSize, height: logoSize, cornerRadius: logoRadius)
                         } else {
                             Image(systemName: "radio")
-                                .frame(width: 36, height: 36)
+                                .frame(width: logoSize, height: logoSize)
                                 .foregroundStyle(.secondary)
                         }
 
                         if audioPlayer.isBuffering {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(.ultraThinMaterial)
-                                .frame(width: 36, height: 36)
+                                .frame(width: logoSize, height: logoSize)
                             ProgressView()
                                 .controlSize(.small)
                         }
@@ -112,7 +117,7 @@ struct MiniPlayerView: View {
             } label: {
                 Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                     .font(.title3)
-                    .frame(width: 44, height: 44)
+                    .frame(width: buttonSize, height: buttonSize)
             }
             .buttonStyle(.plain)
 
@@ -123,13 +128,14 @@ struct MiniPlayerView: View {
                 Image(systemName: "xmark.circle.fill")
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
+                    .frame(width: buttonSize, height: buttonSize)
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+        .hoverEffect(.highlight)
         .glassBackground()
         .glassContainer()
         .sheet(isPresented: $showNowPlaying) {
