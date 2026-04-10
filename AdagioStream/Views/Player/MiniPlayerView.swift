@@ -134,6 +134,8 @@ struct MiniPlayerView: View {
         .glassContainer()
         .sheet(isPresented: $showNowPlaying) {
             NowPlayingView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 

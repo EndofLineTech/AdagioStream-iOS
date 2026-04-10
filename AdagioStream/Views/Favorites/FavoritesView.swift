@@ -39,6 +39,7 @@ struct FavoritesView: View {
             .environment(\.editMode, $editMode)
             .sheet(item: $channelToAdd) { channel in
                 AddToPlaylistSheet(channel: channel)
+                    .presentationDetents([.medium])
             }
         }
     }

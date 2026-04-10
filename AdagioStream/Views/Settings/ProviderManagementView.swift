@@ -46,9 +46,11 @@ struct ProviderManagementView: View {
         }
         .sheet(isPresented: $showAddProvider) {
             AddProviderView()
+                .presentationDetents([.medium, .large])
         }
         .sheet(item: $providerToEdit) { provider in
             AddProviderView(editing: provider)
+                .presentationDetents([.medium, .large])
         }
         .alert("Account Ready", isPresented: .init(
             get: { providerManager.newProviderInfo != nil },

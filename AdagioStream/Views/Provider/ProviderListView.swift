@@ -56,6 +56,7 @@ struct ProviderListView: View {
             }
             .sheet(isPresented: $showAddProvider) {
                 AddProviderView()
+                    .presentationDetents([.medium, .large])
             }
             .alert("Delete Account", isPresented: .init(
                 get: { providerToDelete != nil },

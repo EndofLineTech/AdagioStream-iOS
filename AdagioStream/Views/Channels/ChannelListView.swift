@@ -63,6 +63,7 @@ struct ChannelListView: View {
             }
             .sheet(item: $channelToAdd) { channel in
                 AddToPlaylistSheet(channel: channel)
+                    .presentationDetents([.medium])
             }
         }
     }
