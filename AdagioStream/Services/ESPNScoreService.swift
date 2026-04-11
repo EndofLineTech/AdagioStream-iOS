@@ -226,6 +226,9 @@ final class ESPNScoreService: ObservableObject {
                 outs: comp.situation?.outs,
                 balls: comp.situation?.balls,
                 strikes: comp.situation?.strikes,
+                onFirst: comp.situation?.onFirst,
+                onSecond: comp.situation?.onSecond,
+                onThird: comp.situation?.onThird,
                 possessionTeamAbbr: possessionAbbr,
                 downDistanceText: comp.situation?.shortDownDistanceText ?? comp.situation?.downDistanceText
             )

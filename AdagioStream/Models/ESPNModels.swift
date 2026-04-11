@@ -122,6 +122,9 @@ struct ESPNGameInfo: Equatable {
     let outs: Int?                     // 0-3 during live game
     let balls: Int?                    // 0-3 during live at-bat
     let strikes: Int?                  // 0-2 during live at-bat
+    let onFirst: Bool?                 // Runner on 1B
+    let onSecond: Bool?                // Runner on 2B
+    let onThird: Bool?                 // Runner on 3B
     // NFL
     let possessionTeamAbbr: String?    // "GB" — team with the ball
     let downDistanceText: String?      // "1st & 10"
@@ -186,7 +189,7 @@ struct ESPNGameInfo: Equatable {
     private var liveDetail: String {
         switch league {
         case .mlb:
-            return "\(statusDetail)\(countText)\(outsText)"
+            return "\(statusDetail)\(countText)\(outsText)\(basesText)"
         case .nba, .nhl:
             let clock = displayClock ?? ""
             let periodStr = period.map { ordinal($0) + " " + league.periodName } ?? ""
@@ -209,6 +212,15 @@ struct ESPNGameInfo: Equatable {
     private var outsText: String {
         guard let outs else { return "" }
         return ", \(outs) \(outs == 1 ? "Out" : "Outs")"
+    }
+
+    /// Diamond indicators for base runners: ◆ = occupied, ◇ = empty (3rd, 2nd, 1st)
+    private var basesText: String {
+        guard onFirst != nil || onSecond != nil || onThird != nil else { return "" }
+        let first = (onFirst ?? false) ? "\u{25C6}" : "\u{25C7}"
+        let second = (onSecond ?? false) ? "\u{25C6}" : "\u{25C7}"
+        let third = (onThird ?? false) ? "\u{25C6}" : "\u{25C7}"
+        return " \(third)\(second)\(first)"
     }
 
     /// Formats the game start time in the user's local timezone.
