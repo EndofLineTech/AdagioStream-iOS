@@ -177,9 +177,9 @@ struct ESPNGameInfo: Equatable {
     private var scoreLine: String {
         switch league {
         case .nfl:
-            // Arrow points at team with possession
-            let awayPoss = possessionTeamAbbr == awayAbbr ? "\u{25B6} " : ""
-            let homePoss = possessionTeamAbbr == homeAbbr ? "\u{25B6} " : ""
+            // Football emoji next to team with possession
+            let awayPoss = possessionTeamAbbr == awayAbbr ? "\u{1F3C8} " : ""
+            let homePoss = possessionTeamAbbr == homeAbbr ? "\u{1F3C8} " : ""
             return "\(awayPoss)\(awayAbbr) \(awayScore) - \(homePoss)\(homeAbbr) \(homeScore)"
         default:
             return "\(awayAbbr) \(awayScore) - \(homeAbbr) \(homeScore)"
