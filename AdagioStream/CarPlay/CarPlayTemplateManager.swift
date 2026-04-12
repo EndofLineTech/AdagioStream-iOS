@@ -8,9 +8,11 @@ class CarPlayTemplateManager {
     let interfaceController: CPInterfaceController
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
+    let customPlaylistManager = CustomPlaylistManager.shared
     private let log = DebugLogger.shared
     let savedSongsManager = SavedSongsManager.shared
     private var cancellable: AnyCancellable?
+    private var playlistCancellable: AnyCancellable?
     private var channelCancellable: AnyCancellable?
     private var timeShiftCancellable: AnyCancellable?
     private var trackCancellable: AnyCancellable?
@@ -98,6 +100,12 @@ class CarPlayTemplateManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshChannelListDetailText()
+            }
+
+        playlistCancellable = customPlaylistManager.$playlists
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
             }
     }
 
@@ -226,6 +234,17 @@ class CarPlayTemplateManager {
                     return
                 }
                 self.pushChannelList(title: group, channels: channels)
+                completion()
+            }
+            items.append(item)
+        }
+
+        for playlist in customPlaylistManager.playlists {
+            let entryCount = playlist.groups.flatMap(\.entries).count
+            let item = CPListItem(text: playlist.name, detailText: "\(entryCount) channels")
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
+                self?.pushCustomPlaylist(playlist)
                 completion()
             }
             items.append(item)
@@ -379,6 +398,43 @@ class CarPlayTemplateManager {
             return program.title
         }
         return nil
+    }
+
+    private func pushCustomPlaylist(_ playlist: CustomPlaylist) {
+        let allChannels = playlist.groups.flatMap(\.entries).map(\.asChannel)
+
+        // If only one group, skip straight to the channel list
+        if playlist.groups.count == 1, let group = playlist.groups.first {
+            pushChannelList(title: group.name, channels: group.entries.map(\.asChannel))
+            return
+        }
+
+        let items = playlist.groups.map { group in
+            let channels = group.entries.map(\.asChannel)
+            let item = CPListItem(text: group.name, detailText: "\(channels.count) channels")
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
+                self?.pushChannelList(title: group.name, channels: channels)
+                completion()
+            }
+            return item
+        }
+
+        // Add "Play All" at top if there are multiple groups
+        if allChannels.count > 1 {
+            let playAll = CPListItem(text: "Play All", detailText: "\(allChannels.count) channels")
+            playAll.handler = { [weak self] _, completion in
+                self?.pushChannelList(title: playlist.name, channels: allChannels)
+                completion()
+            }
+            let section = CPListSection(items: [playAll] + items)
+            let template = CPListTemplate(title: playlist.name, sections: [section])
+            interfaceController.pushTemplate(template, animated: true, completion: nil)
+        } else {
+            let section = CPListSection(items: items)
+            let template = CPListTemplate(title: playlist.name, sections: [section])
+            interfaceController.pushTemplate(template, animated: true, completion: nil)
+        }
     }
 
     private func pushChannelList(title: String, channels: [Channel]) {
