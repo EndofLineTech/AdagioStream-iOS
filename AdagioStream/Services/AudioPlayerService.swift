@@ -51,6 +51,8 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
     private let probeTimeout: TimeInterval = 45
     private var lastProbeHTTPStatus: Int?
     private var pendingPlayWorkItem: DispatchWorkItem?
+    private var channelNameOverlayActive = false
+    private var channelNameOverlayWorkItem: DispatchWorkItem?
     private var lastTeardownTime: Date = .distantPast
     private var isPlayingBufferedFile = false
     private var streamStartTime: Date?
@@ -485,6 +487,18 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             accumulatedListeningTime = 0
             currentArtwork = nil
             fetchArtwork(for: channel)
+            // Show channel name briefly on the Now Playing screen so the user
+            // knows which station they switched to (especially useful for
+            // steering-wheel channel changes on CarPlay).
+            channelNameOverlayWorkItem?.cancel()
+            channelNameOverlayActive = true
+            let overlayWork = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.channelNameOverlayActive = false
+                self.updateNowPlayingInfo()
+            }
+            channelNameOverlayWorkItem = overlayWork
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: overlayWork)
         }
         listeningStartDate = Date()
         updateNowPlayingInfo()
@@ -1398,7 +1412,13 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
 
         let stillLoading = isBuffering && !isPlaying
 
-        if let track = sxmService.currentTrack {
+        if channelNameOverlayActive {
+            // Briefly show the channel name so the user knows which station
+            // they switched to (e.g. via steering-wheel controls on CarPlay).
+            title = channel.name
+            artist = channel.group
+            artwork = currentArtwork
+        } else if let track = sxmService.currentTrack {
             title = track.title
             artist = track.artistDisplay
             artwork = artworkDisplayMode == .coverArt ? (sxmArtwork ?? currentArtwork) : currentArtwork
