@@ -12,40 +12,53 @@ struct ChannelListView: View {
         NavigationStack {
             Group {
                 if providerManager.isLoading && providerManager.channels.isEmpty {
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .controlSize(.large)
-                        Text("Loading channels...")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if providerManager.channels.isEmpty && providerManager.providers.isEmpty {
-                    EmptyStateView(
-                        title: "No Accounts",
-                        systemImage: "server.rack",
-                        description: "Add an account in Settings → Accounts to get started."
-                    )
-                } else if providerManager.channels.isEmpty {
-                    VStack(spacing: 16) {
-                        EmptyStateView(
-                            title: "No Channels",
-                            systemImage: "radio",
-                            description: providerManager.error ?? "No channels loaded from your accounts."
-                        )
-                        Button {
-                            Task { await providerManager.loadChannels() }
-                        } label: {
-                            Label("Retry", systemImage: "arrow.clockwise")
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .controlSize(.large)
+                            Text("Loading channels...")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.bordered)
+                        .containerRelativeFrame([.horizontal, .vertical])
+                    }
+                } else if providerManager.channels.isEmpty && providerManager.providers.isEmpty {
+                    ScrollView {
+                        EmptyStateView(
+                            title: "No Accounts",
+                            systemImage: "server.rack",
+                            description: "Add an account in Settings → Accounts to get started."
+                        )
+                        .containerRelativeFrame([.horizontal, .vertical])
+                    }
+                } else if providerManager.channels.isEmpty {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            EmptyStateView(
+                                title: "No Channels",
+                                systemImage: "radio",
+                                description: providerManager.error != nil
+                                    ? "Pull down to retry.\n\n\(providerManager.error!)"
+                                    : "No channels loaded from your accounts."
+                            )
+                            Button {
+                                Task { await providerManager.loadChannels() }
+                            } label: {
+                                Label("Retry", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .containerRelativeFrame([.horizontal, .vertical])
                     }
                 } else if providerManager.sortedVisibleGroups.isEmpty {
-                    EmptyStateView(
-                        title: "All Groups Hidden",
-                        systemImage: "eye.slash",
-                        description: "Enable groups in Settings → Groups to see channels here."
-                    )
+                    ScrollView {
+                        EmptyStateView(
+                            title: "All Groups Hidden",
+                            systemImage: "eye.slash",
+                            description: "Enable groups in Settings → Groups to see channels here."
+                        )
+                        .containerRelativeFrame([.horizontal, .vertical])
+                    }
                 } else {
                     channelList
                 }
