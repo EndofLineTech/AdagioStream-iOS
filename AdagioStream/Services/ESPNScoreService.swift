@@ -25,6 +25,8 @@ final class ESPNScoreService: ObservableObject {
 
     private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
     private static let channelPrefixes = ["Radio: ", "TV: "]
+    /// Matches stream-ID prefixes like "5204 | " that some XC providers prepend.
+    private static let streamIDPrefixPattern = try! NSRegularExpression(pattern: #"^\d+\s*\|\s*"#)
     private static let allLeagues: [ESPNLeague] = [.mlb, .nba, .nhl, .nfl]
 
     private init() {}
@@ -50,6 +52,11 @@ final class ESPNScoreService: ObservableObject {
 
         for channel in sportsChannels {
             var teamName = channel.name
+            // Strip stream-ID prefix (e.g. "5204 | ") from XC providers
+            let range = NSRange(teamName.startIndex..., in: teamName)
+            if let match = Self.streamIDPrefixPattern.firstMatch(in: teamName, range: range) {
+                teamName = String(teamName[Range(match.range, in: teamName)!.upperBound...])
+            }
             for prefix in Self.channelPrefixes {
                 if teamName.hasPrefix(prefix) {
                     teamName = String(teamName.dropFirst(prefix.count))
