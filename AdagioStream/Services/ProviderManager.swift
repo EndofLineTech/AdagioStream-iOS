@@ -137,6 +137,15 @@ final class ProviderManager: ObservableObject {
         }
     }
 
+    private static let streamIDPrefixPattern = try! NSRegularExpression(pattern: #"^\d+\s*\|\s*"#)
+
+    static func stripStreamIDPrefix(_ name: String) -> String {
+        let range = NSRange(name.startIndex..., in: name)
+        guard let match = streamIDPrefixPattern.firstMatch(in: name, range: range),
+              let swiftRange = Range(match.range, in: name) else { return name }
+        return String(name[swiftRange.upperBound...])
+    }
+
     // MARK: - Channel Loading
 
     func loadChannels() async {
@@ -154,6 +163,18 @@ final class ProviderManager: ObservableObject {
             do {
                 var loaded = try await loadChannels(from: provider)
                 for i in loaded.indices {
+                    if provider.stripStreamIDs {
+                        let ch = loaded[i]
+                        loaded[i] = Channel(
+                            id: ch.id,
+                            name: Self.stripStreamIDPrefix(ch.name),
+                            streamURL: ch.streamURL,
+                            logoURL: ch.logoURL,
+                            group: ch.group,
+                            epgChannelID: ch.epgChannelID,
+                            isFavorite: ch.isFavorite
+                        )
+                    }
                     loaded[i].providerName = provider.name
                 }
                 counts[provider.id] = loaded.count

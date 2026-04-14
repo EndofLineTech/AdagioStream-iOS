@@ -78,14 +78,8 @@ final class SXMMetadataService: ObservableObject {
 
         var matched = 0
         var unmatched: [String] = []
-        let streamIDPattern = try! NSRegularExpression(pattern: #"^\d+\s*\|\s*"#)
         for channel in appChannels {
             var cleanName = channel.name
-            // Strip stream-ID prefix (e.g. "5204 | ") from XC providers
-            let idRange = NSRange(cleanName.startIndex..., in: cleanName)
-            if let match = streamIDPattern.firstMatch(in: cleanName, range: idRange) {
-                cleanName = String(cleanName[Range(match.range, in: cleanName)!.upperBound...])
-            }
             var strippedPrefix: String?
             for prefix in sortPrefixes {
                 if cleanName.hasPrefix(prefix) {

@@ -18,6 +18,10 @@ final class ESPNScoreService: ObservableObject {
 
     /// Channels we've matched to teams, keyed by team displayName (lowercased).
     private var teamToChannelIDs: [String: [String]] = [:]
+    /// Sports channels with EPG data that weren't matched by team name — EPG fallback candidates.
+    private var epgCandidateChannels: [String: String] = [:]  // channelID → epgChannelID
+    /// Pre-compiled search tokens per ESPN team displayName for EPG title matching.
+    private var teamTokenCache: [String: TeamSearchTokens] = [:]
     private var hasChannels = false
     private var pollingWanted = false
     private var hasLiveGame = false
@@ -25,8 +29,6 @@ final class ESPNScoreService: ObservableObject {
 
     private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
     private static let channelPrefixes = ["Radio: ", "TV: "]
-    /// Matches stream-ID prefixes like "5204 | " that some XC providers prepend.
-    private static let streamIDPrefixPattern = try! NSRegularExpression(pattern: #"^\d+\s*\|\s*"#)
     private static let allLeagues: [ESPNLeague] = [.mlb, .nba, .nhl, .nfl]
 
     private init() {}
@@ -52,11 +54,6 @@ final class ESPNScoreService: ObservableObject {
 
         for channel in sportsChannels {
             var teamName = channel.name
-            // Strip stream-ID prefix (e.g. "5204 | ") from XC providers
-            let range = NSRange(teamName.startIndex..., in: teamName)
-            if let match = Self.streamIDPrefixPattern.firstMatch(in: teamName, range: range) {
-                teamName = String(teamName[Range(match.range, in: teamName)!.upperBound...])
-            }
             for prefix in Self.channelPrefixes {
                 if teamName.hasPrefix(prefix) {
                     teamName = String(teamName.dropFirst(prefix.count))
@@ -68,7 +65,18 @@ final class ESPNScoreService: ObservableObject {
         }
 
         hasChannels = true
-        log.log("Matched \(teamToChannelIDs.count) team names from \(sportsChannels.count) sports channels", category: .espn)
+        teamTokenCache = [:]
+
+        // Build EPG candidate list: sports channels with EPG that didn't match a team name
+        let matchedChannelIDs = Set(teamToChannelIDs.values.flatMap { $0 })
+        epgCandidateChannels = [:]
+        for channel in sportsChannels {
+            guard let epgID = channel.epgChannelID, !epgID.isEmpty else { continue }
+            guard !matchedChannelIDs.contains(channel.id) else { continue }
+            epgCandidateChannels[channel.id] = epgID
+        }
+
+        log.log("Matched \(teamToChannelIDs.count) team names from \(sportsChannels.count) sports channels, \(epgCandidateChannels.count) EPG fallback candidates", category: .espn)
 
         if pollingWanted {
             startPolling()
@@ -178,6 +186,9 @@ final class ESPNScoreService: ObservableObject {
                 matchEvents(events, league: league, into: &newGames)
             }
 
+            // Second pass: EPG-based fallback for unmatched sports channels
+            matchEventsViaEPG(allEvents, into: &newGames)
+
             if gamesByChannel != newGames {
                 logGameChanges(old: gamesByChannel, new: newGames)
                 gamesByChannel = newGames
@@ -202,55 +213,134 @@ final class ESPNScoreService: ObservableObject {
         espnDateFormatter.date(from: string)
     }
 
+    private func buildGameInfo(from event: ESPNEvent, league: ESPNLeague) -> ESPNGameInfo? {
+        guard let comp = event.competition,
+              let home = comp.homeTeam,
+              let away = comp.awayTeam else { return nil }
+
+        var possessionAbbr: String?
+        if league == .nfl, let possID = comp.situation?.possession {
+            if home.team.id == possID { possessionAbbr = home.team.abbreviation }
+            else if away.team.id == possID { possessionAbbr = away.team.abbreviation }
+        }
+
+        return ESPNGameInfo(
+            league: league,
+            awayAbbr: away.team.abbreviation,
+            homeAbbr: home.team.abbreviation,
+            awayScore: away.score,
+            homeScore: home.score,
+            awayRecord: away.overallRecord,
+            homeRecord: home.overallRecord,
+            state: ESPNGameInfo.GameState(rawValue: comp.status.type.state) ?? .pre,
+            statusDetail: comp.status.type.shortDetail,
+            displayClock: comp.status.displayClock,
+            period: comp.status.period,
+            gameDate: Self.parseESPNDate(event.date),
+            outs: comp.situation?.outs,
+            balls: comp.situation?.balls,
+            strikes: comp.situation?.strikes,
+            onFirst: comp.situation?.onFirst,
+            onSecond: comp.situation?.onSecond,
+            onThird: comp.situation?.onThird,
+            possessionTeamAbbr: possessionAbbr,
+            downDistanceText: comp.situation?.shortDownDistanceText ?? comp.situation?.downDistanceText
+        )
+    }
+
     private func matchEvents(_ events: [ESPNEvent], league: ESPNLeague, into games: inout [String: ESPNGameInfo]) {
         for event in events {
-            guard let comp = event.competition,
+            guard let gameInfo = buildGameInfo(from: event, league: league),
+                  let comp = event.competition,
                   let home = comp.homeTeam,
                   let away = comp.awayTeam else { continue }
 
-            // Resolve NFL possession to team abbreviation
-            var possessionAbbr: String?
-            if league == .nfl, let possID = comp.situation?.possession {
-                if home.team.id == possID { possessionAbbr = home.team.abbreviation }
-                else if away.team.id == possID { possessionAbbr = away.team.abbreviation }
-            }
-
-            let gameDate = Self.parseESPNDate(event.date)
-
-            let gameInfo = ESPNGameInfo(
-                league: league,
-                awayAbbr: away.team.abbreviation,
-                homeAbbr: home.team.abbreviation,
-                awayScore: away.score,
-                homeScore: home.score,
-                awayRecord: away.overallRecord,
-                homeRecord: home.overallRecord,
-                state: ESPNGameInfo.GameState(rawValue: comp.status.type.state) ?? .pre,
-                statusDetail: comp.status.type.shortDetail,
-                displayClock: comp.status.displayClock,
-                period: comp.status.period,
-                gameDate: gameDate,
-                outs: comp.situation?.outs,
-                balls: comp.situation?.balls,
-                strikes: comp.situation?.strikes,
-                onFirst: comp.situation?.onFirst,
-                onSecond: comp.situation?.onSecond,
-                onThird: comp.situation?.onThird,
-                possessionTeamAbbr: possessionAbbr,
-                downDistanceText: comp.situation?.shortDownDistanceText ?? comp.situation?.downDistanceText
-            )
-
-            // Match home team
             let homeKey = home.team.displayName.lowercased()
             if let channelIDs = teamToChannelIDs[homeKey] {
                 for id in channelIDs { games[id] = gameInfo }
             }
 
-            // Match away team
             let awayKey = away.team.displayName.lowercased()
             if let channelIDs = teamToChannelIDs[awayKey] {
                 for id in channelIDs { games[id] = gameInfo }
             }
+        }
+    }
+
+    // MARK: - EPG Fuzzy Matching
+
+    private struct TeamSearchTokens {
+        let fullName: String                        // "boston bruins"
+        let nicknamePattern: NSRegularExpression    // \bbruins\b
+        let abbrPattern: NSRegularExpression        // \bBOS\b
+    }
+
+    private func tokens(for team: ESPNTeam) -> TeamSearchTokens {
+        if let cached = teamTokenCache[team.displayName] { return cached }
+        let full = team.displayName.lowercased()
+        let nickname = team.displayName.split(separator: " ").last.map(String.init) ?? team.displayName
+        let result = TeamSearchTokens(
+            fullName: full,
+            nicknamePattern: try! NSRegularExpression(
+                pattern: "\\b\(NSRegularExpression.escapedPattern(for: nickname))\\b",
+                options: .caseInsensitive
+            ),
+            abbrPattern: try! NSRegularExpression(
+                pattern: "\\b\(NSRegularExpression.escapedPattern(for: team.abbreviation))\\b",
+                options: .caseInsensitive
+            )
+        )
+        teamTokenCache[team.displayName] = result
+        return result
+    }
+
+    private func epgTitleContainsTeam(_ title: String, tokens: TeamSearchTokens) -> Bool {
+        let lowered = title.lowercased()
+        // Tier 1: full display name (most precise)
+        if lowered.contains(tokens.fullName) { return true }
+        let range = NSRange(title.startIndex..., in: title)
+        // Tier 2: team nickname with word boundary
+        if tokens.nicknamePattern.firstMatch(in: title, range: range) != nil { return true }
+        // Tier 3: abbreviation with word boundary
+        if tokens.abbrPattern.firstMatch(in: title, range: range) != nil { return true }
+        return false
+    }
+
+    private func matchEventsViaEPG(_ allEvents: [(ESPNLeague, [ESPNEvent])], into games: inout [String: ESPNGameInfo]) {
+        guard !epgCandidateChannels.isEmpty else { return }
+
+        let epgData = ProviderManager.shared.epgData
+        var epgMatched = 0
+
+        for (channelID, epgID) in epgCandidateChannels {
+            guard games[channelID] == nil else { continue }
+            guard let entries = epgData[epgID],
+                  let currentEntry = entries.first(where: \.isCurrentlyAiring) else { continue }
+
+            let title = currentEntry.title
+
+            outer: for (league, events) in allEvents {
+                for event in events {
+                    guard let comp = event.competition,
+                          let home = comp.homeTeam,
+                          let away = comp.awayTeam,
+                          let gameInfo = buildGameInfo(from: event, league: league) else { continue }
+
+                    let homeTokens = tokens(for: home.team)
+                    let awayTokens = tokens(for: away.team)
+
+                    guard epgTitleContainsTeam(title, tokens: homeTokens),
+                          epgTitleContainsTeam(title, tokens: awayTokens) else { continue }
+
+                    games[channelID] = gameInfo
+                    epgMatched += 1
+                    break outer
+                }
+            }
+        }
+
+        if epgMatched > 0 {
+            log.log("ESPN EPG fallback: matched \(epgMatched) channels via program titles", category: .espn)
         }
     }
 

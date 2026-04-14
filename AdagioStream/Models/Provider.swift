@@ -5,12 +5,14 @@ struct Provider: Codable, Identifiable {
     var name: String
     var type: ProviderType
     var isEnabled: Bool
+    var stripStreamIDs: Bool
 
-    init(id: UUID = UUID(), name: String, type: ProviderType, isEnabled: Bool = true) {
+    init(id: UUID = UUID(), name: String, type: ProviderType, isEnabled: Bool = true, stripStreamIDs: Bool = false) {
         self.id = id
         self.name = name
         self.type = type
         self.isEnabled = isEnabled
+        self.stripStreamIDs = stripStreamIDs
     }
 
     init(from decoder: Decoder) throws {
@@ -19,6 +21,7 @@ struct Provider: Codable, Identifiable {
         name = try container.decode(String.self, forKey: .name)
         type = try container.decode(ProviderType.self, forKey: .type)
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        stripStreamIDs = try container.decodeIfPresent(Bool.self, forKey: .stripStreamIDs) ?? false
     }
 
     enum ProviderType: Codable, Hashable {

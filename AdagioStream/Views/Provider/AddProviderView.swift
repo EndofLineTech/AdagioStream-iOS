@@ -64,6 +64,7 @@ struct AddProviderView: View {
     @State private var xcHost = ""
     @State private var xcUsername = ""
     @State private var xcPassword = ""
+    @State private var stripStreamIDs = false
 
     @State private var error: String?
     @State private var isSaving = false
@@ -108,6 +109,12 @@ struct AddProviderView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                         MaskedTextField(placeholder: "Password", text: $xcPassword)
+                    }
+
+                    Section {
+                        Toggle("Strip numeric prefix from channel names", isOn: $stripStreamIDs)
+                    } footer: {
+                        Text("Enable this if your channel names start with a number and pipe (e.g. \"5204 | Radio: Bruins\"). This strips the prefix so channels display and match correctly.")
                     }
                 }
 
@@ -169,6 +176,7 @@ struct AddProviderView: View {
             xcUsername = username
             xcPassword = password
         }
+        stripStreamIDs = provider.stripStreamIDs
     }
 
     private func save() {
@@ -199,7 +207,7 @@ struct AddProviderView: View {
         }
 
         if let existing = editing {
-            let updated = Provider(id: existing.id, name: name, type: type, isEnabled: existing.isEnabled)
+            let updated = Provider(id: existing.id, name: name, type: type, isEnabled: existing.isEnabled, stripStreamIDs: stripStreamIDs)
             Task {
                 await providerManager.updateProvider(updated)
                 await providerManager.loadChannels()
@@ -211,7 +219,7 @@ struct AddProviderView: View {
                 }
             }
         } else {
-            let provider = Provider(name: name, type: type)
+            let provider = Provider(name: name, type: type, stripStreamIDs: stripStreamIDs)
             Task {
                 await providerManager.addProvider(provider)
                 if let loadError = providerManager.error {
