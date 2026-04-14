@@ -310,8 +310,6 @@ class CarPlayTemplateManager {
         }
     }
 
-    private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
-
     private func trackDetailText(for channel: Channel) -> String? {
         if let track = SXMMetadataService.shared.feedTracks[channel.id] {
             return "\(track.artistDisplay) — \(track.title)"
@@ -319,17 +317,11 @@ class CarPlayTemplateManager {
         if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
             return game.displayText
         }
-        if let program = currentSportsProgram(for: channel) {
+        if let epgID = channel.epgChannelID,
+           let program = providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring) {
             return program.title
         }
         return nil
-    }
-
-    private func currentSportsProgram(for channel: Channel) -> EPGEntry? {
-        let upperGroup = channel.group.uppercased()
-        guard Self.sportsLeagues.contains(where: { upperGroup.contains($0) }),
-              let epgID = channel.epgChannelID else { return nil }
-        return providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring)
     }
 
     private func pushFavorites() {
@@ -394,7 +386,8 @@ class CarPlayTemplateManager {
             return game.displayText
         }
         if let channel = providerManager.channels.first(where: { $0.id == channelID }),
-           let program = currentSportsProgram(for: channel) {
+           let epgID = channel.epgChannelID,
+           let program = providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring) {
             return program.title
         }
         return nil

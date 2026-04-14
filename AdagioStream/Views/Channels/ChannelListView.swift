@@ -108,7 +108,7 @@ struct ChannelListView: View {
                             ChannelRowView(
                                 channel: channel,
                                 nowPlayingTrack: sxmService.feedTracks[channel.id],
-                                currentProgram: currentSportsProgram(for: channel),
+                                currentProgram: currentEPG(for: channel),
                                 espnGame: espnService.gamesByChannel[channel.id]
                             ) {
                                 audioPlayer.channels = group.channels
@@ -172,12 +172,8 @@ struct ChannelListView: View {
         .listStyle(.insetGrouped)
     }
 
-    private static let sportsLeagues: Set<String> = ["NFL", "MLB", "NBA", "NHL"]
-
-    private func currentSportsProgram(for channel: Channel) -> EPGEntry? {
-        let upperGroup = channel.group.uppercased()
-        guard Self.sportsLeagues.contains(where: { upperGroup.contains($0) }),
-              let epgID = channel.epgChannelID else { return nil }
+    private func currentEPG(for channel: Channel) -> EPGEntry? {
+        guard let epgID = channel.epgChannelID else { return nil }
         return providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring)
     }
 

@@ -1430,6 +1430,11 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             title = st
             artist = streamArtist ?? channel.name
             artwork = currentArtwork
+        } else if let epgID = channel.epgChannelID,
+                  let epg = ProviderManager.shared.epgData[epgID]?.first(where: \.isCurrentlyAiring) {
+            title = epg.title
+            artist = channel.name
+            artwork = currentArtwork
         } else {
             title = channel.name
             artist = stillLoading ? "Loading..." : channel.group

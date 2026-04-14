@@ -75,3 +75,5 @@
 {"id":"int-5273dfef","kind":"field_change","created_at":"2026-04-14T01:03:22.456338Z","actor":"lecaptainc","issue_id":"beads_mobilemusic-lqm","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
 {"id":"int-b56c3f94","kind":"field_change","created_at":"2026-04-14T14:10:45.963772Z","actor":"lecaptainc","issue_id":"beads_mobilemusic-12r","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-73cf5d85","kind":"field_change","created_at":"2026-04-14T14:11:16.012104Z","actor":"lecaptainc","issue_id":"beads_mobilemusic-12r","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-82ee3bdf","kind":"field_change","created_at":"2026-04-14T17:34:38.170266Z","actor":"lecaptainc","issue_id":"beads_mobilemusic-8ha","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
+{"id":"int-22e9da97","kind":"field_change","created_at":"2026-04-14T17:38:26.183252Z","actor":"lecaptainc","issue_id":"beads_mobilemusic-8ha","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
