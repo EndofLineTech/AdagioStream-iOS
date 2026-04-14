@@ -131,6 +131,7 @@ struct AppSettings: Codable {
     var artworkDisplayMode: ArtworkDisplayMode
     var espnLivePollInterval: ESPNLivePollInterval
     var channelGroupingMode: ChannelGroupingMode
+    var hasCompletedSetup: Bool
 
     init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -143,7 +144,8 @@ struct AppSettings: Codable {
         debugLoggingEnabled: Bool = false,
         artworkDisplayMode: ArtworkDisplayMode = .coverArt,
         espnLivePollInterval: ESPNLivePollInterval = .fifteen,
-        channelGroupingMode: ChannelGroupingMode = .allGroups
+        channelGroupingMode: ChannelGroupingMode = .allGroups,
+        hasCompletedSetup: Bool = false
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -156,6 +158,7 @@ struct AppSettings: Codable {
         self.artworkDisplayMode = artworkDisplayMode
         self.espnLivePollInterval = espnLivePollInterval
         self.channelGroupingMode = channelGroupingMode
+        self.hasCompletedSetup = hasCompletedSetup
     }
 
     static let `default` = AppSettings()
@@ -173,6 +176,7 @@ struct AppSettings: Codable {
         artworkDisplayMode = try container.decodeIfPresent(ArtworkDisplayMode.self, forKey: .artworkDisplayMode) ?? .coverArt
         espnLivePollInterval = try container.decodeIfPresent(ESPNLivePollInterval.self, forKey: .espnLivePollInterval) ?? .fifteen
         channelGroupingMode = try container.decodeIfPresent(ChannelGroupingMode.self, forKey: .channelGroupingMode) ?? .allGroups
+        hasCompletedSetup = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedSetup) ?? false
     }
 }
 

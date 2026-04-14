@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var hasAttemptedStartupStream = false
     @State private var splashOpacity: Double = 1
     @State private var sharedURLEntry: SharedURLEntry?
+    @State private var showingSetup = false
 
     var body: some View {
         ZStack {
@@ -43,6 +44,9 @@ struct ContentView: View {
                 withAnimation(.easeOut(duration: 0.8)) {
                     splashOpacity = 0
                 }
+                if !settingsViewModel.settings.hasCompletedSetup {
+                    showingSetup = true
+                }
             }
         }
         .task { await performStartupStream() }
@@ -53,6 +57,11 @@ struct ContentView: View {
         }
         .sheet(item: $sharedURLEntry) { entry in
             SharedURLSheet(entry: entry)
+        }
+        .fullScreenCover(isPresented: $showingSetup) {
+            WelcomeSetupView {
+                showingSetup = false
+            }
         }
         .focusable()
         .onKeyPress(characters: .init(charactersIn: " ")) { _ in

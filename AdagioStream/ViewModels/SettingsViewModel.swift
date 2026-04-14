@@ -79,6 +79,11 @@ final class SettingsViewModel: ObservableObject {
         await saveSettings()
     }
 
+    func completeSetup() async {
+        settings.hasCompletedSetup = true
+        await saveSettings()
+    }
+
     func updateESPNLivePollInterval(_ interval: ESPNLivePollInterval) async {
         settings.espnLivePollInterval = interval
         ESPNScoreService.shared.setLivePollInterval(interval.interval)
