@@ -168,6 +168,11 @@ final class ProviderManager: ObservableObject {
             self.error = errors.joined(separator: "\n")
         }
 
+        // Deduplicate channels — first provider wins when IDs collide
+        // (e.g. user added the same provider twice)
+        var seenIDs = Set<String>()
+        allChannels = allChannels.filter { seenIDs.insert($0.id).inserted }
+
         // Restore favorites on full channel set
         favoriteOrder = await loadFavoriteOrder()
         let favoriteSet = Set(favoriteOrder)
