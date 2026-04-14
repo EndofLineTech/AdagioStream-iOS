@@ -183,7 +183,11 @@ struct NowPlayingView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    HStack(spacing: 16) {
+                        AirPlayRoutePickerView()
+                            .frame(width: 24, height: 24)
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
         }
