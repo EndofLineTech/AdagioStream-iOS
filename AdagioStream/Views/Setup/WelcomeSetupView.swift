@@ -62,6 +62,10 @@ struct WelcomeSetupView: View {
 
     // MARK: - Welcome
 
+    private var hasExistingProviders: Bool {
+        !providerManager.providers.isEmpty
+    }
+
     private var welcomeView: some View {
         VStack(spacing: 24) {
             Spacer()
@@ -74,11 +78,20 @@ struct WelcomeSetupView: View {
                 .font(.largeTitle.bold())
                 .multilineTextAlignment(.center)
 
-            Text("Stream your favorite audio channels from M3U playlists or Xtream Codes providers.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+            if hasExistingProviders {
+                let count = providerManager.providers.count
+                Text("You already have \(count) account\(count == 1 ? "" : "s") configured. You can add a new account or skip this setup.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            } else {
+                Text("Stream your favorite audio channels from M3U playlists or Xtream Codes providers.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
 
             Spacer()
 
@@ -86,7 +99,7 @@ struct WelcomeSetupView: View {
                 Button {
                     withAnimation { step = .connectionType }
                 } label: {
-                    Text("Get Started")
+                    Text(hasExistingProviders ? "Add New Account" : "Get Started")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
@@ -99,7 +112,7 @@ struct WelcomeSetupView: View {
                         onComplete()
                     }
                 } label: {
-                    Text("Skip Setup")
+                    Text(hasExistingProviders ? "Keep Existing Setup" : "Skip Setup")
                         .font(.subheadline)
                 }
                 .buttonStyle(.plain)
