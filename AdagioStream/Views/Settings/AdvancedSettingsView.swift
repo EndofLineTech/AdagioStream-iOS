@@ -127,7 +127,12 @@ struct AdvancedSettingsView: View {
         } message: {
             Text("This is your last chance. All data will be permanently deleted and the app will reset to its initial state.")
         }
-        .sheet(isPresented: $showExportSheet) {
+        .sheet(isPresented: $showExportSheet, onDismiss: {
+            if let url = exportFileURL {
+                try? FileManager.default.removeItem(at: url)
+                exportFileURL = nil
+            }
+        }) {
             if let url = exportFileURL {
                 ShareSheet(activityItems: [url])
                     .presentationDetents([.medium, .large])

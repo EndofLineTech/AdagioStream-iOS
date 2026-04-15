@@ -46,5 +46,9 @@ struct DataDeletionService {
                 try? FileManager.default.removeItem(at: file)
             }
         }
+
+        // 8. Export file
+        let exportFile = tempDir.appendingPathComponent("adagiostream-export.json")
+        try? FileManager.default.removeItem(at: exportFile)
     }
 }
