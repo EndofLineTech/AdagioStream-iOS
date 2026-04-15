@@ -20,12 +20,7 @@ struct SettingsView: View {
                     NavigationLink {
                         ChannelsAccountsSettingsView()
                     } label: {
-                        HStack {
-                            Label("Channels & Accounts", systemImage: "antenna.radiowaves.left.and.right")
-                            Spacer()
-                            Text("\(providerManager.visibleChannels.count)")
-                                .foregroundStyle(.secondary)
-                        }
+                        Label("Accounts & Channels", systemImage: "antenna.radiowaves.left.and.right")
                     }
                 }
 

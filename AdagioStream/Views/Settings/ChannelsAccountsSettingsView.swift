@@ -40,6 +40,18 @@ struct ChannelsAccountsSettingsView: View {
             }
 
             Section {
+                HStack {
+                    Text("Channels Loaded")
+                    Spacer()
+                    Text("\(providerManager.visibleChannels.count)")
+                        .foregroundStyle(.secondary)
+                }
+                HStack {
+                    Text("Favorites")
+                    Spacer()
+                    Text("\(providerManager.favoriteChannels.count)")
+                        .foregroundStyle(.secondary)
+                }
                 Button {
                     Task { await providerManager.loadChannels() }
                 } label: {
@@ -53,11 +65,9 @@ struct ChannelsAccountsSettingsView: View {
                     }
                 }
                 .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
-            } footer: {
-                Text("\(providerManager.visibleChannels.count) channels loaded · \(providerManager.favoriteChannels.count) favorites")
             }
         }
-        .navigationTitle("Channels & Accounts")
+        .navigationTitle("Accounts & Channels")
         .navigationBarTitleDisplayMode(.inline)
     }
 
