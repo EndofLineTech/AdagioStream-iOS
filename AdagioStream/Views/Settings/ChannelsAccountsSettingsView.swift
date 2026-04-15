@@ -3,6 +3,7 @@ import SwiftUI
 struct ChannelsAccountsSettingsView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject private var viewModel: SettingsViewModel
+    @State private var showClearFavoritesAlert = false
 
     var body: some View {
         Form {
@@ -35,8 +36,11 @@ struct ChannelsAccountsSettingsView: View {
                         Text(mode.label).tag(mode)
                     }
                 }
+                .pickerStyle(.segmented)
             } header: {
                 Text("Display")
+            } footer: {
+                Text("All Groups merges channels from all accounts into shared groups. By Provider keeps each account's groups separate. By Source shows the original group from each account.")
             }
 
             Section {
@@ -66,8 +70,25 @@ struct ChannelsAccountsSettingsView: View {
                 }
                 .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
             }
+
+            Section {
+                Button(role: .destructive) {
+                    showClearFavoritesAlert = true
+                } label: {
+                    Label("Clear All Favorites", systemImage: "star.slash")
+                }
+                .disabled(providerManager.favoriteChannels.isEmpty)
+            }
         }
         .navigationTitle("Accounts & Channels")
+        .alert("Clear Favorites", isPresented: $showClearFavoritesAlert) {
+            Button("Clear", role: .destructive) {
+                Task { await providerManager.clearFavorites() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Remove all \(providerManager.favoriteChannels.count) channels from your favorites?")
+        }
         .navigationBarTitleDisplayMode(.inline)
     }
 

@@ -65,13 +65,15 @@ struct PlaybackSettingsView: View {
             }
 
             Section {
-                Picker("Live Score Updates", selection: espnLivePollBinding) {
+                Picker("Live Sports Score Updates", selection: espnLivePollBinding) {
                     ForEach(ESPNLivePollInterval.allCases, id: \.self) { interval in
                         Text(interval.label).tag(interval)
                     }
                 }
             } header: {
                 Text("Live Data")
+            } footer: {
+                Text("How often to refresh live sports scores from ESPN.com API. Lower values show scores sooner but use more data.")
             }
         }
         .navigationTitle("Playback")

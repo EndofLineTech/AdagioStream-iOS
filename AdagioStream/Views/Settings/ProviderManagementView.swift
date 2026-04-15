@@ -8,12 +8,18 @@ struct ProviderManagementView: View {
 
     var body: some View {
         List {
-            ForEach(providerManager.providers) { provider in
-                providerRow(provider)
-            }
-            .onDelete { indexSet in
-                if let index = indexSet.first {
-                    providerToDelete = providerManager.providers[index]
+            Section {
+                ForEach(providerManager.providers) { provider in
+                    providerRow(provider)
+                }
+                .onDelete { indexSet in
+                    if let index = indexSet.first {
+                        providerToDelete = providerManager.providers[index]
+                    }
+                }
+            } footer: {
+                if !providerManager.providers.isEmpty {
+                    Text("Swipe right to edit an account. Swipe left to delete.")
                 }
             }
 

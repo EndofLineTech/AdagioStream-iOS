@@ -8,6 +8,14 @@ struct SettingsView: View {
             List {
                 Section {
                     NavigationLink {
+                        ChannelsAccountsSettingsView()
+                    } label: {
+                        Label("Accounts & Channels", systemImage: "antenna.radiowaves.left.and.right")
+                    }
+                }
+
+                Section {
+                    NavigationLink {
                         AppearanceSettingsView()
                     } label: {
                         Label("Appearance", systemImage: "paintbrush")
@@ -16,11 +24,6 @@ struct SettingsView: View {
                         PlaybackSettingsView()
                     } label: {
                         Label("Playback", systemImage: "play.circle")
-                    }
-                    NavigationLink {
-                        ChannelsAccountsSettingsView()
-                    } label: {
-                        Label("Accounts & Channels", systemImage: "antenna.radiowaves.left.and.right")
                     }
                 }
 

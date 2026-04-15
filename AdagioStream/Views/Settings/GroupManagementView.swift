@@ -39,35 +39,77 @@ struct GroupManagementView: View {
         List {
             if searchText.isEmpty {
                 Section {
-                    HStack {
-                        Button("Enable All") {
-                            Task { await providerManager.setAllGroupsEnabled(true) }
-                        }
-                        .disabled(providerManager.enabledGroups == nil)
-                        Spacer()
-                        Button("Disable All") {
-                            Task { await providerManager.setAllGroupsEnabled(false) }
-                        }
-                        .disabled(providerManager.enabledGroups?.isEmpty == true)
+                } footer: {
+                    Text("Tap \(Image(systemName: "plus.circle.fill")) to add a group to your favorites. Favorite groups appear first in your channel list and CarPlay.")
+                }
+
+                Section {
+                    Button("Enable All") {
+                        Task { await providerManager.setAllGroupsEnabled(true) }
                     }
+                    .disabled(providerManager.enabledGroups == nil)
+                    Button("Disable All") {
+                        Task { await providerManager.setAllGroupsEnabled(false) }
+                    }
+                    .disabled(providerManager.enabledGroups?.isEmpty == true)
                 }
             }
 
             if !filteredFavoriteGroups.isEmpty {
-                Section("Favorite Groups") {
+                Section {
                     ForEach(filteredFavoriteGroups) { group in
-                        groupRow(group)
+                        HStack {
+                            groupLabel(group)
+                            Spacer()
+                            Button {
+                                Task { await providerManager.toggleGroupFavorite(group.name) }
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.plain)
+                            Toggle("", isOn: Binding(
+                                get: { providerManager.isGroupEnabled(group.name) },
+                                set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
+                            ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                            .fixedSize()
+                        }
                     }
                     .onMove { source, destination in
                         providerManager.moveGroupFavorite(from: source, to: destination)
                     }
+                } header: {
+                    Text("Favorite Groups")
+                } footer: {
+                    Text("Favorite groups appear first in your channel list and CarPlay. Tap Edit to reorder them.")
                 }
             }
 
-            Section(filteredFavoriteGroups.isEmpty && favoriteGroups.isEmpty ? "Groups" : "Other Groups") {
+            Section {
                 ForEach(filteredNonFavoriteGroups) { group in
-                    groupRow(group)
+                    HStack {
+                        groupLabel(group)
+                        Spacer()
+                        Button {
+                            Task { await providerManager.toggleGroupFavorite(group.name) }
+                        } label: {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                        .buttonStyle(.plain)
+                        Toggle("", isOn: Binding(
+                            get: { providerManager.isGroupEnabled(group.name) },
+                            set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
+                        .fixedSize()
+                    }
                 }
+            } header: {
+                Text(favoriteGroups.isEmpty ? "Groups" : "Other Groups")
             }
         }
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search groups")
@@ -80,29 +122,12 @@ struct GroupManagementView: View {
         }
     }
 
-    private func groupRow(_ group: GroupInfo) -> some View {
+    private func groupLabel(_ group: GroupInfo) -> some View {
         HStack {
-            Toggle(isOn: Binding(
-                get: { providerManager.isGroupEnabled(group.name) },
-                set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
-            )) {
-                HStack {
-                    Text(group.name)
-                    Spacer()
-                    Text("\(group.count)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .toggleStyle(.switch)
-
-            Button {
-                Task { await providerManager.toggleGroupFavorite(group.name) }
-            } label: {
-                Image(systemName: providerManager.isGroupFavorite(group.name) ? "star.fill" : "star")
-                    .foregroundStyle(providerManager.isGroupFavorite(group.name) ? .yellow : .secondary)
-            }
-            .buttonStyle(.plain)
+            Text(group.name)
+            Text("\(group.count)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
