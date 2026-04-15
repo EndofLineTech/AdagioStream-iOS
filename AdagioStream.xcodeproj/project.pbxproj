@@ -61,6 +61,7 @@
 		A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */; };
 		A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
 		ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
+		AC45A485F3635077A4F77F16 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */; };
 		B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */; };
 		B87BC6F49DF0702DA8B0E033 /* ChannelListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */; };
 		BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
@@ -218,6 +219,7 @@
 		E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedURLSheet.swift; sourceTree = "<group>"; };
 		E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParser.swift; sourceTree = "<group>"; };
 		F32076461D1698393DE4F46B /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
@@ -352,6 +354,7 @@
 		4C12206AA03A30F359EBF328 /* Settings */ = {
 			isa = PBXGroup;
 			children = (
+				ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */,
 				79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */,
 				9593372A158F40D59BB914AC /* LicensesView.swift */,
 				A49B5499FEB06793F277174C /* ProviderManagementView.swift */,
@@ -716,6 +719,7 @@
 				FF289466EAF3E3A99B8177FC /* AddManualEntryView.swift in Sources */,
 				34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */,
 				5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */,
+				AC45A485F3635077A4F77F16 /* AdvancedSettingsView.swift in Sources */,
 				9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */,
 				107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */,
 				E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */,
@@ -831,7 +835,7 @@
 		18C40191F01AEC1A18D25DE0 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 100;
+				CURRENT_PROJECT_VERSION = 101;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStreamWidget/Info.plist;
@@ -924,7 +928,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 100;
+				CURRENT_PROJECT_VERSION = 101;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -949,7 +953,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 100;
+				CURRENT_PROJECT_VERSION = 101;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -971,7 +975,7 @@
 		87B303FEAA3343D6A1A0C7FE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CURRENT_PROJECT_VERSION = 100;
+				CURRENT_PROJECT_VERSION = 101;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStreamWidget/Info.plist;
@@ -992,7 +996,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 100;
+				CURRENT_PROJECT_VERSION = 101;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1014,7 +1018,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 100;
+				CURRENT_PROJECT_VERSION = 101;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;

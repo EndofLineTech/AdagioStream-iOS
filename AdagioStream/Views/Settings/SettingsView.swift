@@ -4,17 +4,12 @@ struct SettingsView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject private var viewModel: SettingsViewModel
-    @State private var showClearFavoritesAlert = false
-    @State private var showClearLogsAlert = false
-    @State private var showShareSheet = false
-    @State private var showShareWarning = false
-    @State private var logSize = DebugLogger.shared.logFileSize()
-    @State private var newPrefix = ""
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Appearance") {
+                // MARK: - Appearance
+                Section {
                     Picker("Appearance", selection: $viewModel.settings.appearanceMode) {
                         ForEach(AppearanceMode.allCases, id: \.self) { mode in
                             Text(mode.label).tag(mode)
@@ -24,9 +19,6 @@ struct SettingsView: View {
                     .onChange(of: viewModel.settings.appearanceMode) { _, newValue in
                         Task { await viewModel.updateAppearance(newValue) }
                     }
-                }
-
-                Section {
                     Picker("Text Size", selection: $viewModel.settings.textSizeMode) {
                         ForEach(TextSizeMode.allCases, id: \.self) { mode in
                             Text(mode.label).tag(mode)
@@ -35,15 +27,6 @@ struct SettingsView: View {
                     .onChange(of: viewModel.settings.textSizeMode) { _, newValue in
                         Task { await viewModel.updateTextSize(newValue) }
                     }
-                    Text("Preview: The quick brown fox")
-                        .font(.body)
-                } header: {
-                    Text("Text Size")
-                } footer: {
-                    Text("System follows your device's text size setting.")
-                }
-
-                Section {
                     Picker("Artwork Display", selection: artworkDisplayBinding) {
                         ForEach(ArtworkDisplayMode.allCases, id: \.self) { mode in
                             Text(mode.label).tag(mode)
@@ -51,24 +34,17 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: {
-                    Text("Artwork")
+                    Text("Appearance")
                 } footer: {
-                    Text("Choose whether to display track cover art or the channel logo in the player and CarPlay.")
+                    Text("Text size \"System\" follows your device's text size setting. Artwork controls what appears in the player and CarPlay.")
                 }
 
-                Section("Playback") {
-                    HStack {
-                        Text("Stream Quality")
-                        Spacer()
-                        if audioPlayer.isPlaying, audioPlayer.streamBitrateKbps > 1 {
-                            let formatted = audioPlayer.streamBitrateKbps >= 1000
-                                ? String(format: "%.1f Mbps", audioPlayer.streamBitrateKbps / 1000)
-                                : "\(Int(audioPlayer.streamBitrateKbps)) kbps"
-                            Text(formatted)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Not playing")
-                                .foregroundStyle(.secondary)
+                // MARK: - Playback
+                Section {
+                    Picker("Startup Channel", selection: startupStreamBinding) {
+                        Text("None").tag(String?.none)
+                        ForEach(providerManager.favoriteChannels) { channel in
+                            Text(channel.name).tag(Optional(channel.id))
                         }
                     }
                     VStack(alignment: .leading, spacing: 8) {
@@ -89,55 +65,47 @@ struct SettingsView: View {
                         .onChange(of: viewModel.settings.bufferDuration) { _, newValue in
                             Task { await viewModel.updateBufferDuration(newValue) }
                         }
-                        Text("Higher values improve stability on slow connections but increase initial load time.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Stream Quality")
+                        Spacer()
+                        if audioPlayer.isPlaying, audioPlayer.streamBitrateKbps > 1 {
+                            let formatted = audioPlayer.streamBitrateKbps >= 1000
+                                ? String(format: "%.1f Mbps", audioPlayer.streamBitrateKbps / 1000)
+                                : "\(Int(audioPlayer.streamBitrateKbps)) kbps"
+                            Text(formatted)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Not playing")
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     Picker("Live Score Updates", selection: espnLivePollBinding) {
                         ForEach(ESPNLivePollInterval.allCases, id: \.self) { interval in
                             Text(interval.label).tag(interval)
                         }
                     }
-                }
-
-                Section {
-                    Picker("Channel", selection: startupStreamBinding) {
-                        Text("None").tag(String?.none)
-                        ForEach(providerManager.favoriteChannels) { channel in
-                            Text(channel.name).tag(Optional(channel.id))
-                        }
-                    }
                 } header: {
-                    Text("Startup")
+                    Text("Playback")
                 } footer: {
                     if providerManager.favoriteChannels.isEmpty {
-                        Text("Favorite a channel to set it as your startup channel.")
+                        Text("Favorite a channel to set it as your startup channel. Higher buffer values improve stability on slow connections.")
                     } else {
-                        Text("Automatically plays this channel when the app opens. Only favorited channels are shown.")
+                        Text("Startup channel auto-plays when the app opens. Higher buffer values improve stability on slow connections.")
                     }
                 }
 
-                Section("Channels") {
-                    Picker("Grouping", selection: groupingModeBinding) {
-                        ForEach(ChannelGroupingMode.allCases, id: \.self) { mode in
-                            Text(mode.label).tag(mode)
+                // MARK: - Channels & Accounts
+                Section {
+                    NavigationLink {
+                        ProviderManagementView()
+                    } label: {
+                        HStack {
+                            Text("Accounts")
+                            Spacer()
+                            Text(providersLabel)
+                                .foregroundStyle(.secondary)
                         }
-                    }
-                    Picker("Group Sort", selection: groupSortBinding) {
-                        ForEach(ChannelSortOrder.allCases, id: \.self) { order in
-                            Text(order.label).tag(order)
-                        }
-                    }
-                    Picker("Channel Sort", selection: channelSortBinding) {
-                        ForEach(ChannelSortOrder.allCases, id: \.self) { order in
-                            Text(order.label).tag(order)
-                        }
-                    }
-                    HStack {
-                        Text("Loaded Channels")
-                        Spacer()
-                        Text("\(providerManager.visibleChannels.count)")
-                            .foregroundStyle(.secondary)
                     }
                     NavigationLink {
                         GroupManagementView()
@@ -149,23 +117,11 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    NavigationLink {
-                        ProviderManagementView()
-                    } label: {
-                        HStack {
-                            Text("Accounts")
-                            Spacer()
-                            Text(providersLabel)
-                                .foregroundStyle(.secondary)
+                    Picker("Grouping", selection: groupingModeBinding) {
+                        ForEach(ChannelGroupingMode.allCases, id: \.self) { mode in
+                            Text(mode.label).tag(mode)
                         }
                     }
-                    HStack {
-                        Text("Favorites")
-                        Spacer()
-                        Text("\(providerManager.favoriteChannels.count)")
-                            .foregroundStyle(.secondary)
-                    }
-
                     Button {
                         Task { await providerManager.loadChannels() }
                     } label: {
@@ -179,72 +135,22 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
-                }
-
-                Section {
-                    ForEach(viewModel.settings.sortPrefixes, id: \.self) { prefix in
-                        Text(prefix)
-                    }
-                    .onDelete { indexSet in
-                        viewModel.settings.sortPrefixes.remove(atOffsets: indexSet)
-                        Task { await viewModel.saveSettings() }
-                    }
-                    HStack {
-                        TextField("New prefix...", text: $newPrefix)
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                        Button("Add") {
-                            let trimmed = newPrefix.trimmingCharacters(in: .whitespaces)
-                            guard !trimmed.isEmpty,
-                                  !viewModel.settings.sortPrefixes.contains(trimmed) else { return }
-                            viewModel.settings.sortPrefixes.append(trimmed)
-                            newPrefix = ""
-                            Task { await viewModel.saveSettings() }
-                        }
-                        .disabled(newPrefix.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
                 } header: {
-                    Text("Sort Prefixes")
+                    Text("Channels & Accounts")
                 } footer: {
-                    Text("Channel names starting with these prefixes will be sorted by the text after the prefix (e.g. \"Radio: Jazz\" sorts under J).")
+                    Text("\(providerManager.visibleChannels.count) channels loaded · \(providerManager.favoriteChannels.count) favorites")
                 }
 
-                Section("Data") {
-                    Button(role: .destructive) {
-                        showClearFavoritesAlert = true
-                    } label: {
-                        Label("Clear All Favorites", systemImage: "star.slash")
-                    }
-                    .disabled(providerManager.favoriteChannels.isEmpty)
-                }
-
+                // MARK: - Advanced
                 Section {
-                    Toggle("Enable Debug Logging", isOn: debugLoggingBinding)
-
-                    Button {
-                        showShareWarning = true
+                    NavigationLink {
+                        AdvancedSettingsView()
                     } label: {
-                        HStack {
-                            Label("Share Logs", systemImage: "square.and.arrow.up")
-                            Spacer()
-                            Text(logSize)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("Advanced")
                     }
-                    .disabled(!FileManager.default.fileExists(atPath: DebugLogger.shared.logFileURL.path))
-
-                    Button(role: .destructive) {
-                        showClearLogsAlert = true
-                    } label: {
-                        Label("Clear Logs", systemImage: "trash")
-                    }
-                    .disabled(!FileManager.default.fileExists(atPath: DebugLogger.shared.logFileURL.path))
-                } header: {
-                    Text("Debug Logs")
-                } footer: {
-                    Text("When enabled, logs record player, CarPlay, call, and Siri events for troubleshooting. Share them via AirDrop, email, or save to Files.")
                 }
 
+                // MARK: - About
                 Section("About") {
                     HStack {
                         Text("App")
@@ -273,35 +179,6 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .alert("Clear Favorites", isPresented: $showClearFavoritesAlert) {
-                Button("Clear", role: .destructive) {
-                    Task { await providerManager.clearFavorites() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Remove all \(providerManager.favoriteChannels.count) channels from your favorites?")
-            }
-            .alert("Clear Logs", isPresented: $showClearLogsAlert) {
-                Button("Clear", role: .destructive) {
-                    DebugLogger.shared.clearLogs()
-                    logSize = DebugLogger.shared.logFileSize()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Delete all debug log files?")
-            }
-            .alert("Share Debug Logs", isPresented: $showShareWarning) {
-                Button("Share") { showShareSheet = true }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Log files may contain channel names, server addresses, and connection details. Review the file before sharing publicly.")
-            }
-            .sheet(isPresented: $showShareSheet) {
-                logSize = DebugLogger.shared.logFileSize()
-            } content: {
-                ShareSheet(activityItems: [DebugLogger.shared.logFileURL])
-                    .presentationDetents([.medium, .large])
-            }
         }
     }
 
@@ -310,24 +187,6 @@ struct SettingsView: View {
             get: { viewModel.settings.channelGroupingMode },
             set: { newValue in
                 Task { await viewModel.updateChannelGroupingMode(newValue, providerManager: providerManager) }
-            }
-        )
-    }
-
-    private var channelSortBinding: Binding<ChannelSortOrder> {
-        Binding(
-            get: { viewModel.settings.channelSortOrder },
-            set: { newValue in
-                Task { await viewModel.updateChannelSortOrder(newValue, providerManager: providerManager) }
-            }
-        )
-    }
-
-    private var groupSortBinding: Binding<ChannelSortOrder> {
-        Binding(
-            get: { viewModel.settings.groupSortOrder },
-            set: { newValue in
-                Task { await viewModel.updateGroupSortOrder(newValue, providerManager: providerManager) }
             }
         )
     }
@@ -355,15 +214,6 @@ struct SettingsView: View {
             get: { viewModel.settings.espnLivePollInterval },
             set: { newValue in
                 Task { await viewModel.updateESPNLivePollInterval(newValue) }
-            }
-        )
-    }
-
-    private var debugLoggingBinding: Binding<Bool> {
-        Binding(
-            get: { viewModel.settings.debugLoggingEnabled },
-            set: { newValue in
-                Task { await viewModel.updateDebugLogging(newValue) }
             }
         )
     }
