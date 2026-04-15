@@ -63,6 +63,10 @@ struct ContentView: View {
                 showingSetup = false
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .didDeleteAllData)) { _ in
+            selectedTab = 0
+            showingSetup = true
+        }
         .focusable()
         .onKeyPress(characters: .init(charactersIn: " ")) { _ in
             audioPlayer.togglePlayPause()

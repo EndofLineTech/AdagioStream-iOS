@@ -32,8 +32,10 @@
 		45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 759D39578A2906EC0C071E9A /* LiveActivityManager.swift */; };
 		462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */; };
 		4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */; };
+		47911B7F0C6396628A25C035 /* MaskedTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27383F186EB3DC4FC9B8C0C /* MaskedTextField.swift */; };
 		493C2F0EAA32300C720ECBBB /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0A797FD80F537FF4B6294716 /* SwiftUI.framework */; };
 		49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
+		4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */; };
 		50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */; };
 		52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D099586458688D813DF57122 /* SettingsView.swift */; };
 		54FED6DF6F6733D6BDC056D2 /* SavedSongsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */; };
@@ -59,6 +61,7 @@
 		9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */; };
 		9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */; };
 		9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */; };
+		A0909B69676AA1A75CD921BD /* DataDeletionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */; };
 		A24C54030E71F5C2907BD1D4 /* CustomPlaylistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */; };
 		A260CCCD1191957DE0C6739E /* AdagioStartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5007C81620324434051842F8 /* AdagioStartupView.swift */; };
 		A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */; };
@@ -70,6 +73,7 @@
 		BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
 		BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */; };
 		C0814BA417A9237B8348F95F /* EPGView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */; };
+		C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D317808303BD060CB0340505 /* DataExportService.swift */; };
 		C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */; };
 		C3B00CA635577BDD69A6001B /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CCAE274A593BD7364C5F6FD /* Channel.swift */; };
 		C49FDC073B2434235202F075 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E40BDCF80A62A32C499B93B /* Constants.swift */; };
@@ -172,9 +176,11 @@
 		5007C81620324434051842F8 /* AdagioStartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStartupView.swift; sourceTree = "<group>"; };
 		59978A1B27C81E201050FE95 /* AdagioStreamWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamWidgetBundle.swift; sourceTree = "<group>"; };
 		5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UExporter.swift; sourceTree = "<group>"; };
+		5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDeletionService.swift; sourceTree = "<group>"; };
 		5D4EB311F106E7633D4C135D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
+		6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
 		6F11FFD3957AF605C4334B57 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		70898C94DBBE6C54B3D3F4AD /* NowPlayingAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingAttributes.swift; sourceTree = "<group>"; };
@@ -217,6 +223,8 @@
 		CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamApp.swift; sourceTree = "<group>"; };
 		D099586458688D813DF57122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
+		D27383F186EB3DC4FC9B8C0C /* MaskedTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskedTextField.swift; sourceTree = "<group>"; };
+		D317808303BD060CB0340505 /* DataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataExportService.swift; sourceTree = "<group>"; };
 		D903CA55661DD9736AA33128 /* AddManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddManualEntryView.swift; sourceTree = "<group>"; };
 		DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParser.swift; sourceTree = "<group>"; };
 		DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeShiftBufferService.swift; sourceTree = "<group>"; };
@@ -341,6 +349,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		3B92C5C143BE91606CF31288 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				D27383F186EB3DC4FC9B8C0C /* MaskedTextField.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
 		3DC32907FEBD360A10C72847 /* AdagioStreamTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -369,6 +385,7 @@
 				79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */,
 				9593372A158F40D59BB914AC /* LicensesView.swift */,
 				EE137FF651110189C708941D /* PlaybackSettingsView.swift */,
+				6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */,
 				A49B5499FEB06793F277174C /* ProviderManagementView.swift */,
 				D099586458688D813DF57122 /* SettingsView.swift */,
 			);
@@ -446,6 +463,7 @@
 				9DCB0C46B512BF4D2919E11A /* ContentView.swift */,
 				74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */,
 				2DD4B792FDAF9150EF40E64C /* Channels */,
+				3B92C5C143BE91606CF31288 /* Components */,
 				A97EE5CFDF1DFF2BB9D2E698 /* CustomPlaylists */,
 				A2A244448F29868096069FC2 /* EPG */,
 				6FBC5F09C97033D356ED66F5 /* Favorites */,
@@ -543,6 +561,8 @@
 			children = (
 				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
 				820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */,
+				5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */,
+				D317808303BD060CB0340505 /* DataExportService.swift */,
 				765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */,
 				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
 				128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */,
@@ -754,6 +774,8 @@
 				33B81046142D5B7C9E01CA6A /* CustomPlaylistGroup.swift in Sources */,
 				575D753F86DFC83AEBD874E0 /* CustomPlaylistListView.swift in Sources */,
 				FB623925315D5AAE757A30EE /* CustomPlaylistManager.swift in Sources */,
+				A0909B69676AA1A75CD921BD /* DataDeletionService.swift in Sources */,
+				C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */,
 				3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */,
 				49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */,
 				C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */,
@@ -772,6 +794,7 @@
 				45E2C2A725EA1C61FBBBA2F3 /* LiveActivityManager.swift in Sources */,
 				F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
+				47911B7F0C6396628A25C035 /* MaskedTextField.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
 				06D01EDA53CB232933383D28 /* NowPlayingAttributes.swift in Sources */,
 				23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */,
@@ -779,6 +802,7 @@
 				83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */,
 				C733EDA151EC0DF936A3D4E9 /* PlaybackSettingsView.swift in Sources */,
 				9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */,
+				4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */,
 				129D39FCB60C075DFBF45289 /* Provider.swift in Sources */,
 				5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */,
 				FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */,

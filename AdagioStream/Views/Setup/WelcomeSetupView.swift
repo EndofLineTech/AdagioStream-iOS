@@ -24,18 +24,21 @@ struct WelcomeSetupView: View {
 
     var onComplete: () -> Void
 
+    @State private var newGroupNames: [String] = []
+
     private enum SetupStep {
         case welcome
         case connectionType
         case credentials
+        case groupSelection
     }
 
     var body: some View {
-        ZStack {
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
 
-            VStack(spacing: 0) {
                 stepContent
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -43,6 +46,60 @@ struct WelcomeSetupView: View {
                     ))
                     .animation(.easeInOut(duration: 0.3), value: step)
             }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    leadingButton
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    trailingButton
+                }
+            }
+        }
+    }
+
+    // MARK: - Toolbar Buttons
+
+    @ViewBuilder
+    private var leadingButton: some View {
+        switch step {
+        case .welcome:
+            EmptyView()
+        case .connectionType:
+            Button {
+                withAnimation { step = .welcome }
+            } label: {
+                Image(systemName: "chevron.backward")
+            }
+        case .credentials:
+            Button {
+                error = nil
+                withAnimation { step = .connectionType }
+            } label: {
+                Image(systemName: "chevron.backward")
+            }
+        case .groupSelection:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var trailingButton: some View {
+        switch step {
+        case .welcome:
+            if hasExistingProviders {
+                Button("Skip") {
+                    Task {
+                        await settingsViewModel.completeSetup()
+                        onComplete()
+                    }
+                }
+            }
+        case .connectionType:
+            EmptyView()
+        case .credentials:
+            EmptyView()
+        case .groupSelection:
+            EmptyView()
         }
     }
 
@@ -57,6 +114,8 @@ struct WelcomeSetupView: View {
             connectionTypeView
         case .credentials:
             credentialsView
+        case .groupSelection:
+            groupSelectionView
         }
     }
 
@@ -95,7 +154,7 @@ struct WelcomeSetupView: View {
 
             Spacer()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 Button {
                     withAnimation { step = .connectionType }
                 } label: {
@@ -106,17 +165,15 @@ struct WelcomeSetupView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button {
-                    Task {
-                        await settingsViewModel.completeSetup()
-                        onComplete()
+                if !hasExistingProviders {
+                    Button("Skip Setup") {
+                        Task {
+                            await settingsViewModel.completeSetup()
+                            onComplete()
+                        }
                     }
-                } label: {
-                    Text(hasExistingProviders ? "Keep Existing Setup" : "Skip Setup")
-                        .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
@@ -140,69 +197,52 @@ struct WelcomeSetupView: View {
                 connectionCard(
                     title: "M3U Playlist",
                     description: "Connect using a playlist URL",
-                    icon: "music.note.list",
-                    isSelected: connectionType == 0
+                    icon: "music.note.list"
                 ) {
                     connectionType = 0
+                    withAnimation { step = .credentials }
                 }
 
                 connectionCard(
                     title: "Xtream Codes",
                     description: "Connect with server URL, username, and password",
-                    icon: "server.rack",
-                    isSelected: connectionType == 1
+                    icon: "server.rack"
                 ) {
                     connectionType = 1
+                    withAnimation { step = .credentials }
                 }
             }
             .padding(.horizontal, 24)
 
             Spacer()
-
-            HStack(spacing: 16) {
-                Button("Back") {
-                    withAnimation { step = .welcome }
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    withAnimation { step = .credentials }
-                } label: {
-                    Text("Continue")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 40)
         }
     }
 
-    private func connectionCard(title: String, description: String, icon: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func connectionCard(title: String, description: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
                     .font(.title2)
                     .frame(width: 44)
-                    .foregroundStyle(isSelected ? Color.white : Color.accentColor)
+                    .foregroundStyle(Color.accentColor)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.headline)
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
+                        .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundColor(isSelected ? .white : .gray)
+                Image(systemName: "chevron.forward")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
             }
             .padding(16)
-            .background(isSelected ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-            .foregroundStyle(isSelected ? .white : .primary)
+            .background(Color(.secondarySystemGroupedBackground))
+            .foregroundStyle(.primary)
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
@@ -219,7 +259,7 @@ struct WelcomeSetupView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
-            .padding(.top, 40)
+            .padding(.top, 24)
             .padding(.bottom, 16)
 
             Form {
@@ -251,7 +291,7 @@ struct WelcomeSetupView: View {
                             .textContentType(.init(rawValue: ""))
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                        SecureField("Password", text: $xcPassword)
+                        MaskedTextField(placeholder: "Password", text: $xcPassword)
                     }
                 }
 
@@ -261,30 +301,95 @@ struct WelcomeSetupView: View {
                             .foregroundStyle(.red)
                     }
                 }
+
+                Section {
+                    if isSaving {
+                        HStack {
+                            Spacer()
+                            ProgressView("Adding account...")
+                            Spacer()
+                        }
+                    } else {
+                        Button {
+                            save()
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("Add Account")
+                                    .font(.headline)
+                                Spacer()
+                            }
+                        }
+                        .disabled(!isValid)
+                    }
+                }
             }
             .scrollContentBackground(.hidden)
+        }
+    }
 
-            HStack(spacing: 16) {
-                Button("Back") {
-                    error = nil
-                    withAnimation { step = .connectionType }
-                }
-                .buttonStyle(.bordered)
+    // MARK: - Group Selection
 
-                if isSaving {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Button {
-                        save()
-                    } label: {
-                        Text("Add Account")
-                            .frame(maxWidth: .infinity)
+    private var groupSelectionView: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 8) {
+                Text("Enable Groups")
+                    .font(.title.bold())
+                Text("We found \(newGroupNames.count) groups. Choose which ones to enable.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            .padding(.top, 24)
+            .padding(.bottom, 16)
+
+            List {
+                Section {
+                    Button("Enable All") {
+                        Task { await providerManager.setAllGroupsEnabled(true) }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!isValid)
+                    .disabled(providerManager.enabledGroups == nil)
+                    Button("Disable All") {
+                        Task { await providerManager.setAllGroupsEnabled(false) }
+                    }
+                    .disabled(providerManager.enabledGroups?.isEmpty == true)
+                }
+
+                Section {
+                    ForEach(newGroupNames, id: \.self) { group in
+                        Toggle(isOn: Binding(
+                            get: { providerManager.isGroupEnabled(group) },
+                            set: { _ in Task { await providerManager.toggleGroupEnabled(group) } }
+                        )) {
+                            HStack {
+                                Text(group)
+                                Spacer()
+                                if let count = providerManager.allGroupCounts[group] {
+                                    Text("\(count)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .toggleStyle(.switch)
+                    }
                 }
             }
+            .listStyle(.insetGrouped)
+
+            Button {
+                Task {
+                    await settingsViewModel.completeSetup()
+                    onComplete()
+                }
+            } label: {
+                Text("Done")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+            }
+            .buttonStyle(.borderedProminent)
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
         }
@@ -338,13 +443,16 @@ struct WelcomeSetupView: View {
 
         let provider = Provider(name: name, type: type)
         Task {
-            await providerManager.addProvider(provider)
+            await providerManager.addProvider(provider, enableAllGroups: true)
             if let loadError = providerManager.error {
                 error = loadError
                 isSaving = false
             } else {
-                await settingsViewModel.completeSetup()
-                onComplete()
+                newGroupNames = providerManager.allGroupCounts.keys.sorted {
+                    $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+                }
+                isSaving = false
+                withAnimation { step = .groupSelection }
             }
         }
     }

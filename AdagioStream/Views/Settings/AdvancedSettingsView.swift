@@ -6,6 +6,11 @@ struct AdvancedSettingsView: View {
     @State private var showClearLogsAlert = false
     @State private var showShareSheet = false
     @State private var showShareWarning = false
+    @State private var showExportSheet = false
+    @State private var exportFileURL: URL?
+    @State private var isExporting = false
+    @State private var showDeleteWarning = false
+    @State private var showDeleteConfirmation = false
     @State private var logSize = DebugLogger.shared.logFileSize()
 
     var body: some View {
@@ -38,6 +43,44 @@ struct AdvancedSettingsView: View {
                 Text("When enabled, logs record player, CarPlay, call, and Siri events for troubleshooting. Share them via AirDrop, email, or save to Files.")
             }
 
+            Section {
+                Button {
+                    isExporting = true
+                    Task {
+                        let data = await DataExportService.exportAll(
+                            providerManager: providerManager,
+                            persistence: .shared
+                        )
+                        exportFileURL = try? DataExportService.writeExportFile(data)
+                        isExporting = false
+                        if exportFileURL != nil {
+                            showExportSheet = true
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Label("Export My Data", systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if isExporting {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(isExporting)
+            } footer: {
+                Text("Exports your accounts (without passwords), favorites, saved songs, playlists, groups, and settings as a JSON file.")
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    showDeleteWarning = true
+                } label: {
+                    Label("Delete All My Data", systemImage: "trash")
+                }
+            } footer: {
+                Text("Permanently deletes all app data including accounts, favorites, playlists, settings, cached images, and logs. This cannot be undone.")
+            }
         }
         .navigationTitle("Advanced")
         .navigationBarTitleDisplayMode(.inline)
@@ -61,6 +104,34 @@ struct AdvancedSettingsView: View {
         } content: {
             ShareSheet(activityItems: [DebugLogger.shared.logFileURL])
                 .presentationDetents([.medium, .large])
+        }
+        .alert("Delete All Data?", isPresented: $showDeleteWarning) {
+            Button("Continue", role: .destructive) {
+                showDeleteConfirmation = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently erase all your accounts, favorites, saved songs, playlists, settings, cached images, and logs. This cannot be undone.")
+        }
+        .alert("Are you sure?", isPresented: $showDeleteConfirmation) {
+            Button("Delete Everything", role: .destructive) {
+                Task {
+                    await DataDeletionService.deleteAllData()
+                    await providerManager.loadProviders()
+                    await providerManager.loadChannels()
+                    viewModel.settings = .default
+                    NotificationCenter.default.post(name: .didDeleteAllData, object: nil)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This is your last chance. All data will be permanently deleted and the app will reset to its initial state.")
+        }
+        .sheet(isPresented: $showExportSheet) {
+            if let url = exportFileURL {
+                ShareSheet(activityItems: [url])
+                    .presentationDetents([.medium, .large])
+            }
         }
     }
 

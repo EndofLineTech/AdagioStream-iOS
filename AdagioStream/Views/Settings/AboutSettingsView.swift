@@ -26,6 +26,11 @@ struct AboutSettingsView: View {
 
             Section {
                 NavigationLink {
+                    PrivacyPolicyView()
+                } label: {
+                    Text("Privacy Policy")
+                }
+                NavigationLink {
                     LicensesView()
                 } label: {
                     Text("Licenses")

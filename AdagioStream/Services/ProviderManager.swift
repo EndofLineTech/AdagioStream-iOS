@@ -68,32 +68,39 @@ final class ProviderManager: ObservableObject {
         }
     }
 
-    func addProvider(_ provider: Provider) async {
+    func addProvider(_ provider: Provider, enableAllGroups: Bool = false) async {
         let existingGroups = Set(rawChannels.map(\.group))
 
         providers.append(provider)
         await saveProviders()
         await loadChannels()
 
-        // Disable groups that are new from this provider
+        // Disable groups that are new from this provider (unless enableAllGroups is set)
         let allGroups = Set(rawChannels.map(\.group))
         let newGroups = allGroups.subtracting(existingGroups)
 
         if !newGroups.isEmpty {
-            if enabledGroups == nil {
-                // Was "all enabled" — switch to explicit set excluding new groups
-                enabledGroups = allGroups.subtracting(newGroups)
+            if enableAllGroups {
+                // First-time setup: keep all groups enabled
+                enabledGroups = nil
+                await saveEnabledGroups()
+                applyGroupFilter()
             } else {
-                enabledGroups = enabledGroups?.subtracting(newGroups)
-            }
-            await saveEnabledGroups()
-            applyGroupFilter()
+                if enabledGroups == nil {
+                    // Was "all enabled" — switch to explicit set excluding new groups
+                    enabledGroups = allGroups.subtracting(newGroups)
+                } else {
+                    enabledGroups = enabledGroups?.subtracting(newGroups)
+                }
+                await saveEnabledGroups()
+                applyGroupFilter()
 
-            newProviderInfo = NewProviderInfo(
-                providerName: provider.name,
-                groupCount: newGroups.count,
-                channelCount: channelCountByProvider[provider.id] ?? 0
-            )
+                newProviderInfo = NewProviderInfo(
+                    providerName: provider.name,
+                    groupCount: newGroups.count,
+                    channelCount: channelCountByProvider[provider.id] ?? 0
+                )
+            }
         }
     }
 
