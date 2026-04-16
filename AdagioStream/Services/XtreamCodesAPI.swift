@@ -80,28 +80,6 @@ struct XtreamCodesAPI {
         }
     }
 
-    struct EPGListing: Codable {
-        let title: String?
-        let description: String?
-        let start: String?
-        let end: String?
-
-        enum CodingKeys: String, CodingKey {
-            case title
-            case description
-            case start
-            case end
-        }
-    }
-
-    struct ShortEPGResponse: Codable {
-        let epgListings: [EPGListing]?
-
-        enum CodingKeys: String, CodingKey {
-            case epgListings = "epg_listings"
-        }
-    }
-
     // MARK: - API Calls
 
     func authenticate() async throws -> AuthResponse {
@@ -131,14 +109,6 @@ struct XtreamCodesAPI {
             throw APIError.invalidURL
         }
         return try await fetch(url)
-    }
-
-    func getShortEPG(streamID: Int) async throws -> [EPGListing] {
-        guard let url = host.xtreamCodesURL(username: username, password: password, action: "get_short_epg", params: ["stream_id": String(streamID)]) else {
-            throw APIError.invalidURL
-        }
-        let response: ShortEPGResponse = try await fetch(url)
-        return response.epgListings ?? []
     }
 
     /// Full XMLTV EPG URL exposed by most Xtream Codes panels.

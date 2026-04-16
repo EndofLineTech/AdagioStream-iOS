@@ -35,20 +35,6 @@
                ReferencedContainer = "container:AdagioStream.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "3B863EAC76D53D1796222578"
-               BuildableName = "AdagioStreamWidget.appex"
-               BlueprintName = "AdagioStreamWidget"
-               ReferencedContainer = "container:AdagioStream.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction

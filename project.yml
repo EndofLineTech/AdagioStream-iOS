@@ -56,14 +56,12 @@ targets:
     dependencies:
       - package: VLCKitSPM
       - target: ShareExtension
-      - target: AdagioStreamWidget
     info:
       path: AdagioStream/Info.plist
       properties:
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Adagio Stream
-        NSSupportsLiveActivities: true
         UILaunchStoryboardName: LaunchScreen
         LSApplicationQueriesSchemes:
           - spotify
@@ -88,7 +86,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "102"
+        CURRENT_PROJECT_VERSION: "103"
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
@@ -113,7 +111,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "102"
+        CURRENT_PROJECT_VERSION: "103"
         MARKETING_VERSION: "1.0"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services
@@ -132,30 +130,6 @@ targets:
         com.apple.security.application-groups:
           - group.com.adagiostream.app
 
-  AdagioStreamWidget:
-    type: app-extension
-    platform: iOS
-    sources:
-      - AdagioStreamWidget
-      - path: AdagioStream/Models/NowPlayingAttributes.swift
-    dependencies:
-      - sdk: SwiftUI.framework
-      - sdk: WidgetKit.framework
-      - sdk: ActivityKit.framework
-    info:
-      path: AdagioStreamWidget/Info.plist
-      properties:
-        NSExtension:
-          NSExtensionPointIdentifier: com.apple.widgetkit-extension
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.widget
-        DEVELOPMENT_TEAM: EWT2X7Q9ZJ
-        GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "102"
-        MARKETING_VERSION: "1.0"
-        INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
-
   AdagioStreamTests:
     type: bundle.unit-test
     platform: iOS
@@ -172,7 +146,6 @@ schemes:
     build:
       targets:
         AdagioStream: all
-        AdagioStreamWidget: all
         AdagioStreamTests: [test]
     run:
       config: Debug
