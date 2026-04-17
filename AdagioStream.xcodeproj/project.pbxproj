@@ -847,7 +847,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 103;
+				CURRENT_PROJECT_VERSION = 104;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -872,7 +872,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 103;
+				CURRENT_PROJECT_VERSION = 104;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -895,7 +895,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 103;
+				CURRENT_PROJECT_VERSION = 104;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -917,7 +917,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 103;
+				CURRENT_PROJECT_VERSION = 104;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;

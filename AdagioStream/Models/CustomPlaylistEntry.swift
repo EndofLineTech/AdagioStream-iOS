@@ -24,12 +24,18 @@ struct CustomPlaylistEntry: Codable, Identifiable, Equatable {
     }
 
     var asChannel: Channel {
+        asChannel(groupName: "Custom", playlistName: nil)
+    }
+
+    func asChannel(groupName: String, playlistName: String?) -> Channel {
         Channel(
             id: id.uuidString,
             name: name,
             streamURL: streamURL,
             logoURL: logoURL,
-            group: "Custom"
+            group: groupName,
+            providerName: playlistName,
+            isCustomPlaylist: true
         )
     }
 }

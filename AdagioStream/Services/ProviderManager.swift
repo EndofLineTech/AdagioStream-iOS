@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -29,12 +30,24 @@ final class ProviderManager: ObservableObject {
     @Published var groupSortOrder: ChannelSortOrder = .providerOrder
     @Published var channelGroupingMode: ChannelGroupingMode = .allGroups
     private var rawChannels: [Channel] = []
+    private var providerRawChannels: [Channel] = []
     private var hasInitializedCollapsedGroups = false
     private var isLoadingChannels = false
+    private var cancellables = Set<AnyCancellable>()
 
     private let persistence = PersistenceService.shared
 
     init() {
+        // Re-merge custom playlist channels whenever playlists change
+        CustomPlaylistManager.shared.$playlists
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.rebuildWithCustomPlaylists()
+                }
+            }
+            .store(in: &cancellables)
+
         Task {
             let settings: AppSettings = await persistence.loadOrDefault(
                 from: Constants.StorageKeys.settings, default: .default
@@ -45,6 +58,11 @@ final class ProviderManager: ObservableObject {
             await loadProviders()
             if !providers.isEmpty {
                 await loadChannels()
+            } else {
+                // No providers — still merge custom playlist channels
+                favoriteOrder = await loadFavoriteOrder()
+                appendCustomPlaylistChannels()
+                applyGroupFilter()
             }
         }
     }
@@ -108,11 +126,14 @@ final class ProviderManager: ObservableObject {
         providers.removeAll { $0.id == provider.id }
         await saveProviders()
         if providers.isEmpty {
+            providerRawChannels = []
             rawChannels = []
             channels = []
             epgData = [:]
             allGroupCounts = [:]
             error = nil
+            // Re-merge custom playlist channels even with no providers
+            rebuildWithCustomPlaylists()
         }
     }
 
@@ -204,15 +225,14 @@ final class ProviderManager: ObservableObject {
         // Restore favorites on full channel set
         favoriteOrder = await loadFavoriteOrder()
         let favoriteSet = Set(favoriteOrder)
-        rawChannels = allChannels.map { channel in
+        providerRawChannels = allChannels.map { channel in
             var c = channel
             c.isFavorite = favoriteSet.contains(c.id)
             return c
         }
 
-        // Compute all group counts (including disabled groups) for management UI
-        let grouped = Dictionary(grouping: rawChannels, by: \.group)
-        allGroupCounts = grouped.mapValues(\.count)
+        // Merge custom playlist channels into the pipeline
+        appendCustomPlaylistChannels()
 
         if !hasInitializedCollapsedGroups && !rawChannels.isEmpty {
             collapsedGroups = Set(rawChannels.map(\.group))
@@ -268,6 +288,51 @@ final class ProviderManager: ObservableObject {
         }
     }
 
+    // MARK: - Custom Playlist Integration
+
+    private func appendCustomPlaylistChannels() {
+        let favoriteSet = Set(favoriteOrder)
+        var seenIDs = Set(providerRawChannels.map(\.id))
+        var customChannels: [Channel] = []
+
+        for playlist in CustomPlaylistManager.shared.playlists {
+            for group in playlist.groups {
+                for entry in group.entries {
+                    let channel = entry.asChannel(groupName: group.name, playlistName: playlist.name)
+                    guard seenIDs.insert(channel.id).inserted else { continue }
+                    var c = channel
+                    c.isFavorite = favoriteSet.contains(c.id)
+                    customChannels.append(c)
+                }
+            }
+        }
+
+        rawChannels = providerRawChannels + customChannels
+
+        // Compute all group counts (including disabled groups) for management UI
+        let grouped = Dictionary(grouping: rawChannels, by: \.group)
+        allGroupCounts = grouped.mapValues(\.count)
+
+        // Auto-enable new custom playlist groups
+        if let enabled = enabledGroups {
+            let newGroups = Set(customChannels.map(\.group)).subtracting(enabled)
+            if !newGroups.isEmpty {
+                enabledGroups = enabled.union(newGroups)
+            }
+        }
+
+        // Collapse new groups by default
+        if hasInitializedCollapsedGroups {
+            let newGroups = Set(customChannels.map(\.group)).subtracting(collapsedGroups)
+            collapsedGroups.formUnion(newGroups)
+        }
+    }
+
+    private func rebuildWithCustomPlaylists() {
+        appendCustomPlaylistChannels()
+        applyGroupFilter()
+    }
+
     // MARK: - Favorites
 
     func toggleFavorite(_ channel: Channel) async {
@@ -277,9 +342,12 @@ final class ProviderManager: ObservableObject {
             newValue = channels[index].isFavorite
         } else { return }
 
-        // Keep rawChannels in sync
+        // Keep rawChannels and providerRawChannels in sync
         if let rawIndex = rawChannels.firstIndex(where: { $0.id == channel.id }) {
             rawChannels[rawIndex].isFavorite = newValue
+        }
+        if let provIndex = providerRawChannels.firstIndex(where: { $0.id == channel.id }) {
+            providerRawChannels[provIndex].isFavorite = newValue
         }
 
         if newValue {
@@ -293,7 +361,21 @@ final class ProviderManager: ObservableObject {
 
     var favoriteChannels: [Channel] {
         let channelMap = Dictionary(channels.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-        return favoriteOrder.compactMap { channelMap[$0] }
+        let result = favoriteOrder.compactMap { channelMap[$0] }
+        // Deduplicate by stream URL — account channels take priority over custom playlist channels
+        var urlToIndex: [URL: Int] = [:]
+        var deduped: [Channel] = []
+        for channel in result {
+            if let idx = urlToIndex[channel.streamURL] {
+                if deduped[idx].isCustomPlaylist && !channel.isCustomPlaylist {
+                    deduped[idx] = channel
+                }
+            } else {
+                urlToIndex[channel.streamURL] = deduped.count
+                deduped.append(channel)
+            }
+        }
+        return deduped
     }
 
     func clearFavorites() async {
@@ -302,6 +384,9 @@ final class ProviderManager: ObservableObject {
         }
         for i in rawChannels.indices {
             rawChannels[i].isFavorite = false
+        }
+        for i in providerRawChannels.indices {
+            providerRawChannels[i].isFavorite = false
         }
         favoriteOrder = []
         await saveFavoriteOrder()
@@ -314,14 +399,24 @@ final class ProviderManager: ObservableObject {
     }
 
     func removeFavorite(at offsets: IndexSet) {
-        let idsToRemove = offsets.map { favoriteOrder[$0] }
-        favoriteOrder.remove(atOffsets: offsets)
+        // Map offsets through deduped favoriteChannels to get the actual channel IDs
+        let deduped = favoriteChannels
+        let idsToRemove = offsets.compactMap { idx -> String? in
+            guard deduped.indices.contains(idx) else { return nil }
+            return deduped[idx].id
+        }
+        for id in idsToRemove {
+            favoriteOrder.removeAll { $0 == id }
+        }
         for id in idsToRemove {
             if let index = channels.firstIndex(where: { $0.id == id }) {
                 channels[index].isFavorite = false
             }
             if let rawIndex = rawChannels.firstIndex(where: { $0.id == id }) {
                 rawChannels[rawIndex].isFavorite = false
+            }
+            if let provIndex = providerRawChannels.firstIndex(where: { $0.id == id }) {
+                providerRawChannels[provIndex].isFavorite = false
             }
         }
         rebuildVisibleGroups()

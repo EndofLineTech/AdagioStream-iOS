@@ -67,19 +67,6 @@ struct ContentView: View {
             selectedTab = 0
             showingSetup = true
         }
-        .focusable()
-        .onKeyPress(characters: .init(charactersIn: " ")) { _ in
-            audioPlayer.togglePlayPause()
-            return .handled
-        }
-        .onKeyPress(.rightArrow) {
-            audioPlayer.playNext()
-            return .handled
-        }
-        .onKeyPress(.leftArrow) {
-            audioPlayer.playPrevious()
-            return .handled
-        }
     }
 
     // MARK: - Tab Content

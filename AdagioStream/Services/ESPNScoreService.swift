@@ -78,14 +78,24 @@ final class ESPNScoreService: ObservableObject {
 
         log.log("Matched \(teamToChannelIDs.count) team names from \(sportsChannels.count) sports channels, \(epgCandidateChannels.count) EPG fallback candidates", category: .espn)
 
-        if pollingWanted {
+        if pollingWanted && !pollingDisabledByUser {
             startPolling()
         }
     }
 
     // MARK: - Polling Control
 
+    /// Whether polling is disabled by the user (interval set to 0 / "Off").
+    private var pollingDisabledByUser = false
+
     func setLivePollInterval(_ interval: TimeInterval) {
+        pollingDisabledByUser = interval == 0
+        if pollingDisabledByUser {
+            log.log("ESPN score polling disabled by user", category: .espn)
+            stopPolling()
+            gamesByChannel = [:]
+            return
+        }
         guard interval != livePollInterval else { return }
         livePollInterval = interval
         if pollingWanted, hasLiveGame {
@@ -96,6 +106,7 @@ final class ESPNScoreService: ObservableObject {
 
     func setPollingEnabled(_ enabled: Bool) {
         pollingWanted = enabled
+        if pollingDisabledByUser { return }
         if enabled && hasChannels && pollTimer == nil {
             startPolling()
         } else if !enabled {
