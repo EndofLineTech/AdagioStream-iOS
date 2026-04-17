@@ -31,3 +31,10 @@ body:
       placeholder: e.g. iPhone 15 Pro, Pixel 8
     validations:
       required: false
+  - type: input
+    id: os-version
+    attributes:
+      label: OS Version
+      placeholder: e.g. iOS 18.4, Android 15
+    validations:
+      required: false
