@@ -1,0 +1,33 @@
+name: Question
+description: Ask a question about the app
+labels: ["question"]
+body:
+  - type: input
+    id: email
+    attributes:
+      label: Email Address
+      description: So we can follow up with you
+      placeholder: your@email.com
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What would you like to know?
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App Version
+      placeholder: e.g. 1.0.3
+    validations:
+      required: false
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: e.g. iPhone 15 Pro, Pixel 8
+    validations:
+      required: false
