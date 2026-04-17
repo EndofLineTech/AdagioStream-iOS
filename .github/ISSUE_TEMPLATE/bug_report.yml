@@ -1,0 +1,34 @@
+name: Bug Report
+description: Report a bug or issue with the app
+labels: ["bug"]
+body:
+  - type: input
+    id: email
+    attributes:
+      label: Email Address
+      description: So we can follow up with you
+      placeholder: your@email.com
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the bug in detail. Include steps to reproduce if possible.
+      placeholder: "1. Go to...\n2. Tap on...\n3. See error..."
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: App Version
+      placeholder: e.g. 1.0.3
+    validations:
+      required: false
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: e.g. iPhone 15 Pro, Pixel 8
+    validations:
+      required: false
