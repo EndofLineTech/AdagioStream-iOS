@@ -110,12 +110,15 @@ enum ChannelSortOrder: String, Codable, CaseIterable {
 }
 
 enum ESPNLivePollInterval: Int, Codable, CaseIterable {
+    case off = 0
     case five = 5
     case ten = 10
     case fifteen = 15
     case thirty = 30
 
-    var label: String { "\(rawValue)s" }
+    var label: String {
+        self == .off ? "Off" : "\(rawValue)s"
+    }
     var interval: TimeInterval { TimeInterval(rawValue) }
 }
 
