@@ -559,27 +559,34 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             interruptionFallbackWorkItem = nil
         }
         let session = AVAudioSession.sharedInstance()
+        let otherPlaying = session.isOtherAudioPlaying
         do {
-            // Cycle deactivate→activate so the system formally interrupts
-            // any other audio app (e.g. Apple Music) and recognises Adagio
-            // as the "now playing" app.  A bare setActive(true) is a no-op
-            // when the session is already active from init, which leaves the
-            // previous app's remote-command registration in place — steering-
-            // wheel next/prev then routes to Apple Music instead of us.
-            try session.setActive(false, options: .notifyOthersOnDeactivation)
+            if otherPlaying {
+                // Another app (e.g. Apple Music) is actively playing.
+                // Cycle deactivate→activate so the system formally
+                // interrupts it and recognises Adagio as the "now playing"
+                // app.  A bare setActive(true) is a no-op when the session
+                // is already active from init, which leaves the previous
+                // app's remote-command registration in place — steering-
+                // wheel next/prev then routes to Apple Music instead of us.
+                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                log.log("Audio session deactivated to take over from other app", category: .audioSession)
+            }
             try session.setActive(true)
-            log.log("Audio session cycled OK — now-playing takeover", category: .audioSession)
+            log.log("Audio session active (otherWasPlaying=\(otherPlaying))", category: .audioSession)
         } catch {
             log.log("Session activate before play FAILED: \(error.localizedDescription)", category: .audioSession)
         }
 
-        // Force now-playing info re-assertion after session cycle so the
-        // system picks up our metadata even if values haven't changed.
-        lastNowPlayingTitle = nil
-        lastNowPlayingArtist = nil
-        lastNowPlayingState = nil
-        lastNowPlayingRate = nil
-        updateNowPlayingInfo()
+        if otherPlaying {
+            // Force now-playing info re-assertion after session takeover so
+            // the system picks up our metadata even if values haven't changed.
+            lastNowPlayingTitle = nil
+            lastNowPlayingArtist = nil
+            lastNowPlayingState = nil
+            lastNowPlayingRate = nil
+            updateNowPlayingInfo()
+        }
 
         // Request background execution time so the 20s buffering timeout
         // can fire even when iOS would otherwise suspend the process
