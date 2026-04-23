@@ -560,10 +560,26 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
         }
         let session = AVAudioSession.sharedInstance()
         do {
+            // Cycle deactivate→activate so the system formally interrupts
+            // any other audio app (e.g. Apple Music) and recognises Adagio
+            // as the "now playing" app.  A bare setActive(true) is a no-op
+            // when the session is already active from init, which leaves the
+            // previous app's remote-command registration in place — steering-
+            // wheel next/prev then routes to Apple Music instead of us.
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
             try session.setActive(true)
+            log.log("Audio session cycled OK — now-playing takeover", category: .audioSession)
         } catch {
             log.log("Session activate before play FAILED: \(error.localizedDescription)", category: .audioSession)
         }
+
+        // Force now-playing info re-assertion after session cycle so the
+        // system picks up our metadata even if values haven't changed.
+        lastNowPlayingTitle = nil
+        lastNowPlayingArtist = nil
+        lastNowPlayingState = nil
+        lastNowPlayingRate = nil
+        updateNowPlayingInfo()
 
         // Request background execution time so the 20s buffering timeout
         // can fire even when iOS would otherwise suspend the process
@@ -1536,12 +1552,14 @@ final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelega
             return .success
         }
 
+        commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             DebugLogger.shared.log("Remote command: NEXT_TRACK", category: .remoteCommand)
             Task { @MainActor in self?.playNext() }
             return .success
         }
 
+        commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             DebugLogger.shared.log("Remote command: PREVIOUS_TRACK", category: .remoteCommand)
             Task { @MainActor in self?.playPrevious() }
