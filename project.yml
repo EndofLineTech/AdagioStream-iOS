@@ -100,6 +100,8 @@ targets:
         com.apple.developer.carplay-audio: true
         com.apple.security.application-groups:
           - group.com.adagiostream.app
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.adagiostream.app
 
   ShareExtension:
     type: app-extension
