@@ -46,6 +46,8 @@ packages:
   VLCKitSPM:
     url: https://github.com/tylerjonesio/vlckit-spm
     exactVersion: "3.6.0"
+  AdagioStreamCore:
+    path: ../AdagioStreamCore
 
 targets:
   AdagioStream:
@@ -55,6 +57,7 @@ targets:
       - AdagioStream
     dependencies:
       - package: VLCKitSPM
+      - package: AdagioStreamCore
       - target: ShareExtension
     info:
       path: AdagioStream/Info.plist
@@ -139,6 +142,7 @@ targets:
       - AdagioStreamTests
     dependencies:
       - target: AdagioStream
+      - package: AdagioStreamCore
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true

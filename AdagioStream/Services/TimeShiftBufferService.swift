@@ -1,3 +1,4 @@
+import AdagioStreamCore
 import Foundation
 
 /// Downloads stream data during audio interruptions so playback can resume

@@ -1,3 +1,4 @@
+import AdagioStreamCore
 import Foundation
 
 struct XtreamCodesAPI {

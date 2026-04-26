@@ -1,3 +1,4 @@
+import AdagioStreamCore
 import Foundation
 
 extension Notification.Name {
