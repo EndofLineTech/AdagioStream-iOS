@@ -33,6 +33,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Advanced", systemImage: "gearshape.2")
                     }
+                    NavigationLink {
+                        DiagnosticsView()
+                    } label: {
+                        Label("Diagnostics", systemImage: "stethoscope")
+                    }
                 }
 
                 Section {
