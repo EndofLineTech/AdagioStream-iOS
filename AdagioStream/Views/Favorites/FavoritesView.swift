@@ -1,3 +1,4 @@
+import AdagioStreamCore
 import SwiftUI
 
 struct FavoritesView: View {

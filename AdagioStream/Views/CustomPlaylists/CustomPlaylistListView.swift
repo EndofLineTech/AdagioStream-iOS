@@ -1,3 +1,4 @@
+import AdagioStreamCore
 import SwiftUI
 
 struct CustomPlaylistListView: View {

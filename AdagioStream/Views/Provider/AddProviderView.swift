@@ -1,3 +1,4 @@
+import AdagioStreamCore
 import SwiftUI
 
 struct AddProviderView: View {
