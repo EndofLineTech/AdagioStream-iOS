@@ -38,6 +38,13 @@ final class ProviderManager: ObservableObject {
     private let persistence = PersistenceService.shared
 
     init() {
+        // Migrate legacy Keychain items to iCloud-syncable attributes
+        // BEFORE any keychain read in this init path. Idempotent; see
+        // KeychainSyncMigrator and bead 9nl.2. Synchronous so subsequent
+        // KeychainService.load calls below (loadProviders) observe the
+        // post-migration state.
+        KeychainSyncMigrator.runIfNeeded()
+
         // Re-merge custom playlist channels whenever playlists change
         CustomPlaylistManager.shared.$playlists
             .dropFirst()
