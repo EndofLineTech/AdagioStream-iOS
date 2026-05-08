@@ -8,7 +8,6 @@ struct CustomPlaylistDetailView: View {
     @State private var showingAddGroup = false
     @State private var newGroupName = ""
     @State private var showingAddEntry = false
-    @State private var shareFileURL: URL?
 
     private var playlist: CustomPlaylist? {
         playlistManager.playlists.first { $0.id == playlistID }
@@ -57,8 +56,8 @@ struct CustomPlaylistDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
-                    if let playlist {
-                        ShareLink(item: M3UExporter.export(playlist), preview: SharePreview(playlist.name, image: Image(systemName: "music.note.list")))
+                    if let playlist, let exportURL = try? M3UExporter.exportToFile(playlist) {
+                        ShareLink(item: exportURL, preview: SharePreview(playlist.name, image: Image(systemName: "music.note.list")))
                     }
                     Button {
                         showingAddEntry = true
