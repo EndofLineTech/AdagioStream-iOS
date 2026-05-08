@@ -77,6 +77,16 @@ struct ProviderListView: View {
                     Text("Are you sure you want to delete \"\(provider.name)\"? Its channels will be removed.")
                 }
             }
+            .alert("Account Ready", isPresented: .init(
+                get: { providerManager.newProviderInfo != nil },
+                set: { if !$0 { providerManager.newProviderInfo = nil } }
+            )) {
+                Button("OK") { providerManager.newProviderInfo = nil }
+            } message: {
+                if let info = providerManager.newProviderInfo {
+                    Text("\"\(info.providerName)\" loaded \(info.channelCount) channels in \(info.groupCount) groups. New groups start hidden — enable the ones you want in Settings → Channels & Accounts → Groups.")
+                }
+            }
         }
     }
 }

@@ -66,7 +66,7 @@ struct ProviderManagementView: View {
             Button("OK") { providerManager.newProviderInfo = nil }
         } message: {
             if let info = providerManager.newProviderInfo {
-                Text("\"\(info.providerName)\" loaded \(info.channelCount) channels in \(info.groupCount) groups. All groups are hidden — enable the ones you want in Settings → Groups.")
+                Text("\"\(info.providerName)\" loaded \(info.channelCount) channels in \(info.groupCount) groups. New groups start hidden — enable the ones you want in Settings → Channels & Accounts → Groups.")
             }
         }
         .alert("Delete Account", isPresented: .init(
