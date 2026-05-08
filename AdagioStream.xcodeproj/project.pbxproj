@@ -8,25 +8,34 @@
 
 /* Begin PBXBuildFile section */
 		0FA89C70038A8D734ACBE2B6 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */; };
+		107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32076461D1698393DE4F46B /* AppSettings.swift */; };
+		129D39FCB60C075DFBF45289 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
 		18545F1BF1AC67A74DF31F74 /* GroupManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */; };
+		1A9DB6A68F4DF94B6E096314 /* ChannelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */; };
 		1B7FBCE2515815B7E0C64087 /* XtreamCodesAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */; };
 		1CC9AC317E17D1AD301D41B8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2591A7C2156E83DA1F2F30CE /* Assets.xcassets */; };
 		1F472084E1C6BE3D8F3AA94C /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 310F900A75D0B606DEB7F49F /* AboutSettingsView.swift */; };
 		23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */; };
 		2B16DDBB8A24A98B6C6B2D5E /* VLCKitSPM in Frameworks */ = {isa = PBXBuildFile; productRef = 30FF9E502BE3A16ABFA545D6 /* VLCKitSPM */; };
-		3087C9F54DF7B5577BA5B363 /* AdagioStreamCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4FE9B759B2A14A830BF51FBE /* AdagioStreamCore */; };
+		33B81046142D5B7C9E01CA6A /* CustomPlaylistGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */; };
 		33C3578193ABE2495606970B /* CarPlayTemplateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */; };
 		34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */; };
 		388C6E67648A7F7DF0B8C0DC /* ChannelsAccountsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7515CF1536D0D00A7E4C5568 /* ChannelsAccountsSettingsView.swift */; };
+		3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */; };
 		403FD2102DB1357FB4DF8348 /* CustomPlaylistEntryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */; };
 		40DCCC69DD226BEBBEBADDFE /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74E1BC12E2BCD838B7CC68B /* AppearanceSettingsView.swift */; };
+		4533891205192A239243047A /* SXMTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7434EFB265DF59B08B4394B3 /* SXMTrack.swift */; };
+		462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */; };
 		4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */; };
 		47911B7F0C6396628A25C035 /* MaskedTextField.swift in Sources */ = {isa = PBXBuildFile; fileRef = D27383F186EB3DC4FC9B8C0C /* MaskedTextField.swift */; };
+		49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
 		4AD21563E4090F6A9BDE4065 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25725EB8F5AF7159B8D7A5A1 /* DiagnosticsView.swift */; };
-		4AD87E8A3418572587C82242 /* AdagioStreamCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5CF81B23A358B01EAA5F38FB /* AdagioStreamCore */; };
+		4C9527682263E4F04129BF19 /* PersistenceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E857A8239DB4ADDC5AA458 /* PersistenceServiceTests.swift */; };
 		4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */; };
+		4EA878465057E1C26D33A0E8 /* MigrationDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */; };
 		50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */; };
 		52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D099586458688D813DF57122 /* SettingsView.swift */; };
+		54FED6DF6F6733D6BDC056D2 /* SavedSongsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */; };
 		573D9FD1792C3D1E63352518 /* RetryableAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */; };
 		575D753F86DFC83AEBD874E0 /* CustomPlaylistListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */; };
 		5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64EF86369F656FD2C55498D1 /* ProviderListView.swift */; };
@@ -35,33 +44,63 @@
 		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
 		6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B258B0EF620197CC9833E0 /* ChannelListView.swift */; };
 		6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */; };
+		7413AC5A1A2839861CBADFF5 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E220456DACC5137EA0F00B /* Constants.swift */; };
 		743B9ECFB3057C393642ADE5 /* ProviderManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49B5499FEB06793F277174C /* ProviderManagementView.swift */; };
 		75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD913E9A26B3322688E877D /* ShareSheet.swift */; };
+		77F34E2524DD6C89196F2C6D /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */; };
 		781DB2044B7B08D363A75F59 /* AdagioStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */; };
+		7A11D46D2A8071F1D2C7F23C /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
+		83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411FC365142BB95B070F2EEA /* PinnedURLSession.swift */; };
 		840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
 		887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */; };
 		931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */; };
 		987AA9ADB45C60F54C55F54E /* SavedSongsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */; };
 		9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FA365F7131A727DB1A7C79 /* AirPlayRoutePickerView.swift */; };
+		9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */; };
 		9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */; };
 		9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */; };
 		A0909B69676AA1A75CD921BD /* DataDeletionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */; };
 		A24C54030E71F5C2907BD1D4 /* CustomPlaylistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */; };
 		A260CCCD1191957DE0C6739E /* AdagioStartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5007C81620324434051842F8 /* AdagioStartupView.swift */; };
+		A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */; };
+		A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
+		ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		AC45A485F3635077A4F77F16 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */; };
 		B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */; };
+		B45A9541815DECB5D20BC5E8 /* KeychainSyncMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19271F91713741C80AB630E7 /* KeychainSyncMigrator.swift */; };
+		B87BC6F49DF0702DA8B0E033 /* ChannelListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */; };
+		BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
+		BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */; };
+		BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */; };
 		C0814BA417A9237B8348F95F /* EPGView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */; };
+		C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D317808303BD060CB0340505 /* DataExportService.swift */; };
 		C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */; };
+		C3B00CA635577BDD69A6001B /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CCAE274A593BD7364C5F6FD /* Channel.swift */; };
+		C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */; };
 		C733EDA151EC0DF936A3D4E9 /* PlaybackSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE137FF651110189C708941D /* PlaybackSettingsView.swift */; };
+		C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */; };
 		CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */; };
+		D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A879148E50912620B26D03 /* ProviderManagerTests.swift */; };
+		D3E64054FDAF984ADC9B424A /* CustomPlaylist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF95CAE631C108797282E82 /* CustomPlaylist.swift */; };
+		D9A0AB716D1C358EFD4BEA13 /* SXMMetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */; };
 		DB6E448BE506EEB225B8C176 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
+		E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
+		E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */; };
 		E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */; };
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
 		E6770E028819F7C202725955 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
+		F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20796E24826A70D504E871C4 /* PersistenceService.swift */; };
+		F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */; };
+		F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */; };
+		F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
+		FB623925315D5AAE757A30EE /* CustomPlaylistManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */; };
 		FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5186F218805196281702F1A /* FavoritesView.swift */; };
 		FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */; };
 		FF289466EAF3E3A99B8177FC /* AddManualEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D903CA55661DD9736AA33128 /* AddManualEntryView.swift */; };
+		FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */; };
+		FFF3BD50FC5A7ACD91C7DE7E /* ESPNModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB6CC077DE7865648EC949C /* ESPNModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,79 +138,110 @@
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongRowView.swift; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
+		10E220456DACC5137EA0F00B /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNScoreService.swift; sourceTree = "<group>"; };
+		15E857A8239DB4ADDC5AA458 /* PersistenceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceServiceTests.swift; sourceTree = "<group>"; };
+		177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistGroup.swift; sourceTree = "<group>"; };
+		19271F91713741C80AB630E7 /* KeychainSyncMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainSyncMigrator.swift; sourceTree = "<group>"; };
 		1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowView.swift; sourceTree = "<group>"; };
 		1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
+		1CB6CC077DE7865648EC949C /* ESPNModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNModels.swift; sourceTree = "<group>"; };
 		1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserTests.swift; sourceTree = "<group>"; };
 		1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistDetailView.swift; sourceTree = "<group>"; };
+		20796E24826A70D504E871C4 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSetupView.swift; sourceTree = "<group>"; };
+		23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheService.swift; sourceTree = "<group>"; };
 		25725EB8F5AF7159B8D7A5A1 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		2591A7C2156E83DA1F2F30CE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLoggerTests.swift; sourceTree = "<group>"; };
 		29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateManager.swift; sourceTree = "<group>"; };
 		2E0773D0B4CD7353ACEADE32 /* AdagioStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AdagioStream.entitlements; sourceTree = "<group>"; };
+		2EF95CAE631C108797282E82 /* CustomPlaylist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylist.swift; sourceTree = "<group>"; };
 		2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsTests.swift; sourceTree = "<group>"; };
 		310F900A75D0B606DEB7F49F /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
+		3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationDiagnostics.swift; sourceTree = "<group>"; };
 		3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProviderView.swift; sourceTree = "<group>"; };
-		4401D9AC0133CFF568B05F0D /* AdagioStreamCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = AdagioStreamCore; path = ../AdagioStreamCore; sourceTree = SOURCE_ROOT; };
+		411FC365142BB95B070F2EEA /* PinnedURLSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedURLSession.swift; sourceTree = "<group>"; };
+		4253D682909B25CB052AED9C /* Provider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Provider.swift; sourceTree = "<group>"; };
+		42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SXMMetadataService.swift; sourceTree = "<group>"; };
 		4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryableAsyncImage.swift; sourceTree = "<group>"; };
+		48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListViewModel.swift; sourceTree = "<group>"; };
 		5007C81620324434051842F8 /* AdagioStartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStartupView.swift; sourceTree = "<group>"; };
+		5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UExporter.swift; sourceTree = "<group>"; };
 		5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDeletionService.swift; sourceTree = "<group>"; };
 		5D4EB311F106E7633D4C135D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
+		654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerServiceTests.swift; sourceTree = "<group>"; };
 		6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
+		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		7434EFB265DF59B08B4394B3 /* SXMTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SXMTrack.swift; sourceTree = "<group>"; };
+		74A879148E50912620B26D03 /* ProviderManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManagerTests.swift; sourceTree = "<group>"; };
 		74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		7515CF1536D0D00A7E4C5568 /* ChannelsAccountsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsAccountsSettingsView.swift; sourceTree = "<group>"; };
+		765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogger.swift; sourceTree = "<group>"; };
+		79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManager.swift; sourceTree = "<group>"; };
 		79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupManagementView.swift; sourceTree = "<group>"; };
 		7DD913E9A26B3322688E877D /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
+		818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsManager.swift; sourceTree = "<group>"; };
+		820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistManager.swift; sourceTree = "<group>"; };
+		91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsView.swift; sourceTree = "<group>"; };
+		9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesViewModel.swift; sourceTree = "<group>"; };
 		9593372A158F40D59BB914AC /* LicensesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicensesView.swift; sourceTree = "<group>"; };
 		99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntryTests.swift; sourceTree = "<group>"; };
 		9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
+		9CCAE274A593BD7364C5F6FD /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		9DCB0C46B512BF4D2919E11A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPITests.swift; sourceTree = "<group>"; };
 		A1CF4778448EC75225E98912 /* EPGParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParserTests.swift; sourceTree = "<group>"; };
 		A3FA365F7131A727DB1A7C79 /* AirPlayRoutePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayRoutePickerView.swift; sourceTree = "<group>"; };
 		A49B5499FEB06793F277174C /* ProviderManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManagementView.swift; sourceTree = "<group>"; };
 		A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntryRowView.swift; sourceTree = "<group>"; };
 		B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AdagioStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B785664AF5E9481E580421E3 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
+		B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassEffect+Helpers.swift"; sourceTree = "<group>"; };
+		BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntry.swift; sourceTree = "<group>"; };
 		BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		C7713A3C47F3B23E57849347 /* SavedSong.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSong.swift; sourceTree = "<group>"; };
 		CA8FBFCBC5F7D6224976D34F /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LGPL-2.1.txt"; sourceTree = "<group>"; };
+		CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntry.swift; sourceTree = "<group>"; };
 		CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStreamApp.swift; sourceTree = "<group>"; };
 		D099586458688D813DF57122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
 		D27383F186EB3DC4FC9B8C0C /* MaskedTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskedTextField.swift; sourceTree = "<group>"; };
+		D317808303BD060CB0340505 /* DataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataExportService.swift; sourceTree = "<group>"; };
+		D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		D903CA55661DD9736AA33128 /* AddManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddManualEntryView.swift; sourceTree = "<group>"; };
+		DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParser.swift; sourceTree = "<group>"; };
+		DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeShiftBufferService.swift; sourceTree = "<group>"; };
 		DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListViewModel.swift; sourceTree = "<group>"; };
 		E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedURLSheet.swift; sourceTree = "<group>"; };
 		E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E74E1BC12E2BCD838B7CC68B /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		EE137FF651110189C708941D /* PlaybackSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSettingsView.swift; sourceTree = "<group>"; };
+		F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParser.swift; sourceTree = "<group>"; };
+		F32076461D1698393DE4F46B /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
 		F5186F218805196281702F1A /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
 		F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGView.swift; sourceTree = "<group>"; };
 		F8C3BD180713EE2506F860EF /* AdagioStream.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AdagioStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelGroup.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		4A97F37B1FEAFF8256ACC8F5 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				3087C9F54DF7B5577BA5B363 /* AdagioStreamCore in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		616D289C3562AE68D02BBB38 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				2B16DDBB8A24A98B6C6B2D5E /* VLCKitSPM in Frameworks */,
-				4AD87E8A3418572587C82242 /* AdagioStreamCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -191,9 +261,13 @@
 		1787FE82B04EA5A83B5335BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */,
 				275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */,
 				A1CF4778448EC75225E98912 /* EPGParserTests.swift */,
+				D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */,
 				1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */,
+				15E857A8239DB4ADDC5AA458 /* PersistenceServiceTests.swift */,
+				74A879148E50912620B26D03 /* ProviderManagerTests.swift */,
 				9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */,
 			);
 			path = Services;
@@ -205,6 +279,18 @@
 				2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */,
 			);
 			path = Setup;
+			sourceTree = "<group>";
+		};
+		1D9B7E683E5A145DA73ED921 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */,
+				9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */,
+				9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */,
+				E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */,
+				B785664AF5E9481E580421E3 /* SettingsViewModel.swift */,
+			);
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 		2A145E596DEF592D695C7EDE /* Player */ = {
@@ -293,18 +379,9 @@
 			children = (
 				C7BB60840AEC2DE630CE1B02 /* AdagioStream */,
 				3DC32907FEBD360A10C72847 /* AdagioStreamTests */,
-				9539EF87EC75B264CBC1550F /* Packages */,
 				13A7B37CDDCF294F9B52B3D0 /* ShareExtension */,
 				37BE24923E1012894F65BC0D /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		9539EF87EC75B264CBC1550F /* Packages */ = {
-			isa = PBXGroup;
-			children = (
-				4401D9AC0133CFF568B05F0D /* AdagioStreamCore */,
-			);
-			name = Packages;
 			sourceTree = "<group>";
 		};
 		9E85522650FFA4CE86645183 /* Utilities */ = {
@@ -313,6 +390,24 @@
 				2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */,
 			);
 			path = Utilities;
+			sourceTree = "<group>";
+		};
+		9EFBDF60AA9723373E93EFE1 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F32076461D1698393DE4F46B /* AppSettings.swift */,
+				9CCAE274A593BD7364C5F6FD /* Channel.swift */,
+				F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */,
+				2EF95CAE631C108797282E82 /* CustomPlaylist.swift */,
+				CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */,
+				177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */,
+				BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */,
+				1CB6CC077DE7865648EC949C /* ESPNModels.swift */,
+				4253D682909B25CB052AED9C /* Provider.swift */,
+				C7713A3C47F3B23E57849347 /* SavedSong.swift */,
+				7434EFB265DF59B08B4394B3 /* SXMTrack.swift */,
+			);
+			path = Models;
 			sourceTree = "<group>";
 		};
 		A2A244448F29868096069FC2 /* EPG */ = {
@@ -355,6 +450,7 @@
 		A89E763DDE3B95BBE8B186D5 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */,
 				B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */,
 				4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */,
 				7DD913E9A26B3322688E877D /* ShareSheet.swift */,
@@ -389,13 +485,16 @@
 				2E0773D0B4CD7353ACEADE32 /* AdagioStream.entitlements */,
 				CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */,
 				2591A7C2156E83DA1F2F30CE /* Assets.xcassets */,
+				10E220456DACC5137EA0F00B /* Constants.swift */,
 				09037EC9D6025B184F4A718E /* Info.plist */,
 				9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */,
 				DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */,
 				A3DDF9D70932BE3F2F65D4D1 /* CarPlay */,
+				9EFBDF60AA9723373E93EFE1 /* Models */,
 				466ABA381A1500008474A837 /* Resources */,
 				DF51025FE93F2750A527721A /* Services */,
 				A89E763DDE3B95BBE8B186D5 /* Utilities */,
+				1D9B7E683E5A145DA73ED921 /* ViewModels */,
 				A6F69CDDC9AE4D176E8B131E /* Views */,
 			);
 			path = AdagioStream;
@@ -422,7 +521,26 @@
 		DF51025FE93F2750A527721A /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */,
+				820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */,
 				5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */,
+				D317808303BD060CB0340505 /* DataExportService.swift */,
+				765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */,
+				F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */,
+				128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */,
+				23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */,
+				B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */,
+				19271F91713741C80AB630E7 /* KeychainSyncMigrator.swift */,
+				5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */,
+				DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */,
+				3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */,
+				20796E24826A70D504E871C4 /* PersistenceService.swift */,
+				411FC365142BB95B070F2EEA /* PinnedURLSession.swift */,
+				79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */,
+				818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */,
+				42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */,
+				DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */,
+				D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -464,7 +582,6 @@
 			name = AdagioStream;
 			packageProductDependencies = (
 				30FF9E502BE3A16ABFA545D6 /* VLCKitSPM */,
-				5CF81B23A358B01EAA5F38FB /* AdagioStreamCore */,
 			);
 			productName = AdagioStream;
 			productReference = F8C3BD180713EE2506F860EF /* AdagioStream.app */;
@@ -475,7 +592,6 @@
 			buildConfigurationList = 1F7A9B93054AFA0C343F33B9 /* Build configuration list for PBXNativeTarget "AdagioStreamTests" */;
 			buildPhases = (
 				6B1B0E3762342E3317356402 /* Sources */,
-				4A97F37B1FEAFF8256ACC8F5 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -484,7 +600,6 @@
 			);
 			name = AdagioStreamTests;
 			packageProductDependencies = (
-				4FE9B759B2A14A830BF51FBE /* AdagioStreamCore */,
 			);
 			productName = AdagioStreamTests;
 			productReference = B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */;
@@ -518,7 +633,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				5CDF012D765C20060EADB0A1 /* XCRemoteSwiftPackageReference "vlckit-spm" */,
-				00F5CC20500915928D33F0F3 /* XCLocalSwiftPackageReference "../AdagioStreamCore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 37BE24923E1012894F65BC0D /* Products */;
@@ -559,11 +673,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */,
 				C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */,
 				B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */,
 				64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */,
 				E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */,
+				BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */,
 				9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */,
+				4C9527682263E4F04129BF19 /* PersistenceServiceTests.swift in Sources */,
+				D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */,
 				1B7FBCE2515815B7E0C64087 /* XtreamCodesAPITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -580,38 +698,75 @@
 				5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */,
 				AC45A485F3635077A4F77F16 /* AdvancedSettingsView.swift in Sources */,
 				9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */,
+				107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */,
 				40DCCC69DD226BEBBEBADDFE /* AppearanceSettingsView.swift in Sources */,
+				E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */,
 				9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */,
 				33C3578193ABE2495606970B /* CarPlayTemplateManager.swift in Sources */,
+				C3B00CA635577BDD69A6001B /* Channel.swift in Sources */,
+				1A9DB6A68F4DF94B6E096314 /* ChannelGroup.swift in Sources */,
 				6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */,
+				B87BC6F49DF0702DA8B0E033 /* ChannelListViewModel.swift in Sources */,
 				6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */,
 				388C6E67648A7F7DF0B8C0DC /* ChannelsAccountsSettingsView.swift in Sources */,
+				7413AC5A1A2839861CBADFF5 /* Constants.swift in Sources */,
 				E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */,
+				D3E64054FDAF984ADC9B424A /* CustomPlaylist.swift in Sources */,
 				A24C54030E71F5C2907BD1D4 /* CustomPlaylistDetailView.swift in Sources */,
+				A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */,
 				403FD2102DB1357FB4DF8348 /* CustomPlaylistEntryRowView.swift in Sources */,
+				33B81046142D5B7C9E01CA6A /* CustomPlaylistGroup.swift in Sources */,
 				575D753F86DFC83AEBD874E0 /* CustomPlaylistListView.swift in Sources */,
+				FB623925315D5AAE757A30EE /* CustomPlaylistManager.swift in Sources */,
 				A0909B69676AA1A75CD921BD /* DataDeletionService.swift in Sources */,
+				C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */,
+				3BD783934C01E14E7CC8A611 /* DebugLogger.swift in Sources */,
 				4AD21563E4090F6A9BDE4065 /* DiagnosticsView.swift in Sources */,
+				49E37BC108F67914E0D575EC /* EPGEntry.swift in Sources */,
+				C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */,
 				C0814BA417A9237B8348F95F /* EPGView.swift in Sources */,
+				FFF3BD50FC5A7ACD91C7DE7E /* ESPNModels.swift in Sources */,
+				ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */,
 				E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */,
+				77F34E2524DD6C89196F2C6D /* Extensions.swift in Sources */,
 				FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */,
+				E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */,
 				4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */,
 				18545F1BF1AC67A74DF31F74 /* GroupManagementView.swift in Sources */,
+				BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */,
+				F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */,
+				B45A9541815DECB5D20BC5E8 /* KeychainSyncMigrator.swift in Sources */,
 				652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */,
+				F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */,
+				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
 				47911B7F0C6396628A25C035 /* MaskedTextField.swift in Sources */,
+				4EA878465057E1C26D33A0E8 /* MigrationDiagnostics.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
 				23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */,
+				F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */,
+				83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */,
 				C733EDA151EC0DF936A3D4E9 /* PlaybackSettingsView.swift in Sources */,
+				9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */,
 				4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */,
+				129D39FCB60C075DFBF45289 /* Provider.swift in Sources */,
 				5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */,
+				FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */,
 				743B9ECFB3057C393642ADE5 /* ProviderManagementView.swift in Sources */,
+				A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */,
 				573D9FD1792C3D1E63352518 /* RetryableAsyncImage.swift in Sources */,
+				D9A0AB716D1C358EFD4BEA13 /* SXMMetadataService.swift in Sources */,
+				4533891205192A239243047A /* SXMTrack.swift in Sources */,
+				7A11D46D2A8071F1D2C7F23C /* SavedSong.swift in Sources */,
 				887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */,
+				54FED6DF6F6733D6BDC056D2 /* SavedSongsManager.swift in Sources */,
 				987AA9ADB45C60F54C55F54E /* SavedSongsView.swift in Sources */,
 				52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */,
+				DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */,
 				75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */,
 				FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */,
+				F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */,
 				931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */,
+				462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -724,7 +879,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 107;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -749,7 +904,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 107;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = AdagioStream/Info.plist;
@@ -772,7 +927,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 107;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -794,7 +949,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 106;
+				CURRENT_PROJECT_VERSION = 107;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -933,13 +1088,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		00F5CC20500915928D33F0F3 /* XCLocalSwiftPackageReference "../AdagioStreamCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../AdagioStreamCore;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		5CDF012D765C20060EADB0A1 /* XCRemoteSwiftPackageReference "vlckit-spm" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -956,14 +1104,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5CDF012D765C20060EADB0A1 /* XCRemoteSwiftPackageReference "vlckit-spm" */;
 			productName = VLCKitSPM;
-		};
-		4FE9B759B2A14A830BF51FBE /* AdagioStreamCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = AdagioStreamCore;
-		};
-		5CF81B23A358B01EAA5F38FB /* AdagioStreamCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = AdagioStreamCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

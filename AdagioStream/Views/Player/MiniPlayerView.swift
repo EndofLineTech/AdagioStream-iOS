@@ -1,4 +1,3 @@
-import AdagioStreamCore
 import SwiftUI
 
 struct MiniPlayerView: View {

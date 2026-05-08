@@ -1,12 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// SwiftUI bridge for `UIActivityViewController`. iOS-only — `UIKit` and
-/// `UIActivityViewController` are not available on tvOS.
-///
-/// Was previously colocated with cross-platform extensions in
-/// `Utilities/Extensions.swift`; split out during Phase 0 (bgc.5) when the
-/// extensions moved to `AdagioStreamCore`.
+/// SwiftUI bridge for `UIActivityViewController`.
 struct ShareSheet: UIViewControllerRepresentable {
     let activityItems: [Any]
 

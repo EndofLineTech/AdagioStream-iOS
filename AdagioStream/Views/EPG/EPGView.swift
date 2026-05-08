@@ -1,4 +1,3 @@
-import AdagioStreamCore
 import SwiftUI
 
 struct EPGView: View {
