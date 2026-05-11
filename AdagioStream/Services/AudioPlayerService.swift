@@ -4,7 +4,6 @@
 
 #if os(iOS)
 import AVFoundation
-import CallKit
 import Combine
 import MediaPlayer
 import SwiftUI
@@ -31,8 +30,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     public let sxmService = SXMMetadataService.shared
 
     private var mediaPlayer = VLCMediaPlayer()
-    private let callObserver = CXCallObserver()
-    private let callDelegate = CallObserverDelegate()
     private var sxmCancellable: AnyCancellable?
     private var espnCancellable: AnyCancellable?
     private var stateTimer: Timer?
@@ -129,7 +126,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         super.init()
         log.log("AudioPlayerService init", category: .player)
         mediaPlayer.delegate = self
-        callObserver.setDelegate(callDelegate, queue: nil)
         configureAudioSession()
         configureRemoteCommands()
         // Live Activity disabled — system Now Playing widget is sufficient
@@ -382,16 +378,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
         let inputs = session.currentRoute.inputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
         let isCarPlay = session.currentRoute.outputs.contains { $0.portType == .carAudio }
-        let activeCalls = callObserver.calls.map { call -> String in
-            let state: String
-            if call.hasConnected { state = "connected" }
-            else if call.hasEnded { state = "ended" }
-            else if call.isOutgoing { state = "outgoing-ringing" }
-            else { state = "incoming-ringing" }
-            return "\(state)(onHold=\(call.isOnHold))"
-        }
-        let callInfo = activeCalls.isEmpty ? "none" : activeCalls.joined(separator: ", ")
-        log.log("Session[\(context)]: cat=\(session.category.rawValue), mode=\(session.mode.rawValue), otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), carplay=\(isCarPlay), outputs=[\(outputs)], inputs=[\(inputs)], calls=[\(callInfo)]", category: .audioSession)
+        log.log("Session[\(context)]: cat=\(session.category.rawValue), mode=\(session.mode.rawValue), otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), carplay=\(isCarPlay), outputs=[\(outputs)], inputs=[\(inputs)]", category: .audioSession)
     }
 
     private func reactivateAndPlay(channel: Channel, bufferFileURL: URL? = nil) {
@@ -1583,28 +1570,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         commandCenter.seekForwardCommand.isEnabled = false
         commandCenter.seekBackwardCommand.isEnabled = false
         commandCenter.changePlaybackPositionCommand.isEnabled = false
-    }
-}
-
-// MARK: - Call Observer
-
-/// Logs phone call state changes for debugging CarPlay interruption issues.
-final class CallObserverDelegate: NSObject, CXCallObserverDelegate {
-    public func callObserver(_ callObserver: CXCallObserver, callChanged call: CXCall) {
-        let state: String
-        if call.hasEnded {
-            state = "ENDED"
-        } else if call.hasConnected {
-            state = "CONNECTED"
-        } else if call.isOutgoing {
-            state = "OUTGOING_RINGING"
-        } else {
-            state = "INCOMING_RINGING"
-        }
-        let session = AVAudioSession.sharedInstance()
-        let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
-        let isCarPlay = session.currentRoute.outputs.contains { $0.portType == .carAudio }
-        DebugLogger.shared.log("Call \(state): onHold=\(call.isOnHold), carplay=\(isCarPlay), outputs=[\(outputs)], otherAudio=\(session.isOtherAudioPlaying), mode=\(session.mode.rawValue)", category: .call)
     }
 }
 
