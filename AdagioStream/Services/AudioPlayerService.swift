@@ -601,10 +601,17 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // rejects network-caching and live-caching as "unsafe" options.
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
         let cacheMs = Int(effectiveBuffer * 1000)
-        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms", category: .player)
+        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect, http-continuous, audio-time-stretch", category: .player)
         retirePlayer(options: [
             "--network-caching=\(cacheMs)",
             "--live-caching=\(cacheMs)",
+            // Auto-reconnect on HTTP drops; continue reading on transient errors
+            // instead of surfacing them as playback failures.
+            "--http-reconnect",
+            "--http-continuous",
+            // Allow inaudible ±2% rate adjustment to absorb buffer drift on
+            // cellular instead of dropping samples or gapping.
+            "--audio-time-stretch",
         ])
 
         let media = VLCMedia(url: channel.streamURL)
