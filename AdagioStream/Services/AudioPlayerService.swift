@@ -6,6 +6,7 @@
 import AVFoundation
 import Combine
 import MediaPlayer
+import Network
 import SwiftUI
 @preconcurrency import VLCKitSPM
 
@@ -90,6 +91,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// to the old stop-and-capture path.
     private var interruptionFallbackWorkItem: DispatchWorkItem?
 
+    private var pathMonitor: NWPathMonitor?
+    private let pathMonitorQueue = DispatchQueue(label: "com.adagiostream.pathmonitor")
+    private var lastPathStatus: NWPath.Status?
+    private var lastPrimaryInterface: NWInterface.InterfaceType?
+    private var lastPathReconnectTime: Date = .distantPast
+    /// Minimum interval between path-monitor-triggered reconnects.  A subway
+    /// or tower handoff can fire several path events in quick succession;
+    /// without a cooldown we'd tear down and rebuild the player repeatedly.
+    private let pathReconnectCooldown: TimeInterval = 5
+
     public var channels: [Channel] = []
     public var bufferDuration: TimeInterval = Constants.defaultBufferDuration
     public var artworkDisplayMode: ArtworkDisplayMode = .coverArt
@@ -128,6 +139,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         mediaPlayer.delegate = self
         configureAudioSession()
         configureRemoteCommands()
+        configureNetworkPathMonitor()
         // Live Activity disabled — system Now Playing widget is sufficient
 
         sxmCancellable = sxmService.$currentTrack
@@ -370,6 +382,101 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 self.log.log("Interruption UNKNOWN type: \(typeValue)", category: .interruption)
                 break
             }
+        }
+    }
+
+    // MARK: - Network Path Monitor
+
+    /// Watches for network path transitions (Wi-Fi <-> cellular, online/offline)
+    /// and forces a player rebuild when the underlying interface changes.
+    /// VLC's own `--http-reconnect` handles connection-level drops but won't
+    /// recover an HTTP socket bound to a now-dead Wi-Fi interface.
+    private func configureNetworkPathMonitor() {
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        monitor.pathUpdateHandler = { [weak self] path in
+            // NWPathMonitor invokes the handler on its own queue; hop to the
+            // MainActor since we touch @MainActor state (currentChannel, etc.).
+            Task { @MainActor [weak self] in
+                self?.handlePathUpdate(path)
+            }
+        }
+        monitor.start(queue: pathMonitorQueue)
+    }
+
+    private func handlePathUpdate(_ path: NWPath) {
+        let primary = primaryInterfaceType(for: path)
+        let primaryName = primary.map(interfaceName) ?? "none"
+        let statusName = pathStatusName(path.status)
+
+        // First fire after start() — record state, don't treat as a transition.
+        guard let previousStatus = lastPathStatus else {
+            lastPathStatus = path.status
+            lastPrimaryInterface = primary
+            log.log("Path monitor initial: status=\(statusName), primary=\(primaryName), expensive=\(path.isExpensive), constrained=\(path.isConstrained)", category: .player)
+            return
+        }
+
+        let statusBecameSatisfied = previousStatus != .satisfied && path.status == .satisfied
+        let interfaceChanged = path.status == .satisfied
+            && lastPrimaryInterface != nil
+            && primary != nil
+            && primary != lastPrimaryInterface
+
+        lastPathStatus = path.status
+        lastPrimaryInterface = primary
+
+        guard statusBecameSatisfied || interfaceChanged else { return }
+
+        let reason = statusBecameSatisfied
+            ? "network came back (\(pathStatusName(previousStatus)) -> \(statusName))"
+            : "primary interface changed (\(lastPrimaryInterfaceDescription) -> \(primaryName))"
+        log.log("Path transition: \(reason), expensive=\(path.isExpensive), constrained=\(path.isConstrained)", category: .player)
+
+        guard let channel = currentChannel else { return }
+
+        let elapsed = Date().timeIntervalSince(lastPathReconnectTime)
+        if elapsed < pathReconnectCooldown {
+            log.log("Path-driven reconnect suppressed — \(String(format: "%.1f", elapsed))s since last (cooldown \(Int(pathReconnectCooldown))s)", category: .player)
+            return
+        }
+
+        log.log("Path-driven reconnect for \"\(channel.name)\" — \(reason)", category: .player)
+        lastPathReconnectTime = Date()
+        // play(channel:) early-exits when the channel matches and the session
+        // is active.  Clear the flag so the full teardown/restart runs.
+        isActiveSession = false
+        play(channel: channel)
+    }
+
+    private func primaryInterfaceType(for path: NWPath) -> NWInterface.InterfaceType? {
+        for type in [NWInterface.InterfaceType.wifi, .cellular, .wiredEthernet, .loopback, .other] {
+            if path.usesInterfaceType(type) { return type }
+        }
+        return nil
+    }
+
+    private var lastPrimaryInterfaceDescription: String {
+        lastPrimaryInterface.map(interfaceName) ?? "none"
+    }
+
+    private func interfaceName(_ type: NWInterface.InterfaceType) -> String {
+        switch type {
+        case .wifi: return "wifi"
+        case .cellular: return "cellular"
+        case .wiredEthernet: return "ethernet"
+        case .loopback: return "loopback"
+        case .other: return "other"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private func pathStatusName(_ status: NWPath.Status) -> String {
+        switch status {
+        case .satisfied: return "satisfied"
+        case .unsatisfied: return "unsatisfied"
+        case .requiresConnection: return "requiresConnection"
+        @unknown default: return "unknown"
         }
     }
 
