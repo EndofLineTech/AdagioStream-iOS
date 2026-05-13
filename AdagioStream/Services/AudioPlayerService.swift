@@ -387,6 +387,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
     // MARK: - Network Path Monitor
 
+    /// Human-readable summary of the last observed network path, for debug
+    /// snapshots.  Returns "unknown" if the monitor has not fired yet.
+    public var networkPathSummary: String {
+        guard let status = lastPathStatus else { return "unknown" }
+        let interfaceName = lastPrimaryInterface.map(self.interfaceName) ?? "none"
+        return "\(pathStatusName(status)) via \(interfaceName)"
+    }
+
     /// Watches for network path transitions (Wi-Fi <-> cellular, online/offline)
     /// and forces a player rebuild when the underlying interface changes.
     /// VLC's own `--http-reconnect` handles connection-level drops but won't
@@ -418,19 +426,21 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
 
         let statusBecameSatisfied = previousStatus != .satisfied && path.status == .satisfied
+        let previousPrimary = lastPrimaryInterface
         let interfaceChanged = path.status == .satisfied
-            && lastPrimaryInterface != nil
+            && previousPrimary != nil
             && primary != nil
-            && primary != lastPrimaryInterface
+            && primary != previousPrimary
 
         lastPathStatus = path.status
         lastPrimaryInterface = primary
 
         guard statusBecameSatisfied || interfaceChanged else { return }
 
+        let previousPrimaryName = previousPrimary.map(interfaceName) ?? "none"
         let reason = statusBecameSatisfied
             ? "network came back (\(pathStatusName(previousStatus)) -> \(statusName))"
-            : "primary interface changed (\(lastPrimaryInterfaceDescription) -> \(primaryName))"
+            : "primary interface changed (\(previousPrimaryName) -> \(primaryName))"
         log.log("Path transition: \(reason), expensive=\(path.isExpensive), constrained=\(path.isConstrained)", category: .player)
 
         guard let channel = currentChannel else { return }
@@ -454,10 +464,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             if path.usesInterfaceType(type) { return type }
         }
         return nil
-    }
-
-    private var lastPrimaryInterfaceDescription: String {
-        lastPrimaryInterface.map(interfaceName) ?? "none"
     }
 
     private func interfaceName(_ type: NWInterface.InterfaceType) -> String {
@@ -708,17 +714,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // rejects network-caching and live-caching as "unsafe" options.
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
         let cacheMs = Int(effectiveBuffer * 1000)
-        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect, http-continuous, audio-time-stretch", category: .player)
+        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect", category: .player)
         retirePlayer(options: [
             "--network-caching=\(cacheMs)",
             "--live-caching=\(cacheMs)",
-            // Auto-reconnect on HTTP drops; continue reading on transient errors
-            // instead of surfacing them as playback failures.
+            // Auto-reconnect on HTTP drops.  Dropped --http-continuous and
+            // --audio-time-stretch in 1.1.x after they caused audible pitch
+            // artifacts ("skipping") and forward-skips ("jump aheads") on
+            // cellular drives.
             "--http-reconnect",
-            "--http-continuous",
-            // Allow inaudible ±2% rate adjustment to absorb buffer drift on
-            // cellular instead of dropping samples or gapping.
-            "--audio-time-stretch",
         ])
 
         let media = VLCMedia(url: channel.streamURL)
@@ -1110,7 +1114,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     public func updateBufferDuration(_ duration: TimeInterval) {
+        let previous = bufferDuration
         bufferDuration = duration
+        if abs(previous - duration) > 0.01 {
+            log.log("bufferDuration set to \(Int(duration))s (was \(Int(previous))s)", category: .player)
+        }
     }
 
     // MARK: - VLCMediaPlayerDelegate

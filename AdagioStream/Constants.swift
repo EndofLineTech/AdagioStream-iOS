@@ -10,7 +10,10 @@ public enum Constants {
     public static let appName = "Adagio Stream"
 
     /// Default audio buffer length in seconds.
-    public static let defaultBufferDuration: TimeInterval = 2.0
+    public static let defaultBufferDuration: TimeInterval = 5.0
+    /// Old default kept only so the one-time migration in SettingsViewModel
+    /// can recognize unmodified-from-old-default values and bump them up.
+    public static let legacyDefaultBufferDuration: TimeInterval = 2.0
 
     /// Filenames in app-support storage and account keys in the Keychain.
     /// Do NOT rename these — they identify persisted user data.
