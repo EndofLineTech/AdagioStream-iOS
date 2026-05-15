@@ -190,19 +190,40 @@ public final class ProviderManager: ObservableObject {
     // MARK: - Channel Loading
 
     public func loadChannels() async {
-        guard !isLoadingChannels else { return }
+        guard !isLoadingChannels else {
+            DebugLogger.shared.log("loadChannels: skipped — already loading", category: .providers)
+            return
+        }
         isLoadingChannels = true
         defer { isLoadingChannels = false }
         isLoading = true
         error = nil
 
+        let enabled = providers.filter(\.isEnabled)
+        let m3uCount = enabled.filter { if case .m3u = $0.type { return true } else { return false } }.count
+        let xcCount = enabled.filter { if case .xtreamCodes = $0.type { return true } else { return false } }.count
+        DebugLogger.shared.log(
+            "loadChannels: starting — \(enabled.count) enabled providers (\(m3uCount) M3U, \(xcCount) XC)",
+            category: .providers
+        )
+
         var allChannels: [Channel] = []
         var errors: [String] = []
         var counts: [UUID: Int] = [:]
 
-        for provider in providers.filter(\.isEnabled) {
+        for provider in enabled {
+            let typeLabel: String = {
+                switch provider.type {
+                case .m3u: return "M3U"
+                case .xtreamCodes: return "XC"
+                }
+            }()
+            DebugLogger.shared.log(
+                "loadChannels: loading \(typeLabel) provider \"\(provider.name)\"",
+                category: .providers
+            )
             do {
-                var loaded = try await loadChannels(from: provider)
+                var loaded = try await loadChannelsWithRetry(from: provider, attempts: 2)
                 for i in loaded.indices {
                     if provider.stripStreamIDs {
                         let ch = loaded[i]
@@ -220,11 +241,23 @@ public final class ProviderManager: ObservableObject {
                 }
                 counts[provider.id] = loaded.count
                 allChannels.append(contentsOf: loaded)
+                DebugLogger.shared.log(
+                    "loadChannels: \(typeLabel) \"\(provider.name)\" loaded \(loaded.count) channels",
+                    category: .providers
+                )
             } catch {
                 errors.append("\(provider.name): \(error.localizedDescription)")
+                DebugLogger.shared.log(
+                    "loadChannels: \(typeLabel) \"\(provider.name)\" FAILED — \(String(describing: error))",
+                    category: .providers
+                )
             }
         }
         channelCountByProvider = counts
+        DebugLogger.shared.log(
+            "loadChannels: done — \(allChannels.count) channels from \(counts.count)/\(enabled.count) providers, \(errors.count) failed",
+            category: .providers
+        )
 
         if !errors.isEmpty {
             self.error = errors.joined(separator: "\n")
@@ -263,10 +296,40 @@ public final class ProviderManager: ObservableObject {
         ESPNScoreService.shared.matchChannels(channels)
     }
 
+    /// Wraps `loadChannels(from:)` with a bounded retry. Cold CarPlay
+    /// background launches can fail the first network attempt (DNS, TLS
+    /// handshake, or transient connectivity), and XC's three sequential
+    /// calls magnify that risk. Retries any thrown error once with a
+    /// short backoff so a single dropped request doesn't leave the
+    /// provider with zero channels until the next manual refresh.
+    private func loadChannelsWithRetry(from provider: Provider, attempts: Int) async throws -> [Channel] {
+        var lastError: Error?
+        for attempt in 1...attempts {
+            do {
+                return try await loadChannels(from: provider)
+            } catch {
+                lastError = error
+                if attempt < attempts {
+                    DebugLogger.shared.log(
+                        "loadChannels[\(provider.name)]: attempt \(attempt)/\(attempts) failed (\(String(describing: error))) — retrying",
+                        category: .providers
+                    )
+                    try? await Task.sleep(for: .seconds(2))
+                }
+            }
+        }
+        throw lastError ?? NSError(domain: "ProviderManager", code: -1)
+    }
+
     public func loadChannels(from provider: Provider) async throws -> [Channel] {
         switch provider.type {
         case .m3u(let url, let epgURL):
+            DebugLogger.shared.log("M3U[\(provider.name)]: fetching playlist", category: .providers)
             let channels = try await M3UParser.parse(from: url)
+            DebugLogger.shared.log(
+                "M3U[\(provider.name)]: parsed \(channels.count) channels",
+                category: .providers
+            )
             if let epgURL {
                 do {
                     let epg = try await EPGParser.parse(from: epgURL)
@@ -280,10 +343,17 @@ public final class ProviderManager: ObservableObject {
 
         case .xtreamCodes(let host, let username, let password):
             var api = XtreamCodesAPI(host: host, username: username, password: password)
+            DebugLogger.shared.log("XC[\(provider.name)]: authenticate", category: .providers)
             let authResponse = try await api.authenticate()
             api.applyAuthFormats(authResponse)
+            DebugLogger.shared.log("XC[\(provider.name)]: getLiveCategories", category: .providers)
             let categories = try await api.getLiveCategories()
+            DebugLogger.shared.log("XC[\(provider.name)]: getLiveStreams", category: .providers)
             let streams = try await api.getLiveStreams()
+            DebugLogger.shared.log(
+                "XC[\(provider.name)]: fetched \(streams.count) streams across \(categories.count) categories",
+                category: .providers
+            )
 
             // Load EPG in background — non-fatal, mirrors M3U behavior
             if let xmltvURL = api.xmltvURL {

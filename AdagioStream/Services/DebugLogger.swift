@@ -79,6 +79,7 @@ public final class DebugLogger: @unchecked Sendable {
         case sxm = "SXM"
         case imageCache = "IMGCACHE"
         case espn = "ESPN"
+        case providers = "PROVIDERS"
     }
 
     // MARK: - Redaction

@@ -28,6 +28,8 @@ class CarPlayTemplateManager {
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
     private var startupStreamID: String?
     private var hasAttemptedStartupStream = false
+    private var providerRecoveryAttempts = 0
+    private let maxProviderRecoveryAttempts = 2
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -107,6 +109,49 @@ class CarPlayTemplateManager {
             .sink { [weak self] _ in
                 self?.updateRootSections()
             }
+
+        scheduleProviderRecoveryCheck(after: 15)
+    }
+
+    /// Detect cold-launch provider load failures (XC's three sequential
+    /// network calls are most prone to this). After a short delay, if any
+    /// enabled provider has zero channels in `channelCountByProvider`,
+    /// trigger another `loadChannels()` attempt. Bounded to
+    /// `maxProviderRecoveryAttempts` so a genuinely-broken provider
+    /// doesn't loop forever.
+    private func scheduleProviderRecoveryCheck(after delay: TimeInterval) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+
+            let enabled = self.providerManager.providers.filter(\.isEnabled)
+            let counts = self.providerManager.channelCountByProvider
+            let missing = enabled.filter { (counts[$0.id] ?? 0) == 0 }
+            guard !missing.isEmpty else {
+                log.log(
+                    "Provider recovery: all \(enabled.count) enabled providers loaded — no retry needed",
+                    category: .carplay
+                )
+                return
+            }
+
+            guard self.providerRecoveryAttempts < self.maxProviderRecoveryAttempts else {
+                log.log(
+                    "Provider recovery: \(missing.count) provider(s) still empty after \(self.providerRecoveryAttempts) attempts — giving up",
+                    category: .carplay
+                )
+                return
+            }
+
+            self.providerRecoveryAttempts += 1
+            let names = missing.map(\.name).joined(separator: ", ")
+            log.log(
+                "Provider recovery (attempt \(self.providerRecoveryAttempts)/\(self.maxProviderRecoveryAttempts)): \(missing.count) empty — [\(names)] — refreshing",
+                category: .carplay
+            )
+            await self.providerManager.loadChannels()
+            self.scheduleProviderRecoveryCheck(after: 30)
+        }
     }
 
     private func attemptStartupStream() {
