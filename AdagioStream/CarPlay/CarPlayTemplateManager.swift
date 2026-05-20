@@ -31,6 +31,11 @@ class CarPlayTemplateManager {
     private var hasAttemptedStartupStream = false
     private var providerRecoveryAttempts = 0
     private let maxProviderRecoveryAttempts = 2
+    /// Separate counter for the "providers list still empty" reschedule path
+    /// so a slow keychain/disk read doesn't burn through the load-retry budget
+    /// before we've even seen the provider list materialize.
+    private var emptyProviderListChecks = 0
+    private let maxEmptyProviderListChecks = 1
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
@@ -125,7 +130,34 @@ class CarPlayTemplateManager {
             try? await Task.sleep(for: .seconds(delay))
             guard let self else { return }
 
-            let enabled = self.providerManager.providers.filter(\.isEnabled)
+            let allProviders = self.providerManager.providers
+            let enabled = allProviders.filter(\.isEnabled)
+
+            // Distinguish "no providers in memory yet" from "all loaded, all
+            // happy".  Before pid.3, both states took the early-success
+            // branch — an empty `enabled` produces an empty `missing`,
+            // which means "no missing" — and we silently declared success
+            // while a slow keychain/disk read was still hydrating the
+            // provider list.  Reschedule once at +30s so the recovery
+            // doesn't fire its 'no retry needed' log against a list that
+            // hasn't materialized.
+            if allProviders.isEmpty {
+                if self.emptyProviderListChecks < self.maxEmptyProviderListChecks {
+                    self.emptyProviderListChecks += 1
+                    log.log(
+                        "Provider recovery: provider list still empty (check \(self.emptyProviderListChecks)/\(self.maxEmptyProviderListChecks)) — rescheduling at +30s",
+                        category: .carplay
+                    )
+                    self.scheduleProviderRecoveryCheck(after: 30)
+                } else {
+                    log.log(
+                        "Provider recovery: provider list still empty after \(self.emptyProviderListChecks) checks — giving up (no persisted providers?)",
+                        category: .carplay
+                    )
+                }
+                return
+            }
+
             let counts = self.providerManager.channelCountByProvider
             let missing = enabled.filter { (counts[$0.id] ?? 0) == 0 }
             guard !missing.isEmpty else {
