@@ -105,6 +105,20 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     public var bufferDuration: TimeInterval = Constants.defaultBufferDuration
     public var artworkDisplayMode: ArtworkDisplayMode = .coverArt
 
+    /// Run `block` and log how long it took.  Used to stamp every VLC
+    /// teardown call so a future main-thread stall leaves an unambiguous
+    /// fingerprint: the 0x8BADF00D scene-update watchdog gives us 10 s
+    /// before SIGKILL, and without per-call timing we cannot tell from the
+    /// log alone which call burned the budget.
+    @discardableResult
+    private func timed<T>(_ name: String, _ block: () -> T) -> T {
+        let start = Date()
+        let result = block()
+        let elapsedMs = Int((Date().timeIntervalSince(start) * 1000).rounded())
+        log.log("\(name) elapsed=\(elapsedMs)ms", category: .player)
+        return result
+    }
+
     /// Replace the current VLCMediaPlayer with a fresh instance, retiring the
     /// old one so that its `libvlc_media_player_destroy` (which calls
     /// `pthread_join` on VLC's internal threads) runs on a background queue
@@ -118,18 +132,36 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     ///   `live-caching` as "unsafe" options.  Instance-level options are always trusted.
     private func retirePlayer(options: [String]? = nil) {
         let old = mediaPlayer
-        old.stop()
-        old.media = nil
-        old.delegate = nil
-        if let options {
-            mediaPlayer = VLCMediaPlayer(options: options)
-        } else {
-            mediaPlayer = VLCMediaPlayer()
+        // Detach the media input *before* stop().  stop() synchronously
+        // drains VLC's input/decoder threads; if the input thread is sitting
+        // in poll() on a stalled socket, stop() inherits that block.
+        // Clearing media first signals the input layer to exit so stop() has
+        // nothing left to wait on.  Same logic for the delegate — clear it
+        // before stop() so no late VLC callbacks land on a half-torn player.
+        timed("retirePlayer: old.media=nil") { old.media = nil }
+        timed("retirePlayer: old.delegate=nil") { old.delegate = nil }
+        timed("retirePlayer: old.stop()") { old.stop() }
+        timed("retirePlayer: new VLCMediaPlayer") {
+            if let options {
+                mediaPlayer = VLCMediaPlayer(options: options)
+            } else {
+                mediaPlayer = VLCMediaPlayer()
+            }
         }
         mediaPlayer.delegate = self
-        // Release on a background thread so pthread_join can't block main
+        // Release on a background thread so pthread_join can't block main.
+        // The closure strong-captures `old`; the actual dealloc runs when the
+        // closure exits.  Log on entry and exit so we can confirm the path
+        // executed and bound how long the dealloc itself blocked the utility
+        // queue (which is harmless — main is what matters for the watchdog).
         DispatchQueue.global(qos: .utility).async { @Sendable [old] in
+            let start = Date()
+            DebugLogger.shared.log("retirePlayer: utility-queue dispose entered", category: .player)
             _ = old
+            // dealloc fires here as the closure scope exits — measured by the
+            // gap between this log and the next teardown log on this queue.
+            let elapsedMs = Int((Date().timeIntervalSince(start) * 1000).rounded())
+            DebugLogger.shared.log("retirePlayer: utility-queue dispose pre-exit elapsed=\(elapsedMs)ms", category: .player)
         }
     }
 
@@ -569,8 +601,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
         if hadActiveMedia {
             log.log("Stopping old VLCMediaPlayer to release connection", category: .player)
-            mediaPlayer.stop()
-            mediaPlayer.media = nil
+            timed("play(): mediaPlayer.stop()") { mediaPlayer.stop() }
+            timed("play(): mediaPlayer.media=nil") { mediaPlayer.media = nil }
             lastTeardownTime = Date()
         }
 
@@ -714,7 +746,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // rejects network-caching and live-caching as "unsafe" options.
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
         let cacheMs = Int(effectiveBuffer * 1000)
-        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect", category: .player)
+        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect, ipv4-timeout=2000ms, ipv6-timeout=2000ms", category: .player)
         retirePlayer(options: [
             "--network-caching=\(cacheMs)",
             "--live-caching=\(cacheMs)",
@@ -723,6 +755,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             // artifacts ("skipping") and forward-skips ("jump aheads") on
             // cellular drives.
             "--http-reconnect",
+            // Bound the initial TCP connect.  VLC defaults to 5 s here; on a
+            // cell handoff or radio stall a fresh connection that would
+            // otherwise stall the input thread now gives up in 2 s and the
+            // reconnect loop can move forward.  Steady-state socket reads
+            // can NOT be bounded via libvlc options (poll() inside
+            // vlc_tls_Read uses an infinite timeout); the data-flow stale
+            // watchdog in syncState() is the only mechanism for that.
+            "--ipv4-timeout=2000",
+            "--ipv6-timeout=2000",
         ])
 
         let media = VLCMedia(url: channel.streamURL)
@@ -920,6 +961,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             retirePlayer(options: [
                 "--network-caching=\(cacheMs)",
                 "--live-caching=\(cacheMs)",
+                "--ipv4-timeout=2000",
+                "--ipv6-timeout=2000",
             ])
         }
 
@@ -990,7 +1033,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             accumulatedListeningTime += Date().timeIntervalSince(start)
             listeningStartDate = nil
         }
-        mediaPlayer.stop()
+        timed("pause(): mediaPlayer.stop()") { mediaPlayer.stop() }
         isPlaying = false
         isBuffering = false
         sxmService.stopPolling()
@@ -1071,8 +1114,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         vlcZeroByteRetryCount = 0
         listeningStartDate = nil
         accumulatedListeningTime = 0
-        mediaPlayer.stop()
-        mediaPlayer.media = nil
+        timed("stop(): mediaPlayer.stop()") { mediaPlayer.stop() }
+        timed("stop(): mediaPlayer.media=nil") { mediaPlayer.media = nil }
         lastPlayedChannel = currentChannel
         currentChannel = nil
         isPlaying = false
@@ -1382,8 +1425,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     stateTimer?.invalidate()
                     stateTimer = nil
                     endBufferingBackgroundTask()
-                    mediaPlayer.stop()
-                    mediaPlayer.media = nil
+                    timed("giveup: mediaPlayer.stop()") { mediaPlayer.stop() }
+                    timed("giveup: mediaPlayer.media=nil") { mediaPlayer.media = nil }
                     isPlaying = false
                     isBuffering = false
                     error = "Unable to connect — no data received after multiple attempts. Check your network or provider status."
