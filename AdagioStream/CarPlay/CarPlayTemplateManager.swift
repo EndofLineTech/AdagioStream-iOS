@@ -1,6 +1,7 @@
 import CarPlay
 import Combine
 import Foundation
+import MediaPlayer
 import UIKit
 
 @MainActor
@@ -323,22 +324,38 @@ class CarPlayTemplateManager {
 
     private func pushNowPlaying() {
         let nowPlaying = CPNowPlayingTemplate.shared
+        let context = nowPlayingContext()
         if interfaceController.topTemplate is CPNowPlayingTemplate {
-            log.log("pushNowPlaying: already on top, refreshing info", category: .carplay)
+            log.log("pushNowPlaying: already on top, refreshing info — \(context)", category: .carplay)
             audioPlayer.refreshNowPlayingInfo()
             return
         }
         if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
-            log.log("pushNowPlaying: popping back to existing template", category: .carplay)
+            log.log("pushNowPlaying: popping back to existing template — \(context)", category: .carplay)
             interfaceController.pop(to: nowPlaying, animated: true) { [weak self] _, _ in
                 Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
             }
         } else {
-            log.log("pushNowPlaying: pushing new template", category: .carplay)
+            log.log("pushNowPlaying: pushing new template — \(context)", category: .carplay)
             interfaceController.pushTemplate(nowPlaying, animated: true) { [weak self] _, _ in
                 Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
             }
         }
+    }
+
+    /// Snapshot of MPNowPlayingInfoCenter at the moment a CPNowPlayingTemplate
+    /// push is initiated.  The template itself draws from
+    /// MPNowPlayingInfoCenter.default(), so if the values here are nil at
+    /// push time the user sees a blank Now-Playing surface even though the
+    /// SXM matcher may set them moments later.  Logged to diagnose the
+    /// cold-launch metadata gap (bd 651.1).
+    private func nowPlayingContext() -> String {
+        let channelName = audioPlayer.currentChannel?.name ?? "nil"
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        let title = info?[MPMediaItemPropertyTitle] as? String ?? "nil"
+        let artist = info?[MPMediaItemPropertyArtist] as? String ?? "nil"
+        let hasArtwork = info?[MPMediaItemPropertyArtwork] != nil
+        return "channel=\"\(channelName)\", MPNowPlayingInfo: title=\"\(title)\", artist=\"\(artist)\", hasArtwork=\(hasArtwork)"
     }
 
     private func playChannelAndShowNowPlaying(_ channel: Channel, within channels: [Channel]) {
@@ -347,11 +364,24 @@ class CarPlayTemplateManager {
         audioPlayer.play(channel: channel)
         pushNowPlaying()
 
-        // Re-publish now playing info after a delay to handle CarPlay head units
-        // that don't pick up metadata set before the app becomes "now playing"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard self?.audioPlayer.currentChannel?.id == channel.id else { return }
-            self?.audioPlayer.refreshNowPlayingInfo()
+        // Re-publish now playing info at several delays.  Some CarPlay head
+        // units don't pick up metadata set before the app becomes "now
+        // playing"; the cold-launch path additionally races the audio
+        // session activation against the first MPNowPlayingInfoCenter
+        // write, so a single 1 s refresh can miss the late SXM track
+        // resolve.  Ladder: 1 s catches warm path, 3 s catches the typical
+        // SXM matcher hop, 5 s catches CarPlay head units that don't
+        // observe MPNowPlayingInfoCenter until well after push.  Each
+        // refresh logs a NowPlaying snapshot via updateNowPlayingInfo so
+        // bd 651.1 has visible per-attempt evidence.
+        let refreshDelays: [TimeInterval] = [1.0, 3.0, 5.0]
+        for delay in refreshDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self,
+                      self.audioPlayer.currentChannel?.id == channel.id else { return }
+                self.log.log("CarPlay refresh attempt: t+\(delay)s for \"\(channel.name)\"", category: .carplay)
+                self.audioPlayer.refreshNowPlayingInfo()
+            }
         }
     }
 

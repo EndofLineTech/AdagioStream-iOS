@@ -906,6 +906,57 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
 
+    /// Pre-warm iOS's "now playing app" assertion at CarPlay connect time.
+    /// After a CarPlay-only cold launch the audio session was activated by
+    /// init() but iOS may not yet route MPRemoteCommandCenter events to us
+    /// until something convinces it we're a now-playing candidate.  Writing
+    /// a placeholder MPNowPlayingInfoCenter payload (rate=0, no title) is
+    /// the documented signal that we intend to take that role; it's
+    /// overwritten by updateNowPlayingInfo() as soon as a channel plays.
+    /// Also logs the audio session and now-playing state so bd 651.2 has
+    /// visible evidence of what iOS saw at connect time.
+    public func prewarmRemoteCommands() {
+        let session = AVAudioSession.sharedInstance()
+        let category = session.category.rawValue
+        let mode = session.mode.rawValue
+        let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        let center = MPNowPlayingInfoCenter.default()
+        let existingInfo = center.nowPlayingInfo
+        let stateName: String
+        switch center.playbackState {
+        case .playing: stateName = "playing"
+        case .paused: stateName = "paused"
+        case .stopped: stateName = "stopped"
+        case .interrupted: stateName = "interrupted"
+        case .unknown: stateName = "unknown"
+        @unknown default: stateName = "raw(\(center.playbackState.rawValue))"
+        }
+        log.log("prewarmRemoteCommands: session=\(category)/\(mode), outputs=[\(outputs)], existingInfo=\(existingInfo == nil ? "nil" : "present"), state=\(stateName)", category: .player)
+
+        // Take ownership only if no one else has set NowPlayingInfo yet —
+        // otherwise we'd stomp the active-stream payload on a CarPlay
+        // reconnect that finds the app already playing.
+        if existingInfo == nil {
+            center.nowPlayingInfo = [
+                MPNowPlayingInfoPropertyPlaybackRate: 0.0,
+                MPNowPlayingInfoPropertyIsLiveStream: true,
+            ]
+            center.playbackState = .stopped
+            log.log("prewarmRemoteCommands: wrote placeholder NowPlayingInfo to assert now-playing role", category: .player)
+        }
+
+        // Ensure the audio session is active.  If it was already activated
+        // by init() this is a no-op; if a prior interruption left it
+        // inactive without a delivered .ended event, this restores it so
+        // MPRemoteCommandCenter targets become reachable.
+        do {
+            try session.setActive(true)
+            log.log("prewarmRemoteCommands: session.setActive(true) OK", category: .audioSession)
+        } catch {
+            log.log("prewarmRemoteCommands: session.setActive(true) FAILED: \(error.localizedDescription)", category: .audioSession)
+        }
+    }
+
     /// Recover from an interruption whose ENDED event was never delivered.
     /// Called when the app returns to foreground or CarPlay reconnects.
     /// If `interruptedChannel` has been set for longer than 30 s with no
@@ -1579,6 +1630,17 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     // MARK: - Now Playing Info
 
     public func refreshNowPlayingInfo() {
+        // Force a full re-publish, not just an artwork refresh.  Clearing
+        // every change-detection field guarantees the next updateNowPlayingInfo
+        // writes to MPNowPlayingInfoCenter regardless of whether values
+        // appear unchanged — needed because some CarPlay head units only
+        // pick up metadata after a fresh write, even if MPNowPlayingInfoCenter
+        // already holds the right data (bd 651.1).
+        lastNowPlayingTitle = nil
+        lastNowPlayingArtist = nil
+        lastNowPlayingIsLive = nil
+        lastNowPlayingRate = nil
+        lastNowPlayingState = nil
         lastNowPlayingArtwork = nil
         updateNowPlayingInfo()
     }
@@ -1589,6 +1651,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let title: String
         let artist: String
         let artwork: MPMediaItemArtwork?
+        let source: String
 
         let stillLoading = isBuffering && !isPlaying
 
@@ -1598,27 +1661,33 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             title = channel.name
             artist = channel.group
             artwork = currentArtwork
+            source = "channelNameOverlay"
         } else if let track = sxmService.currentTrack {
             title = track.title
             artist = track.artistDisplay
             artwork = artworkDisplayMode == .coverArt ? (sxmArtwork ?? currentArtwork) : currentArtwork
+            source = "sxm"
         } else if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
             title = game.nowPlayingTitle
             artist = game.nowPlayingSubtitle
             artwork = currentArtwork
+            source = "espn"
         } else if let st = streamTitle {
             title = st
             artist = streamArtist ?? channel.name
             artwork = currentArtwork
+            source = "streamMetadata"
         } else if let epgID = channel.epgChannelID,
                   let epg = ProviderManager.shared.epgData[epgID]?.first(where: \.isCurrentlyAiring) {
             title = epg.title
             artist = channel.name
             artwork = currentArtwork
+            source = "epg"
         } else {
             title = channel.name
             artist = stillLoading ? "Loading..." : channel.group
             artwork = currentArtwork
+            source = stillLoading ? "fallback-loading" : "fallback-channel"
         }
 
         let isLive = !isPlayingBufferedFile
@@ -1656,6 +1725,17 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = info
         center.playbackState = state
+
+        let stateName: String
+        switch state {
+        case .playing: stateName = "playing"
+        case .paused: stateName = "paused"
+        case .stopped: stateName = "stopped"
+        case .interrupted: stateName = "interrupted"
+        case .unknown: stateName = "unknown"
+        @unknown default: stateName = "raw(\(state.rawValue))"
+        }
+        log.log("NowPlaying set: source=\(source), title=\"\(title)\", artist=\"\(artist)\", album=\"\(channel.name)\", isLive=\(isLive), state=\(stateName), rate=\(rate), hasArtwork=\(artwork != nil)", category: .player)
     }
 
     private func fetchSXMArtwork(url: URL, trackID: String) {
@@ -1678,6 +1758,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     private func clearNowPlayingInfo() {
+        log.log("NowPlaying cleared", category: .player)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         lastNowPlayingTitle = nil
         lastNowPlayingArtist = nil

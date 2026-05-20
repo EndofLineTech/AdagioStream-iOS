@@ -26,6 +26,14 @@ class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
         // Recover from interruptions whose ENDED event was never delivered
         // (common when CarPlay disconnects during an active interruption).
         AudioPlayerService.shared.recoverStaleInterruption()
+        // Assert ourselves as a now-playing candidate before the user
+        // selects a channel.  Without this, after a CarPlay-only cold
+        // launch (process spawned by CarPlay scene with no prior iOS
+        // window), iOS may not route MPRemoteCommandCenter events to us
+        // until something else convinces it we're the now-playing app —
+        // causing the "steering wheel did nothing for 4 minutes" symptom
+        // reported in bd 651.2.
+        AudioPlayerService.shared.prewarmRemoteCommands()
     }
 
     func templateApplicationScene(_ templateApplicationScene: CPTemplateApplicationScene,
