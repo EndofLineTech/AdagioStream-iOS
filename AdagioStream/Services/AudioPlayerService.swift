@@ -746,24 +746,22 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // rejects network-caching and live-caching as "unsafe" options.
         let effectiveBuffer = isReducedBufferRetry ? reducedBufferDuration : bufferDuration
         let cacheMs = Int(effectiveBuffer * 1000)
-        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect, ipv4-timeout=2000ms, ipv6-timeout=2000ms", category: .player)
+        log.log("VLC instance options: network-caching=\(cacheMs)ms, live-caching=\(cacheMs)ms, http-reconnect", category: .player)
         retirePlayer(options: [
             "--network-caching=\(cacheMs)",
             "--live-caching=\(cacheMs)",
             // Auto-reconnect on HTTP drops.  Dropped --http-continuous and
             // --audio-time-stretch in 1.1.x after they caused audible pitch
             // artifacts ("skipping") and forward-skips ("jump aheads") on
-            // cellular drives.
+            // cellular drives.  Tried --ipv4-timeout / --ipv6-timeout in
+            // build 144 and they crashed the libvlc instance init
+            // (libvlc_media_player_new with NULL p_libvlc) — those options
+            // are not recognized by this MobileVLCKit's bundled libvlc,
+            // and passing them poisons VLCLibrary so the next player creation
+            // segfaults.  Steady-state socket reads can NOT be bounded via
+            // libvlc options anyway; the data-flow stale watchdog in
+            // syncState() is the only mechanism for that.
             "--http-reconnect",
-            // Bound the initial TCP connect.  VLC defaults to 5 s here; on a
-            // cell handoff or radio stall a fresh connection that would
-            // otherwise stall the input thread now gives up in 2 s and the
-            // reconnect loop can move forward.  Steady-state socket reads
-            // can NOT be bounded via libvlc options (poll() inside
-            // vlc_tls_Read uses an infinite timeout); the data-flow stale
-            // watchdog in syncState() is the only mechanism for that.
-            "--ipv4-timeout=2000",
-            "--ipv6-timeout=2000",
         ])
 
         let media = VLCMedia(url: channel.streamURL)
@@ -1012,8 +1010,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             retirePlayer(options: [
                 "--network-caching=\(cacheMs)",
                 "--live-caching=\(cacheMs)",
-                "--ipv4-timeout=2000",
-                "--ipv6-timeout=2000",
             ])
         }
 
