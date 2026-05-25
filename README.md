@@ -23,7 +23,7 @@ A feature-rich IPTV audio streaming app for iOS. Manage multiple streaming provi
 ## Requirements
 
 - iOS 17.0+
-- Xcode 16.3+
+- Xcode 26.0+ (required — project uses iOS 26 Liquid Glass APIs gated by `#available`)
 - Swift 5.9
 
 ## Setup
