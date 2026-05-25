@@ -114,4 +114,6 @@ Adagio Stream does not collect, store, or transmit any personal data. See [PRIVA
 
 ## License
 
-Copyright (c) 2026 Adagio Stream. All rights reserved.
+Adagio Stream is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0), with an additional permission under section 7 allowing distribution through Apple's App Store. See [LICENSE](LICENSE) for the full text.
+
+Copyright (C) 2026 End of Line Technologies
