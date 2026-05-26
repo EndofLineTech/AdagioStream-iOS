@@ -182,10 +182,37 @@ public final class ProviderManager: ObservableObject {
     }
 
     public func updateProvider(_ provider: Provider) async {
-        if let index = providers.firstIndex(where: { $0.id == provider.id }) {
-            providers[index] = provider
-            await saveProviders()
+        guard let index = providers.firstIndex(where: { $0.id == provider.id }) else {
+            return
         }
+
+        // Pre-validate, same pattern as addProvider: if the updated
+        // credentials fail to load any channels, leave the prior good
+        // config untouched in providers / on disk.
+        error = nil
+        do {
+            let validated = try await loadChannelsWithRetry(from: provider, attempts: 2)
+            if validated.isEmpty {
+                error = "\(provider.name): playlist returned no channels"
+                DebugLogger.shared.log(
+                    "updateProvider[\(provider.name)]: REJECTED — 0 channels from validation",
+                    category: .providers
+                )
+                return
+            }
+        } catch let validationError {
+            error = "\(provider.name): \(validationError.localizedDescription)"
+            DebugLogger.shared.log(
+                "updateProvider[\(provider.name)]: REJECTED — \(String(describing: validationError))",
+                category: .providers
+            )
+            return
+        }
+        error = nil
+
+        providers[index] = provider
+        await saveProviders()
+        await loadChannels()
     }
 
     public func toggleProviderEnabled(_ provider: Provider) async {

@@ -164,7 +164,6 @@ struct AddProviderView: View {
             let updated = Provider(id: existing.id, name: name, type: type, isEnabled: existing.isEnabled, stripStreamIDs: stripStreamIDs)
             Task {
                 await providerManager.updateProvider(updated)
-                await providerManager.loadChannels()
                 if let loadError = providerManager.error {
                     error = loadError
                     isSaving = false
