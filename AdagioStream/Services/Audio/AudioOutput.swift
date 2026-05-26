@@ -29,7 +29,6 @@ public final class AudioOutput {
 
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
-    private var isRunning = false
     private let log = DebugLogger.shared
 
     private init() {
@@ -81,21 +80,25 @@ public final class AudioOutput {
         engine.connect(node, to: engine.mainMixerNode, format: format)
     }
 
+    /// Idempotent.  Checks engine.isRunning directly (rather than a
+    /// cached flag) because iOS can stop the engine under us — for
+    /// example when the audio session is deactivated during a pause —
+    /// without us getting a chance to update local state.  Calling
+    /// start() after that path correctly resumes audio output.
     public func start() {
-        guard !isRunning, sourceNode != nil else { return }
+        guard sourceNode != nil else { return }
+        if engine.isRunning { return }
         do {
             try engine.start()
-            isRunning = true
-            log.log("AudioOutput: engine started, format=FL32 \(Self.sampleRate)Hz \(Self.channelCount)ch", category: .audioSession)
+            log.log("AudioOutput: engine started, sourceFormat=Float32 planar \(Self.sampleRate)Hz \(Self.channelCount)ch", category: .audioSession)
         } catch {
             log.log("AudioOutput: engine.start() FAILED: \(error.localizedDescription)", category: .audioSession)
         }
     }
 
     public func stop() {
-        guard isRunning else { return }
+        guard engine.isRunning else { return }
         engine.stop()
-        isRunning = false
         log.log("AudioOutput: engine stopped", category: .audioSession)
     }
 }

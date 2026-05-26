@@ -1138,18 +1138,22 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             listeningStartDate = nil
         }
         timed("pause(): mediaPlayer.stop()") { mediaPlayer.stop() }
+        // Drop anything still in the ring buffer so resuming doesn't
+        // splash out the tail of pre-pause audio.
+        VLCAudioCallbackBridge.flushBuffer()
         isPlaying = false
         isBuffering = false
         sxmService.stopPolling()
         updateNowPlayingInfo()
 
-        // Release audio hardware when explicitly paused
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            log.log("Audio session deactivated on pause", category: .audioSession)
-        } catch {
-            log.log("Audio session deactivate on pause failed: \(error.localizedDescription)", category: .audioSession)
-        }
+        // NOTE: deliberately do NOT deactivate the audio session here.
+        // The AVAudioEngine in AudioOutput is running on this session;
+        // setActive(false) tears the engine down and the next play
+        // would produce no audio because engine.isRunning quietly
+        // flips to false without raising an error.  Holding the
+        // session active across pause is cheap (no audio is actually
+        // flowing — the engine renders silence from the empty ring
+        // buffer) and lets resume() pick up cleanly.
     }
 
     public func resume() {

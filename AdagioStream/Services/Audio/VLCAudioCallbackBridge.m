@@ -46,8 +46,22 @@ static _Atomic long adg_play_count = 0;
 static _Atomic long adg_format_count = 0;
 static _Atomic long adg_dropped_frames = 0;
 
+/// 1.0 / 32768.0, precomputed so the conversion loop is a single
+/// multiplication per sample.  Int16 PCM is signed [-32768, 32767];
+/// dividing by 32768 maps to [-1.0, 1.0) which is what AVAudioEngine
+/// expects for float32 audio.
+static const float kInt16ToFloat = 1.0f / 32768.0f;
+
 /// PRODUCER side — called from VLC's audio thread.
-static void adg_ring_write(const float *samples, uint64_t frames) {
+///
+/// VLC 3.x's amem audio output module hardcodes its sample format to
+/// S16N regardless of what libvlc_audio_set_format() requests (see
+/// modules/audio_output/amem.c — there's a literal `TODO: amem-format`
+/// in the source).  So `samples` is ALWAYS interleaved int16 here,
+/// never float32 as the API surface implies.  We convert on the
+/// producer side so the rest of the pipeline (ring buffer, render
+/// block) keeps the cleaner float32 contract.
+static void adg_ring_write(const int16_t *samples, uint64_t frames) {
     if (frames == 0) { return; }
     uint64_t head = atomic_load_explicit(&adg_ring_head, memory_order_relaxed);
     uint64_t tail = atomic_load_explicit(&adg_ring_tail, memory_order_acquire);
@@ -67,17 +81,24 @@ static void adg_ring_write(const float *samples, uint64_t frames) {
 
     uint64_t head_idx = head & ADG_RING_MASK;
     uint64_t until_wrap = (uint64_t)ADG_RING_CAPACITY - head_idx;
-    if (frames <= until_wrap) {
-        memcpy(&adg_ring_buffer[head_idx * ADG_FRAME_FLOATS],
-               samples,
-               frames * ADG_FRAME_FLOATS * sizeof(float));
-    } else {
-        memcpy(&adg_ring_buffer[head_idx * ADG_FRAME_FLOATS],
-               samples,
-               until_wrap * ADG_FRAME_FLOATS * sizeof(float));
-        memcpy(&adg_ring_buffer[0],
-               samples + until_wrap * ADG_FRAME_FLOATS,
-               (frames - until_wrap) * ADG_FRAME_FLOATS * sizeof(float));
+    uint64_t first_chunk = (frames <= until_wrap) ? frames : until_wrap;
+
+    // Convert int16 → float32 sample-by-sample.  Hot path, but the
+    // math is one multiply per sample and modern CPUs vectorise this
+    // trivially; profile if it ever shows up as a hotspot.
+    float *dst = &adg_ring_buffer[head_idx * ADG_FRAME_FLOATS];
+    const int16_t *src = samples;
+    for (uint64_t i = 0; i < first_chunk * ADG_FRAME_FLOATS; i++) {
+        dst[i] = (float)src[i] * kInt16ToFloat;
+    }
+
+    if (frames > until_wrap) {
+        uint64_t second_chunk = frames - until_wrap;
+        float *dst2 = &adg_ring_buffer[0];
+        const int16_t *src2 = samples + until_wrap * ADG_FRAME_FLOATS;
+        for (uint64_t i = 0; i < second_chunk * ADG_FRAME_FLOATS; i++) {
+            dst2[i] = (float)src2[i] * kInt16ToFloat;
+        }
     }
     atomic_store_explicit(&adg_ring_head, head + frames, memory_order_release);
 }
@@ -116,7 +137,7 @@ static void adg_ring_flush(void) {
 static void adg_audio_play_cb(void *data, const void *samples,
                               unsigned count, int64_t pts) {
     atomic_fetch_add_explicit(&adg_play_count, 1, memory_order_relaxed);
-    adg_ring_write((const float *)samples, (uint64_t)count);
+    adg_ring_write((const int16_t *)samples, (uint64_t)count);
 }
 
 static void adg_audio_pause_cb(void *data, int64_t pts) {
