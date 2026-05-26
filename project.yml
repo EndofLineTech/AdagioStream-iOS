@@ -86,7 +86,15 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "148"
+        CURRENT_PROJECT_VERSION: "149"
+        SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          # MobileVLCKit ships the libvlc C headers under vlc/ inside its
+          # Headers directory.  They cross-reference each other via
+          # <vlc/libvlc.h>-style includes, which need vlc/ to be findable
+          # at the top of the search path.  See VLCAudioCallbackBridge.m.
+          - $(BUILT_PRODUCTS_DIR)/MobileVLCKit.framework/Headers
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
@@ -113,7 +121,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "148"
+        CURRENT_PROJECT_VERSION: "149"
         MARKETING_VERSION: "1.1"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services

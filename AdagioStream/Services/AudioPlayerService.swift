@@ -799,6 +799,19 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         media.delegate = self
         mediaPlayer.media = media
         mediaPlayer.audio?.volume = 100
+
+        // Phase 1 spike: register PCM callbacks to switch VLC's audio output
+        // from audiounit_ios (which owns AVAudioSession and calls
+        // setActive(false, .notifyOthersOnDeactivation) on stop, allowing
+        // Apple Music to auto-resume during channel changes) to the in-
+        // memory "amem" module.  Counter-only callbacks here — no PCM
+        // routing yet.  Audio will be silent.  Validation criterion: no
+        // setActive(false) shows up in the log on mediaPlayer.stop().
+        let preAttachPlay = VLCAudioCallbackBridge.playCallbackCount
+        let preAttachFormat = VLCAudioCallbackBridge.formatCallbackCount
+        let attached = VLCAudioCallbackBridge.attachCountingCallbacks(to: mediaPlayer)
+        log.log("amem bridge: attached=\(attached), priorPlayCount=\(preAttachPlay), priorFormatCount=\(preAttachFormat)", category: .audioSession)
+
         mediaPlayer.play()
         isActiveSession = true
         log.log("play() started: playerState=\(vlcStateName(mediaPlayer.state)), willPlay=\(mediaPlayer.willPlay)", category: .player)
@@ -1304,6 +1317,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         } else {
             details += ", media=NIL"
         }
+
+        // Phase 1 spike instrumentation: surface amem callback counters
+        // alongside each state transition so the log shows whether VLC
+        // is routing audio through our PCM callbacks (amem) instead of
+        // audiounit_ios.  formatCount > 0 means setup_cb fired.
+        // playCount climbing means play_cb is being invoked with PCM.
+        details += ", amem(play=\(VLCAudioCallbackBridge.playCallbackCount),fmt=\(VLCAudioCallbackBridge.formatCallbackCount))"
 
         log.log(details, category: .vlcState)
     }

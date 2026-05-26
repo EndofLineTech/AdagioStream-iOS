@@ -53,6 +53,7 @@
 		83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411FC365142BB95B070F2EEA /* PinnedURLSession.swift */; };
 		840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
 		887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */; };
+		8F65506BDA72BC28D1162110 /* VLCAudioCallbackBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */; };
 		931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */; };
 		987AA9ADB45C60F54C55F54E /* SavedSongsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */; };
 		9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FA365F7131A727DB1A7C79 /* AirPlayRoutePickerView.swift */; };
@@ -173,6 +174,7 @@
 		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
 		654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerServiceTests.swift; sourceTree = "<group>"; };
+		6B53DA1A6B961046A0188A39 /* AdagioStream-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AdagioStream-Bridging-Header.h"; sourceTree = "<group>"; };
 		6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
 		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		7434EFB265DF59B08B4394B3 /* SXMTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SXMTrack.swift; sourceTree = "<group>"; };
@@ -199,6 +201,7 @@
 		A1CF4778448EC75225E98912 /* EPGParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParserTests.swift; sourceTree = "<group>"; };
 		A3FA365F7131A727DB1A7C79 /* AirPlayRoutePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayRoutePickerView.swift; sourceTree = "<group>"; };
 		A49B5499FEB06793F277174C /* ProviderManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManagementView.swift; sourceTree = "<group>"; };
+		A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VLCAudioCallbackBridge.m; sourceTree = "<group>"; };
 		A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntryRowView.swift; sourceTree = "<group>"; };
 		B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AdagioStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B785664AF5E9481E580421E3 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
@@ -224,6 +227,7 @@
 		E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedURLSheet.swift; sourceTree = "<group>"; };
 		E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		E74E1BC12E2BCD838B7CC68B /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
+		EBA9C37814DF850D9943C848 /* VLCAudioCallbackBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VLCAudioCallbackBridge.h; sourceTree = "<group>"; };
 		EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		EE137FF651110189C708941D /* PlaybackSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSettingsView.swift; sourceTree = "<group>"; };
@@ -291,6 +295,15 @@
 				B785664AF5E9481E580421E3 /* SettingsViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		277631CB83D7B81EF6365C90 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				EBA9C37814DF850D9943C848 /* VLCAudioCallbackBridge.h */,
+				A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */,
+			);
+			path = Audio;
 			sourceTree = "<group>";
 		};
 		2A145E596DEF592D695C7EDE /* Player */ = {
@@ -482,6 +495,7 @@
 		C7BB60840AEC2DE630CE1B02 /* AdagioStream */ = {
 			isa = PBXGroup;
 			children = (
+				6B53DA1A6B961046A0188A39 /* AdagioStream-Bridging-Header.h */,
 				2E0773D0B4CD7353ACEADE32 /* AdagioStream.entitlements */,
 				CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */,
 				2591A7C2156E83DA1F2F30CE /* Assets.xcassets */,
@@ -541,6 +555,7 @@
 				42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */,
 				DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */,
 				D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */,
+				277631CB83D7B81EF6365C90 /* Audio */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -765,6 +780,7 @@
 				75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */,
 				FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */,
 				F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */,
+				8F65506BDA72BC28D1162110 /* VLCAudioCallbackBridge.m in Sources */,
 				931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */,
 				462B7E90D6FEAED0D57D018C /* XtreamCodesAPI.swift in Sources */,
 			);
@@ -879,9 +895,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 148;
+				CURRENT_PROJECT_VERSION = 149;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)/MobileVLCKit.framework/Headers",
+				);
 				INFOPLIST_FILE = AdagioStream/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIRequiresFullScreen = NO;
@@ -894,6 +914,7 @@
 				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "AdagioStream/AdagioStream-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -904,9 +925,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 148;
+				CURRENT_PROJECT_VERSION = 149;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)/MobileVLCKit.framework/Headers",
+				);
 				INFOPLIST_FILE = AdagioStream/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_UIRequiresFullScreen = NO;
@@ -919,6 +944,7 @@
 				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.adagiostream.app;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "AdagioStream/AdagioStream-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -927,7 +953,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 148;
+				CURRENT_PROJECT_VERSION = 149;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -949,7 +975,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 148;
+				CURRENT_PROJECT_VERSION = 149;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
