@@ -30,6 +30,41 @@ NS_ASSUME_NONNULL_BEGIN
 /// AVAudioEngine isn't draining fast enough.
 @property (class, readonly) NSInteger droppedFrameCount;
 
+/// The `count` argument from the most recent play_cb invocation.
+/// VLC's chunk size — typically 1024–2048 stereo frames per call.
+/// Useful for sanity-checking the frames-per-channel interpretation
+/// of the libvlc audio callback contract.
+@property (class, readonly) NSInteger lastPlayCallbackCount;
+
+/// The PTS (presentation timestamp, microseconds) of the most recent
+/// play_cb invocation.  Combined with playCallbackCount and wall-clock
+/// delta, lets us empirically verify VLC is producing audio at the
+/// requested sample rate.
+@property (class, readonly) int64_t lastPlayCallbackPTS;
+
+/// Total frames received across all play_cb invocations.  At 48 kHz
+/// stereo this should accumulate at roughly 48,000 frames/sec of
+/// playback wall-clock time; large deviations indicate sample-rate
+/// mismatch between what we asked for and what VLC produced.
+@property (class, readonly) NSInteger totalReceivedFrames;
+
+/// Render-block invocations where the ring buffer didn't have enough
+/// frames to satisfy the requested frameCount and we had to zero-fill
+/// the tail.  Steady-state should be 0; occasional underruns at
+/// startup are expected.
+@property (class, readonly) NSInteger renderUnderrunCount;
+
+/// Total render-block invocations since launch.  Provides a denominator
+/// for the underrun rate.
+@property (class, readonly) NSInteger renderCallCount;
+
+/// Called from the render block whenever we couldn't deliver as many
+/// frames as the engine asked for.  REAL-TIME safe (atomic increment).
++ (void)reportUnderrun;
+
+/// Called from the render block on every invocation.  REAL-TIME safe.
++ (void)reportRenderCall;
+
 /// Register PCM callbacks on `player` and pin its decoder output to
 /// FL32 (float32 native endian, interleaved) at the given rate/channels.
 /// Must be called before `[player play]`.  Returns YES if the underlying

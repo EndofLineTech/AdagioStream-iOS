@@ -86,7 +86,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "152"
+        CURRENT_PROJECT_VERSION: "153"
         SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
@@ -121,7 +121,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "152"
+        CURRENT_PROJECT_VERSION: "153"
         MARKETING_VERSION: "1.1"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services

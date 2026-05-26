@@ -45,6 +45,11 @@ static _Atomic uint64_t adg_ring_tail = 0;  // consumer reads from here
 static _Atomic long adg_play_count = 0;
 static _Atomic long adg_format_count = 0;
 static _Atomic long adg_dropped_frames = 0;
+static _Atomic long adg_last_cb_count = 0;
+static _Atomic int_least64_t adg_last_cb_pts = 0;
+static _Atomic long adg_total_frames = 0;
+static _Atomic long adg_render_underruns = 0;
+static _Atomic long adg_render_calls = 0;
 
 /// 1.0 / 32768.0, precomputed so the conversion loop is a single
 /// multiplication per sample.  Int16 PCM is signed [-32768, 32767];
@@ -137,6 +142,9 @@ static void adg_ring_flush(void) {
 static void adg_audio_play_cb(void *data, const void *samples,
                               unsigned count, int64_t pts) {
     atomic_fetch_add_explicit(&adg_play_count, 1, memory_order_relaxed);
+    atomic_store_explicit(&adg_last_cb_count, (long)count, memory_order_relaxed);
+    atomic_store_explicit(&adg_last_cb_pts, (int_least64_t)pts, memory_order_relaxed);
+    atomic_fetch_add_explicit(&adg_total_frames, (long)count, memory_order_relaxed);
     adg_ring_write((const int16_t *)samples, (uint64_t)count);
 }
 
@@ -176,6 +184,34 @@ static void adg_audio_drain_cb(void *data) {
 
 + (NSInteger)droppedFrameCount {
     return (NSInteger)atomic_load_explicit(&adg_dropped_frames, memory_order_relaxed);
+}
+
++ (NSInteger)lastPlayCallbackCount {
+    return (NSInteger)atomic_load_explicit(&adg_last_cb_count, memory_order_relaxed);
+}
+
++ (int64_t)lastPlayCallbackPTS {
+    return (int64_t)atomic_load_explicit(&adg_last_cb_pts, memory_order_relaxed);
+}
+
++ (NSInteger)totalReceivedFrames {
+    return (NSInteger)atomic_load_explicit(&adg_total_frames, memory_order_relaxed);
+}
+
++ (NSInteger)renderUnderrunCount {
+    return (NSInteger)atomic_load_explicit(&adg_render_underruns, memory_order_relaxed);
+}
+
++ (NSInteger)renderCallCount {
+    return (NSInteger)atomic_load_explicit(&adg_render_calls, memory_order_relaxed);
+}
+
++ (void)reportUnderrun {
+    atomic_fetch_add_explicit(&adg_render_underruns, 1, memory_order_relaxed);
+}
+
++ (void)reportRenderCall {
+    atomic_fetch_add_explicit(&adg_render_calls, 1, memory_order_relaxed);
 }
 
 + (BOOL)attachAudioCallbacksToPlayer:(VLCMediaPlayer *)player

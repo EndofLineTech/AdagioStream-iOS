@@ -50,6 +50,7 @@ public final class AudioOutput {
         let node = AVAudioSourceNode(format: format) { isSilence, _, frameCount, audioBufferList -> OSStatus in
             // REAL-TIME audio I/O thread.  No allocations, no Swift
             // locks, no Obj-C dispatch beyond the C-bridged pull.
+            VLCAudioCallbackBridge.reportRenderCall()
             let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
             guard abl.count >= 2,
                   let leftData = abl[0].mData?.assumingMemoryBound(to: Float.self),
@@ -70,6 +71,7 @@ public final class AudioOutput {
                 let zeroBytes = zeroCount * MemoryLayout<Float>.size
                 memset(leftData.advanced(by: pulled), 0, zeroBytes)
                 memset(rightData.advanced(by: pulled), 0, zeroBytes)
+                VLCAudioCallbackBridge.reportUnderrun()
             }
             isSilence.pointee = ObjCBool(pulled == 0)
             return noErr
@@ -90,7 +92,15 @@ public final class AudioOutput {
         if engine.isRunning { return }
         do {
             try engine.start()
-            log.log("AudioOutput: engine started, sourceFormat=Float32 planar \(Self.sampleRate)Hz \(Self.channelCount)ch", category: .audioSession)
+            // Surface the hardware output format the engine actually
+            // bound to.  If this doesn't match our source node format
+            // (48 kHz stereo float32), AVAudioEngine has inserted an
+            // implicit converter and any rate mismatch will show up as
+            // pitch artifacts that point straight at the cause.
+            let mixerOut = engine.mainMixerNode.outputFormat(forBus: 0)
+            let mixerIn  = engine.mainMixerNode.inputFormat(forBus: 0)
+            let outputFmt = engine.outputNode.outputFormat(forBus: 0)
+            log.log("AudioOutput: engine started, source=Float32 planar \(Self.sampleRate)Hz \(Self.channelCount)ch | mixer.in=\(Int(mixerIn.sampleRate))Hz/\(mixerIn.channelCount)ch | mixer.out=\(Int(mixerOut.sampleRate))Hz/\(mixerOut.channelCount)ch | hwOut=\(Int(outputFmt.sampleRate))Hz/\(outputFmt.channelCount)ch", category: .audioSession)
         } catch {
             log.log("AudioOutput: engine.start() FAILED: \(error.localizedDescription)", category: .audioSession)
         }

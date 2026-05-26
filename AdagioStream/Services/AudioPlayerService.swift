@@ -1339,12 +1339,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             details += ", media=NIL"
         }
 
-        // amem pipeline diagnostics: playCount climbing = VLC is
-        // feeding the ring buffer; bufferedFrames > 0 = audio is
-        // ready for the AVAudioSourceNode render block; dropped > 0
-        // = engine isn't draining fast enough (shouldn't happen in
-        // steady state).
-        details += ", amem(play=\(VLCAudioCallbackBridge.playCallbackCount),fmt=\(VLCAudioCallbackBridge.formatCallbackCount),buf=\(VLCAudioCallbackBridge.bufferedFrames),dropped=\(VLCAudioCallbackBridge.droppedFrameCount))"
+        // amem pipeline diagnostics:
+        //   play / lastCount = total play_cb calls / last frame count
+        //     (lastCount validates "frames per channel" interpretation:
+        //      typical 1024–2048; combined with total/elapsed gives
+        //      empirical sample rate)
+        //   totalFrames = sum of frame counts (≈ sampleRate * playSeconds)
+        //   buf / dropped = current ring depth / overflow count
+        //   render / under = AVAudioEngine render-block calls /
+        //     calls that had to zero-fill (engine starvation)
+        details += ", amem(play=\(VLCAudioCallbackBridge.playCallbackCount),lastCnt=\(VLCAudioCallbackBridge.lastPlayCallbackCount),total=\(VLCAudioCallbackBridge.totalReceivedFrames),pts=\(VLCAudioCallbackBridge.lastPlayCallbackPTS),buf=\(VLCAudioCallbackBridge.bufferedFrames),dropped=\(VLCAudioCallbackBridge.droppedFrameCount),render=\(VLCAudioCallbackBridge.renderCallCount),under=\(VLCAudioCallbackBridge.renderUnderrunCount))"
 
         log.log(details, category: .vlcState)
     }
