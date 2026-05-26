@@ -83,7 +83,10 @@ static void adg_ring_write(const float *samples, uint64_t frames) {
 }
 
 /// CONSUMER side — called from the AVAudioSourceNode render thread.
-static uint64_t adg_ring_read(float *dest, uint64_t max_frames) {
+/// De-interleaves into separate L/R buffers in the same pass that
+/// reads from the ring, keeping the render block allocation-free.
+static uint64_t adg_ring_read_planar(float *left, float *right,
+                                     uint64_t max_frames) {
     if (max_frames == 0) { return 0; }
     uint64_t tail = atomic_load_explicit(&adg_ring_tail, memory_order_relaxed);
     uint64_t head = atomic_load_explicit(&adg_ring_head, memory_order_acquire);
@@ -91,19 +94,10 @@ static uint64_t adg_ring_read(float *dest, uint64_t max_frames) {
     uint64_t to_read = available < max_frames ? available : max_frames;
     if (to_read == 0) { return 0; }
 
-    uint64_t tail_idx = tail & ADG_RING_MASK;
-    uint64_t until_wrap = (uint64_t)ADG_RING_CAPACITY - tail_idx;
-    if (to_read <= until_wrap) {
-        memcpy(dest,
-               &adg_ring_buffer[tail_idx * ADG_FRAME_FLOATS],
-               to_read * ADG_FRAME_FLOATS * sizeof(float));
-    } else {
-        memcpy(dest,
-               &adg_ring_buffer[tail_idx * ADG_FRAME_FLOATS],
-               until_wrap * ADG_FRAME_FLOATS * sizeof(float));
-        memcpy(dest + until_wrap * ADG_FRAME_FLOATS,
-               &adg_ring_buffer[0],
-               (to_read - until_wrap) * ADG_FRAME_FLOATS * sizeof(float));
+    for (uint64_t i = 0; i < to_read; i++) {
+        uint64_t idx = (tail + i) & ADG_RING_MASK;
+        left[i]  = adg_ring_buffer[idx * ADG_FRAME_FLOATS + 0];
+        right[i] = adg_ring_buffer[idx * ADG_FRAME_FLOATS + 1];
     }
     atomic_store_explicit(&adg_ring_tail, tail + to_read, memory_order_release);
     return to_read;
@@ -190,9 +184,11 @@ static void adg_audio_drain_cb(void *data) {
     return YES;
 }
 
-+ (NSInteger)pullFramesInto:(float *)dest maxFrames:(NSInteger)maxFrames {
-    if (!dest || maxFrames <= 0) { return 0; }
-    return (NSInteger)adg_ring_read(dest, (uint64_t)maxFrames);
++ (NSInteger)pullFramesIntoLeft:(float *)left
+                          right:(float *)right
+                      maxFrames:(NSInteger)maxFrames {
+    if (!left || !right || maxFrames <= 0) { return 0; }
+    return (NSInteger)adg_ring_read_planar(left, right, (uint64_t)maxFrames);
 }
 
 + (void)flushBuffer {

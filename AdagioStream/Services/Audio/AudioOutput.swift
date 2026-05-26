@@ -33,36 +33,44 @@ public final class AudioOutput {
     private let log = DebugLogger.shared
 
     private init() {
+        // NON-INTERLEAVED (planar) float32.  iOS's AU buses only accept
+        // planar formats on input; trying to connect an AVAudioSourceNode
+        // configured with interleaved=true crashes inside
+        // AUInterfaceBaseV3::SetFormat with an NSException.  The bridge
+        // de-interleaves on the C side as it pulls from the ring buffer,
+        // so this format mismatch with VLC's FL32 interleaved output is
+        // resolved zero-copy on the audio thread.
         guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                           sampleRate: Double(Self.sampleRate),
                                           channels: AVAudioChannelCount(Self.channelCount),
-                                          interleaved: true) else {
+                                          interleaved: false) else {
             log.log("AudioOutput: failed to construct AVAudioFormat", category: .audioSession)
             return
         }
 
         let node = AVAudioSourceNode(format: format) { isSilence, _, frameCount, audioBufferList -> OSStatus in
             // REAL-TIME audio I/O thread.  No allocations, no Swift
-            // locks, no Obj-C dispatch beyond the C-bridged pullFrames.
+            // locks, no Obj-C dispatch beyond the C-bridged pull.
             let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
-            guard let mData = abl[0].mData else {
+            guard abl.count >= 2,
+                  let leftData = abl[0].mData?.assumingMemoryBound(to: Float.self),
+                  let rightData = abl[1].mData?.assumingMemoryBound(to: Float.self) else {
                 isSilence.pointee = ObjCBool(true)
                 return noErr
             }
-            let dest = mData.assumingMemoryBound(to: Float.self)
             let requested = Int(frameCount)
-            let pulled = VLCAudioCallbackBridge.pullFrames(into: dest, maxFrames: requested)
+            let pulled = VLCAudioCallbackBridge.pullFrames(intoLeft: leftData,
+                                                           right: rightData,
+                                                           maxFrames: requested)
 
             if pulled < requested {
                 // Underrun (or stream paused / between channels) —
-                // zero-fill the rest so the render block doesn't
-                // emit uninitialised memory.  Two channels interleaved,
-                // four bytes per sample.
-                let writtenSamples = pulled * Int(Self.channelCount)
-                let remainingSamples = (requested - pulled) * Int(Self.channelCount)
-                let byteOffset = writtenSamples * MemoryLayout<Float>.size
-                let byteLength = remainingSamples * MemoryLayout<Float>.size
-                memset(mData.advanced(by: byteOffset), 0, byteLength)
+                // zero-fill the tail of each channel so the render
+                // block doesn't emit uninitialised memory.
+                let zeroCount = requested - pulled
+                let zeroBytes = zeroCount * MemoryLayout<Float>.size
+                memset(leftData.advanced(by: pulled), 0, zeroBytes)
+                memset(rightData.advanced(by: pulled), 0, zeroBytes)
             }
             isSilence.pointee = ObjCBool(pulled == 0)
             return noErr

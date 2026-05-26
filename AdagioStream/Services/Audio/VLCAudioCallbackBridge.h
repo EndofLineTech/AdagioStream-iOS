@@ -38,11 +38,17 @@ NS_ASSUME_NONNULL_BEGIN
                           sampleRate:(uint32_t)sampleRate
                             channels:(uint32_t)channels;
 
-/// Pull up to `maxFrames` stereo interleaved float32 frames from the
-/// ring buffer into `dest`.  Returns the number of frames actually
-/// written.  REAL-TIME SAFE — no allocations, no locks.  Intended for
-/// invocation from an AVAudioSourceNode render block.
-+ (NSInteger)pullFramesInto:(float *)dest maxFrames:(NSInteger)maxFrames;
+/// Pull up to `maxFrames` stereo frames from the ring buffer and
+/// de-interleave them into the planar `left` and `right` channel
+/// destinations.  Returns the number of frames actually written.
+/// REAL-TIME SAFE — no allocations, no locks.  Intended for invocation
+/// from an AVAudioSourceNode render block configured with a non-
+/// interleaved AVAudioFormat (iOS only accepts planar formats on AU
+/// input buses, which is why we de-interleave here instead of giving
+/// Swift the raw interleaved bytes).
++ (NSInteger)pullFramesIntoLeft:(float *)left
+                          right:(float *)right
+                      maxFrames:(NSInteger)maxFrames;
 
 /// Drop everything currently buffered.  Call between streams (after
 /// mediaPlayer.stop, before the next mediaPlayer.play) so the tail of
