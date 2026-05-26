@@ -100,6 +100,37 @@ public final class ProviderManager: ObservableObject {
     }
 
     public func addProvider(_ provider: Provider, enableAllGroups: Bool = false) async {
+        // Pre-validate by loading channels from the candidate provider
+        // before touching the persisted provider list.  If the load
+        // throws (bad URL, auth failure, network) or returns no channels,
+        // surface the error and bail — don't leave a broken entry with
+        // 0 channels in the provider list.  loadChannels(from:) may set
+        // self.error as a non-fatal EPG warning during validation; reset
+        // to a known state on entry and let the full refresh below
+        // repopulate it.
+        error = nil
+        do {
+            let validated = try await loadChannelsWithRetry(from: provider, attempts: 2)
+            if validated.isEmpty {
+                error = "\(provider.name): playlist returned no channels"
+                DebugLogger.shared.log(
+                    "addProvider[\(provider.name)]: REJECTED — 0 channels from validation",
+                    category: .providers
+                )
+                return
+            }
+        } catch let validationError {
+            error = "\(provider.name): \(validationError.localizedDescription)"
+            DebugLogger.shared.log(
+                "addProvider[\(provider.name)]: REJECTED — \(String(describing: validationError))",
+                category: .providers
+            )
+            return
+        }
+        // Discard any EPG warning set during validation; the full refresh
+        // below re-runs the EPG fetch and will set this if it's still true.
+        error = nil
+
         let existingGroups = Set(rawChannels.map(\.group))
 
         providers.append(provider)
