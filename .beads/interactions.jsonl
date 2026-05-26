@@ -166,3 +166,5 @@
 {"id":"int-c613a0fc","kind":"field_change","created_at":"2026-05-25T02:19:44.860795Z","actor":"Curt LeCaptain","issue_id":"beads_mobilemusic-7ah","extra":{"field":"status","new_value":"closed","old_value":"open"}}
 {"id":"int-0b18d5e1","kind":"field_change","created_at":"2026-05-25T02:49:53.560599Z","actor":"Curt LeCaptain","issue_id":"beads_mobilemusic-h5k","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-d64ff7e0","kind":"field_change","created_at":"2026-05-25T02:49:54.393725Z","actor":"Curt LeCaptain","issue_id":"beads_mobilemusic-h5k","extra":{"field":"status","new_value":"closed","old_value":"open"}}
+{"id":"int-0c9725a7","kind":"field_change","created_at":"2026-05-26T13:35:03.467644Z","actor":"Curt LeCaptain","issue_id":"beads_mobilemusic-yty","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
+{"id":"int-d85b159b","kind":"field_change","created_at":"2026-05-26T13:38:05.923873Z","actor":"Curt LeCaptain","issue_id":"beads_mobilemusic-yty","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}

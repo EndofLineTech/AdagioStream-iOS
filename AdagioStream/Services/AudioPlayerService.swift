@@ -599,12 +599,26 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // without options poisons VLCKit's shared VLCLibrary instance,
         // causing all subsequent players to lose their caching settings.
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
+        let otherPlayingBeforeStop = AVAudioSession.sharedInstance().isOtherAudioPlaying
+        log.log("play() entry: otherAudio=\(otherPlayingBeforeStop), hadActiveMedia=\(hadActiveMedia)", category: .audioSession)
         if hadActiveMedia {
             log.log("Stopping old VLCMediaPlayer to release connection", category: .player)
             timed("play(): mediaPlayer.stop()") { mediaPlayer.stop() }
             timed("play(): mediaPlayer.media=nil") { mediaPlayer.media = nil }
             lastTeardownTime = Date()
+            let otherPlayingAfterStop = AVAudioSession.sharedInstance().isOtherAudioPlaying
+            log.log("play() post-stop: otherAudio=\(otherPlayingAfterStop)", category: .audioSession)
         }
+
+        // Assert session ownership BEFORE the debounce timer.  Previously
+        // this dance ran inside startStream(), so a channel change with
+        // needsDelay=true left a ~1.5s window between mediaPlayer.stop()
+        // (audio goes silent) and setActive(false)+setActive(true) (formal
+        // takeover).  During that gap iOS would auto-resume the previously
+        // interrupted app (Apple Music), which then got kicked off again
+        // when the deferred setActive(false) fired — producing the
+        // "briefly plays then stops" symptom on every channel change.
+        assertSessionOwnership(context: "play(): pre-debounce takeover")
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
@@ -654,6 +668,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 self.log.log("Channel changed during debounce, aborting play for \(channel.name)", category: .player)
                 return
             }
+            let otherNow = AVAudioSession.sharedInstance().isOtherAudioPlaying
+            self.log.log("startStream entry: otherAudio=\(otherNow)", category: .audioSession)
             self.startStream(for: channel)
         }
         pendingPlayWorkItem = workItem
@@ -663,6 +679,30 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
         } else {
             workItem.perform()
+        }
+    }
+
+    /// Deactivate→reactivate the session so iOS formally hands audio focus
+    /// to Adagio.  A bare setActive(true) is a no-op when the session is
+    /// already active, which leaves remote-command registration with
+    /// whichever app held focus previously — steering-wheel next/prev then
+    /// routes there instead of us.  Only runs the deactivate step when
+    /// another app currently holds focus; otherwise this is a cheap no-op.
+    @discardableResult
+    private func assertSessionOwnership(context: String) -> Bool {
+        let session = AVAudioSession.sharedInstance()
+        let otherPlaying = session.isOtherAudioPlaying
+        do {
+            if otherPlaying {
+                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                log.log("\(context): session deactivated to take over from other app", category: .audioSession)
+            }
+            try session.setActive(true)
+            log.log("\(context): session active (otherWasPlaying=\(otherPlaying))", category: .audioSession)
+            return otherPlaying
+        } catch {
+            log.log("\(context): session takeover FAILED: \(error.localizedDescription)", category: .audioSession)
+            return false
         }
     }
 
@@ -695,25 +735,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             interruptionFallbackWorkItem?.cancel()
             interruptionFallbackWorkItem = nil
         }
-        let session = AVAudioSession.sharedInstance()
-        let otherPlaying = session.isOtherAudioPlaying
-        do {
-            if otherPlaying {
-                // Another app (e.g. Apple Music) is actively playing.
-                // Cycle deactivate→activate so the system formally
-                // interrupts it and recognises Adagio as the "now playing"
-                // app.  A bare setActive(true) is a no-op when the session
-                // is already active from init, which leaves the previous
-                // app's remote-command registration in place — steering-
-                // wheel next/prev then routes to Apple Music instead of us.
-                try session.setActive(false, options: .notifyOthersOnDeactivation)
-                log.log("Audio session deactivated to take over from other app", category: .audioSession)
-            }
-            try session.setActive(true)
-            log.log("Audio session active (otherWasPlaying=\(otherPlaying))", category: .audioSession)
-        } catch {
-            log.log("Session activate before play FAILED: \(error.localizedDescription)", category: .audioSession)
-        }
+        // Belt-and-braces: play() already asserted ownership before the
+        // debounce timer.  This handles the retry paths that call
+        // startStream() directly (reconnect / channel-change retry).
+        // When play() already took over, isOtherAudioPlaying is false here
+        // and this becomes a cheap setActive(true) no-op.
+        let otherPlaying = assertSessionOwnership(context: "startStream")
 
         if otherPlaying {
             // Force now-playing info re-assertion after session takeover so
