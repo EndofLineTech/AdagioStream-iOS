@@ -4,16 +4,16 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Bridges to libvlc's PCM-callback audio output (the "amem" module).  When
-/// callbacks are registered on a VLCMediaPlayer's underlying libvlc handle,
-/// VLC switches away from the iOS audiounit output module.  audiounit_ios is
-/// what owns the AVAudioSession and calls
-/// setActive(false, .notifyOthersOnDeactivation) on mediaPlayer.stop() —
-/// the root cause of Apple Music auto-resuming during channel changes.
-/// Once amem is engaged, AdagioStream owns AVAudioSession exclusively.
+/// Bridges to libvlc's PCM-callback audio output (the "amem" module) and
+/// routes the decoded samples through a lock-free single-producer
+/// single-consumer ring buffer for an AVAudioEngine-based Swift pipeline.
 ///
-/// Phase 1 spike: counter-only callbacks (no PCM routing).  The goal is to
-/// confirm the switch to amem actually neutralises the session manipulation.
+/// Engaging amem switches VLC away from the iOS audiounit_ios output
+/// module, which is the module that owns AVAudioSession and calls
+/// `setActive(false, .notifyOthersOnDeactivation)` on mediaPlayer.stop()
+/// — the root cause of Apple Music auto-resuming during channel changes.
+/// With this bridge live, AdagioStream owns the audio session exclusively
+/// and VLC never touches it.
 @interface VLCAudioCallbackBridge : NSObject
 
 /// Total play callbacks fired across all players since bridge load.
@@ -22,11 +22,32 @@ NS_ASSUME_NONNULL_BEGIN
 /// Total format-setup callbacks fired since bridge load.
 @property (class, readonly) NSInteger formatCallbackCount;
 
-/// Register no-op PCM callbacks on `player`.  Must be called before
-/// `[player play]`; libvlc binds the audio output module at playback start.
-/// Returns YES if the underlying libvlc handle was accessible and
-/// callbacks were registered.
-+ (BOOL)attachCountingCallbacksToPlayer:(VLCMediaPlayer *)player;
+/// Frames currently buffered (ready to be pulled by the render block).
+@property (class, readonly) NSInteger bufferedFrames;
+
+/// Frames dropped because the ring buffer was full when VLC tried to
+/// push samples.  Steady-state should be 0; non-zero indicates the
+/// AVAudioEngine isn't draining fast enough.
+@property (class, readonly) NSInteger droppedFrameCount;
+
+/// Register PCM callbacks on `player` and pin its decoder output to
+/// FL32 (float32 native endian, interleaved) at the given rate/channels.
+/// Must be called before `[player play]`.  Returns YES if the underlying
+/// libvlc handle was reachable and callbacks were registered.
++ (BOOL)attachAudioCallbacksToPlayer:(VLCMediaPlayer *)player
+                          sampleRate:(uint32_t)sampleRate
+                            channels:(uint32_t)channels;
+
+/// Pull up to `maxFrames` stereo interleaved float32 frames from the
+/// ring buffer into `dest`.  Returns the number of frames actually
+/// written.  REAL-TIME SAFE — no allocations, no locks.  Intended for
+/// invocation from an AVAudioSourceNode render block.
++ (NSInteger)pullFramesInto:(float *)dest maxFrames:(NSInteger)maxFrames;
+
+/// Drop everything currently buffered.  Call between streams (after
+/// mediaPlayer.stop, before the next mediaPlayer.play) so the tail of
+/// the previous channel doesn't leak into the new one.
++ (void)flushBuffer;
 
 @end
 

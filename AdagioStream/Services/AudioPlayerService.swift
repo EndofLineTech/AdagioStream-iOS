@@ -204,6 +204,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("Audio session config FAILED: \(error.localizedDescription)", category: .audioSession)
             self.error = "Failed to configure audio session: \(error.localizedDescription)"
         }
+        // Note: the AVAudioEngine (AudioOutput.shared) is started
+        // lazily inside startStream(), not here.  Starting it during
+        // AudioPlayerService.init causes the unit-test process to
+        // deadlock on teardown because the test environment has no
+        // valid audio session for the engine to associate with.
 
         NotificationCenter.default.addObserver(
             self,
@@ -605,9 +610,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("Stopping old VLCMediaPlayer to release connection", category: .player)
             timed("play(): mediaPlayer.stop()") { mediaPlayer.stop() }
             timed("play(): mediaPlayer.media=nil") { mediaPlayer.media = nil }
+            // Drop whatever's still queued from the old stream so the
+            // tail of channel A doesn't leak into channel B's first
+            // moments through our ring buffer.  The AVAudioSourceNode
+            // render block will see an empty buffer and emit silence
+            // until the new stream's first play_cb arrives.
+            VLCAudioCallbackBridge.flushBuffer()
             lastTeardownTime = Date()
             let otherPlayingAfterStop = AVAudioSession.sharedInstance().isOtherAudioPlaying
-            log.log("play() post-stop: otherAudio=\(otherPlayingAfterStop)", category: .audioSession)
+            log.log("play() post-stop: otherAudio=\(otherPlayingAfterStop), droppedFrames=\(VLCAudioCallbackBridge.droppedFrameCount)", category: .audioSession)
         }
 
         // Assert session ownership BEFORE the debounce timer.  Previously
@@ -800,17 +811,23 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         mediaPlayer.media = media
         mediaPlayer.audio?.volume = 100
 
-        // Phase 1 spike: register PCM callbacks to switch VLC's audio output
-        // from audiounit_ios (which owns AVAudioSession and calls
-        // setActive(false, .notifyOthersOnDeactivation) on stop, allowing
-        // Apple Music to auto-resume during channel changes) to the in-
-        // memory "amem" module.  Counter-only callbacks here — no PCM
-        // routing yet.  Audio will be silent.  Validation criterion: no
-        // setActive(false) shows up in the log on mediaPlayer.stop().
+        // Lazy-start the AVAudioEngine on the first real playback
+        // (idempotent — subsequent streams find it already running).
+        AudioOutput.shared.start()
+
+        // Route VLC's decoded PCM through our amem ring buffer →
+        // AVAudioEngine pipeline instead of letting VLC's audiounit_ios
+        // module own the audio output.  Phase 1 proved this prevents
+        // the setActive(false, .notifyOthersOnDeactivation) that
+        // resurrects Apple Music on channel change; phase 2 connects
+        // the samples to AVAudioSourceNode so audio is actually heard.
         let preAttachPlay = VLCAudioCallbackBridge.playCallbackCount
-        let preAttachFormat = VLCAudioCallbackBridge.formatCallbackCount
-        let attached = VLCAudioCallbackBridge.attachCountingCallbacks(to: mediaPlayer)
-        log.log("amem bridge: attached=\(attached), priorPlayCount=\(preAttachPlay), priorFormatCount=\(preAttachFormat)", category: .audioSession)
+        let attached = VLCAudioCallbackBridge.attachAudioCallbacks(
+            to: mediaPlayer,
+            sampleRate: AudioOutput.sampleRate,
+            channels: AudioOutput.channelCount
+        )
+        log.log("amem bridge: attached=\(attached), rate=\(AudioOutput.sampleRate), channels=\(AudioOutput.channelCount), priorPlayCount=\(preAttachPlay)", category: .audioSession)
 
         mediaPlayer.play()
         isActiveSession = true
@@ -1318,12 +1335,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             details += ", media=NIL"
         }
 
-        // Phase 1 spike instrumentation: surface amem callback counters
-        // alongside each state transition so the log shows whether VLC
-        // is routing audio through our PCM callbacks (amem) instead of
-        // audiounit_ios.  formatCount > 0 means setup_cb fired.
-        // playCount climbing means play_cb is being invoked with PCM.
-        details += ", amem(play=\(VLCAudioCallbackBridge.playCallbackCount),fmt=\(VLCAudioCallbackBridge.formatCallbackCount))"
+        // amem pipeline diagnostics: playCount climbing = VLC is
+        // feeding the ring buffer; bufferedFrames > 0 = audio is
+        // ready for the AVAudioSourceNode render block; dropped > 0
+        // = engine isn't draining fast enough (shouldn't happen in
+        // steady state).
+        details += ", amem(play=\(VLCAudioCallbackBridge.playCallbackCount),fmt=\(VLCAudioCallbackBridge.formatCallbackCount),buf=\(VLCAudioCallbackBridge.bufferedFrames),dropped=\(VLCAudioCallbackBridge.droppedFrameCount))"
 
         log.log(details, category: .vlcState)
     }

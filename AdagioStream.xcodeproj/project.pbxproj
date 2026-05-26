@@ -88,6 +88,7 @@
 		DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
 		E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
 		E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */; };
+		E0581AB56C0A01DA4AA36FE5 /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAEC5D3D42331FF6DBC36DA /* AudioOutput.swift */; };
 		E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */; };
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
@@ -156,6 +157,7 @@
 		2591A7C2156E83DA1F2F30CE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLoggerTests.swift; sourceTree = "<group>"; };
 		29E03DAEBBD9485209B049DB /* CarPlayTemplateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateManager.swift; sourceTree = "<group>"; };
+		2AAEC5D3D42331FF6DBC36DA /* AudioOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOutput.swift; sourceTree = "<group>"; };
 		2E0773D0B4CD7353ACEADE32 /* AdagioStream.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AdagioStream.entitlements; sourceTree = "<group>"; };
 		2EF95CAE631C108797282E82 /* CustomPlaylist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylist.swift; sourceTree = "<group>"; };
 		2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtensionsTests.swift; sourceTree = "<group>"; };
@@ -300,6 +302,7 @@
 		277631CB83D7B81EF6365C90 /* Audio */ = {
 			isa = PBXGroup;
 			children = (
+				2AAEC5D3D42331FF6DBC36DA /* AudioOutput.swift */,
 				EBA9C37814DF850D9943C848 /* VLCAudioCallbackBridge.h */,
 				A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */,
 			);
@@ -715,6 +718,7 @@
 				9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */,
 				107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */,
 				40DCCC69DD226BEBBEBADDFE /* AppearanceSettingsView.swift in Sources */,
+				E0581AB56C0A01DA4AA36FE5 /* AudioOutput.swift in Sources */,
 				E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */,
 				9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */,
 				33C3578193ABE2495606970B /* CarPlayTemplateManager.swift in Sources */,
@@ -895,7 +899,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 149;
+				CURRENT_PROJECT_VERSION = 150;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -925,7 +929,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 149;
+				CURRENT_PROJECT_VERSION = 150;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -953,7 +957,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 149;
+				CURRENT_PROJECT_VERSION = 150;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -975,7 +979,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 149;
+				CURRENT_PROJECT_VERSION = 150;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
