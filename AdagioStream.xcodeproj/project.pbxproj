@@ -73,6 +73,7 @@
 		6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */; };
 		6E1002B73E53AD77F5B7ED25 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
 		701227A8D261E3BFC31A11B0 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
+		73708E2321CC7E5207592574 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C7642DA09DCBAEB0F4EC649 /* Assets.xcassets */; };
 		7413AC5A1A2839861CBADFF5 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E220456DACC5137EA0F00B /* Constants.swift */; };
 		743B9ECFB3057C393642ADE5 /* ProviderManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49B5499FEB06793F277174C /* ProviderManagementView.swift */; };
 		75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD913E9A26B3322688E877D /* ShareSheet.swift */; };
@@ -244,6 +245,7 @@
 		765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogger.swift; sourceTree = "<group>"; };
 		79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManager.swift; sourceTree = "<group>"; };
 		79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupManagementView.swift; sourceTree = "<group>"; };
+		7C7642DA09DCBAEB0F4EC649 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7DD913E9A26B3322688E877D /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsManager.swift; sourceTree = "<group>"; };
 		820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistManager.swift; sourceTree = "<group>"; };
@@ -686,6 +688,7 @@
 			children = (
 				AA8734D305C00DEE5A785341 /* AdagioStream-tvOS.entitlements */,
 				27924384C8E4F5B4A4E37EA3 /* AdagioStreamTVApp.swift */,
+				7C7642DA09DCBAEB0F4EC649 /* Assets.xcassets */,
 				0F67E823749582BB0256C664 /* Info.plist */,
 				D99265112261A1F2B54A01EB /* Views */,
 			);
@@ -822,6 +825,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				73708E2321CC7E5207592574 /* Assets.xcassets in Resources */,
 				B8E21F2AA577F31548774C90 /* LGPL-2.1.txt in Resources */,
 				903AB7D66FED2024F9516131 /* PrivacyInfo.xcprivacy in Resources */,
 			);
