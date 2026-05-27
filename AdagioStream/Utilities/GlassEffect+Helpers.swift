@@ -5,7 +5,7 @@ import SwiftUI
 /// Replaces `.background(.ultraThinMaterial)` with `.glassEffect(.regular)` on iOS 26+.
 struct GlassBackgroundModifier: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, tvOS 26, *) {
             content.glassEffect(.regular)
         } else {
             content.background(.ultraThinMaterial)
@@ -18,7 +18,7 @@ struct GlassBackgroundModifier: ViewModifier {
 /// Uses `.glass` button style on iOS 26+, subtle scale fallback on older.
 struct InteractiveGlassButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, tvOS 26, *) {
             Button(configuration)
                 .buttonStyle(.glass)
         } else {
@@ -33,7 +33,7 @@ struct InteractiveGlassButtonStyle: PrimitiveButtonStyle {
 /// Wraps content in `GlassEffectContainer` on iOS 26+ for grouped glass effects.
 struct GlassContainerModifier: ViewModifier {
     func body(content: Content) -> some View {
-        if #available(iOS 26, *) {
+        if #available(iOS 26, tvOS 26, *) {
             GlassEffectContainer {
                 content
             }

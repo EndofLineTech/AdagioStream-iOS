@@ -1,14 +1,12 @@
-// AudioPlayerService is iOS-only per Phase 0 G2. The whole file body —
-// including the imports — is gated with `#if os(iOS)` so the tvOS
-// build sees no symbol. tvOS gets its own audio service in Phase 1.
-
-#if os(iOS)
 import AVFoundation
 import Combine
 import MediaPlayer
 import Network
 import SwiftUI
 @preconcurrency import VLCKitSPM
+#if os(iOS)
+import UIKit
+#endif
 
 @MainActor
 public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlayerDelegate, VLCMediaDelegate {
@@ -73,7 +71,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var lastDataFlowTime: Date?
     /// How long data flow can be absent before triggering auto-reconnect.
     private let dataFlowStaleTimeout: TimeInterval = 8
+    #if os(iOS)
     private var bufferingBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    #endif
     private var lastNowPlayingTitle: String?
     private var lastNowPlayingArtist: String?
     private var lastNowPlayingIsLive: Bool?
@@ -726,11 +726,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     /// End any active background task requested for buffering timeout.
+    /// No-op on tvOS — the iOS background-task model doesn't apply there.
     private func endBufferingBackgroundTask() {
+        #if os(iOS)
         if bufferingBackgroundTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(bufferingBackgroundTaskID)
             bufferingBackgroundTaskID = .invalid
         }
+        #endif
     }
 
     private func startStream(for channel: Channel) {
@@ -775,9 +778,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // can fire even when iOS would otherwise suspend the process
         // (e.g., CarPlay with phone locked and VLC not yet producing audio).
         endBufferingBackgroundTask()
+        #if os(iOS)
         bufferingBackgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "StreamBuffering") { [weak self] in
             self?.endBufferingBackgroundTask()
         }
+        #endif
 
         // Always create a fresh VLC player right before use.  During rapid
         // next/prev switching the player pre-created in play() may carry
@@ -1899,5 +1904,3 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         commandCenter.changePlaybackPositionCommand.isEnabled = false
     }
 }
-
-#endif // os(iOS)

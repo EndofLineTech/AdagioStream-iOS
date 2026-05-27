@@ -1,8 +1,3 @@
-// SettingsViewModel depends on AudioPlayerService which is iOS-only per
-// Phase 0 G2. Gate the whole file `#if os(iOS)` so the tvOS build sees
-// no symbol — tvOS Phase 1 will provide its own settings VM.
-
-#if os(iOS)
 import Foundation
 import SwiftUI
 import UIKit
@@ -193,5 +188,3 @@ public final class SettingsViewModel: ObservableObject {
         }
     }
 }
-
-#endif // os(iOS)

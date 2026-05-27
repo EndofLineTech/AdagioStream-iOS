@@ -1,8 +1,3 @@
-// PlayerViewModel depends on AudioPlayerService which is iOS-only per
-// Phase 0 G2. Gate the whole file `#if os(iOS)` so the tvOS build sees
-// no symbol — tvOS Phase 1 will provide its own player VM as needed.
-
-#if os(iOS)
 import Foundation
 import SwiftUI
 
@@ -29,5 +24,3 @@ public final class PlayerViewModel: ObservableObject {
         currentEPG.first(where: \.isUpcoming)
     }
 }
-
-#endif // os(iOS)

@@ -1,3 +1,6 @@
+// UIActivityViewController is iOS-only — gate so the file is symbol-absent
+// on tvOS when sources are shared. tvOS will not surface share affordances.
+#if os(iOS)
 import SwiftUI
 import UIKit
 
@@ -11,3 +14,4 @@ struct ShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
+#endif
