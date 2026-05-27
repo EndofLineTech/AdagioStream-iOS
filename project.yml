@@ -172,6 +172,8 @@ targets:
         MARKETING_VERSION: "1.1"
         CURRENT_PROJECT_VERSION: "155"
         TARGETED_DEVICE_FAMILY: "3"
+        SDKROOT: appletvos
+        SUPPORTED_PLATFORMS: "appletvos appletvsimulator"
         SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
