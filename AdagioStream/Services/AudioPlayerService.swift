@@ -375,18 +375,18 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     // need time to switch back from phone/Siri to media output).
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         let session = AVAudioSession.sharedInstance()
+                        // Cycle through deactivate to clear the stale route
+                        // that the interruption left behind, then go through
+                        // assertSessionOwnership for the activate side — that
+                        // helper also restarts AVAudioEngine, which iOS will
+                        // have stopped when the session went inactive.
                         do {
                             try session.setActive(false, options: .notifyOthersOnDeactivation)
-                            self.log.log("Session deactivated OK (short interruption)", category: .audioSession)
+                            self.log.log("Short interruption: session deactivated to clear stale route", category: .audioSession)
                         } catch {
-                            self.log.log("Session deactivate FAILED (short interruption): \(error.localizedDescription)", category: .audioSession)
+                            self.log.log("Short interruption: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
                         }
-                        do {
-                            try session.setActive(true)
-                            self.log.log("Session reactivated OK (short interruption)", category: .audioSession)
-                        } catch {
-                            self.log.log("Session reactivate FAILED (short interruption): \(error.localizedDescription)", category: .audioSession)
-                        }
+                        self.assertSessionOwnership(context: "short interruption")
 
                         // Check if VLC survived the interruption
                         let vlcAlive = self.isActiveSession && (self.mediaPlayer.isPlaying || self.mediaPlayer.state == .buffering || self.mediaPlayer.state == .opening)
@@ -536,21 +536,18 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
         log.log("reactivateAndPlay: channel=\"\(channel.name)\", buffer=\(bufferFileURL != nil), outputs=[\(outputs)]", category: .audioSession)
 
-        // Deactivate first to fully release the old audio route, then
-        // reactivate — this resets stale hardware state that can prevent
-        // VLC from reconnecting after CarPlay interruptions
+        // Unconditionally cycle deactivate→activate to release the stale
+        // audio route (CarPlay/Siri/phone-call interruptions leave VLC
+        // unable to reconnect otherwise) AND restart the AVAudioEngine
+        // that the deactivation will have stopped.  Routing through the
+        // helper keeps the engine-restart logic in one place.
         do {
             try session.setActive(false, options: .notifyOthersOnDeactivation)
-            log.log("Session deactivated OK", category: .audioSession)
+            log.log("reactivateAndPlay: session deactivated to clear stale route", category: .audioSession)
         } catch {
-            log.log("Session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
+            log.log("reactivateAndPlay: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
         }
-        do {
-            try session.setActive(true)
-            log.log("Session reactivated OK", category: .audioSession)
-        } catch {
-            log.log("Session reactivate FAILED: \(error.localizedDescription)", category: .audioSession)
-        }
+        assertSessionOwnership(context: "reactivateAndPlay")
 
         if let bufferFileURL {
             playBufferedFile(bufferFileURL, for: channel)
@@ -621,15 +618,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("play() post-stop: otherAudio=\(otherPlayingAfterStop), droppedFrames=\(VLCAudioCallbackBridge.droppedFrameCount)", category: .audioSession)
         }
 
-        // Assert session ownership BEFORE the debounce timer.  Previously
-        // this dance ran inside startStream(), so a channel change with
-        // needsDelay=true left a ~1.5s window between mediaPlayer.stop()
-        // (audio goes silent) and setActive(false)+setActive(true) (formal
-        // takeover).  During that gap iOS would auto-resume the previously
-        // interrupted app (Apple Music), which then got kicked off again
-        // when the deferred setActive(false) fired — producing the
-        // "briefly plays then stops" symptom on every channel change.
-        assertSessionOwnership(context: "play(): pre-debounce takeover")
+        // Take audio focus from any other app currently producing audio
+        // (Apple Music, podcast app, etc.).  No-op when otherAudio is
+        // already false (typical channel change), so this is essentially
+        // a cold-start hook.  The amem pipeline keeps VLC from touching
+        // the session at all, so we only need the explicit takeover at
+        // the moment of first-play; channel-to-channel transitions never
+        // release ownership in the first place.
+        assertSessionOwnership(context: "play(): takeover")
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
@@ -699,6 +695,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// whichever app held focus previously — steering-wheel next/prev then
     /// routes there instead of us.  Only runs the deactivate step when
     /// another app currently holds focus; otherwise this is a cheap no-op.
+    ///
+    /// CRITICAL: setActive(false) on a session that AVAudioEngine is bound
+    /// to causes the engine to stop, and setActive(true) does NOT
+    /// auto-restart it.  This helper restarts AudioOutput at the end so
+    /// every caller gets a working engine on return.  Same applies to a
+    /// bare setActive(true) — an earlier interruption may have stopped
+    /// the engine without our knowledge, so the resilient restart is
+    /// always worth running.
     @discardableResult
     private func assertSessionOwnership(context: String) -> Bool {
         let session = AVAudioSession.sharedInstance()
@@ -710,9 +714,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             }
             try session.setActive(true)
             log.log("\(context): session active (otherWasPlaying=\(otherPlaying))", category: .audioSession)
+            AudioOutput.shared.start()
             return otherPlaying
         } catch {
             log.log("\(context): session takeover FAILED: \(error.localizedDescription)", category: .audioSession)
+            // Try to bring the engine back regardless — the session may
+            // still be usable even if the cycle errored.
+            AudioOutput.shared.start()
             return false
         }
     }
@@ -814,6 +822,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Lazy-start the AVAudioEngine on the first real playback
         // (idempotent — subsequent streams find it already running).
         AudioOutput.shared.start()
+        // Render-block counters are cumulative-since-launch by default;
+        // resetting at stream start makes per-stream underrun rate
+        // observable (otherwise the buffering window's natural empty-
+        // ring underruns dominate the signal).
+        VLCAudioCallbackBridge.resetRenderCounters()
 
         // Route VLC's decoded PCM through our amem ring buffer →
         // AVAudioEngine pipeline instead of letting VLC's audiounit_ios

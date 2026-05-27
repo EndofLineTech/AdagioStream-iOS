@@ -65,6 +65,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// Called from the render block on every invocation.  REAL-TIME safe.
 + (void)reportRenderCall;
 
+/// Zero the render-block counters (renderCallCount, renderUnderrunCount).
+/// Call when a new stream starts so the per-stream underrun rate is
+/// visible — without this, counters accumulate across long buffering
+/// gaps where every render call is naturally an underrun, swamping
+/// the steady-state signal.
++ (void)resetRenderCounters;
+
 /// Register PCM callbacks on `player` and pin its decoder output to
 /// FL32 (float32 native endian, interleaved) at the given rate/channels.
 /// Must be called before `[player play]`.  Returns YES if the underlying

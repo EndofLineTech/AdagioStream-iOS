@@ -214,6 +214,11 @@ static void adg_audio_drain_cb(void *data) {
     atomic_fetch_add_explicit(&adg_render_calls, 1, memory_order_relaxed);
 }
 
++ (void)resetRenderCounters {
+    atomic_store_explicit(&adg_render_calls, 0, memory_order_relaxed);
+    atomic_store_explicit(&adg_render_underruns, 0, memory_order_relaxed);
+}
+
 + (BOOL)attachAudioCallbacksToPlayer:(VLCMediaPlayer *)player
                           sampleRate:(uint32_t)sampleRate
                             channels:(uint32_t)channels {
