@@ -86,7 +86,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "154"
+        CURRENT_PROJECT_VERSION: "155"
         SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
@@ -121,7 +121,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "154"
+        CURRENT_PROJECT_VERSION: "155"
         MARKETING_VERSION: "1.1"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services
@@ -139,6 +139,56 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.adagiostream.app
+
+  AdagioStream-tvOS:
+    type: application
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AdagioStream
+        excludes:
+          - AdagioStreamApp.swift
+          - CarPlay
+          - Views
+          - Assets.xcassets
+          - LaunchScreen.storyboard
+          - Info.plist
+          - AdagioStream.entitlements
+      - AdagioStream-tvOS
+    dependencies:
+      - package: VLCKitSPM
+    info:
+      path: AdagioStream-tvOS/Info.plist
+      properties:
+        ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes: [audio]
+        CFBundleDisplayName: Adagio Stream
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsForMedia: true
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
+        MARKETING_VERSION: "1.1"
+        CURRENT_PROJECT_VERSION: "155"
+        TARGETED_DEVICE_FAMILY: "3"
+        SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          # TVVLCKit ships the libvlc C headers under vlc/ inside its
+          # Headers directory, mirroring the MobileVLCKit layout.  See
+          # VLCAudioCallbackBridge.m for the TARGET_OS_TV switch.
+          - $(BUILT_PRODUCTS_DIR)/TVVLCKit.framework/Headers
+        DEVELOPMENT_TEAM: EWT2X7Q9ZJ
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+    entitlements:
+      path: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.adagiostream.app
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.adagiostream.app
 
   AdagioStreamTests:
     type: bundle.unit-test
@@ -163,6 +213,19 @@ schemes:
       config: Debug
       targets:
         - AdagioStreamTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  AdagioStream-tvOS:
+    build:
+      targets:
+        AdagioStream-tvOS: all
+    run:
+      config: Debug
     profile:
       config: Release
     analyze:

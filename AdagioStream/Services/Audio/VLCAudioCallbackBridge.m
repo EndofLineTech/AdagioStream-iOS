@@ -5,14 +5,19 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wnon-modular-include-in-framework-module"
 #pragma clang diagnostic ignored "-Wquoted-include-in-framework-header"
-#import <MobileVLCKit/MobileVLCKit.h>
+#if TARGET_OS_TV
+#import <TVVLCKit/TVVLCKit.h>
 // vlc.h is the umbrella; it defines LIBVLC_API and pulls in the
 // libvlc_media_t / libvlc_instance_t typedefs that libvlc_media_player.h
 // depends on.  Importing the real header (instead of hand-typed extern
 // declarations) means the compiler validates our call sites against the
 // same signatures the framework was built against — any future libvlc
 // API drift fails loudly at build time instead of silently at runtime.
+#import <TVVLCKit/vlc/vlc.h>
+#else
+#import <MobileVLCKit/MobileVLCKit.h>
 #import <MobileVLCKit/vlc/vlc.h>
+#endif
 #pragma clang diagnostic pop
 
 // VLCMediaPlayer+Internal.h (PrivateHeaders) exposes
