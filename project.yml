@@ -185,6 +185,12 @@ targets:
         GENERATE_INFOPLIST_FILE: false
         ASSETCATALOG_COMPILER_APPICON_NAME: App Icon & Top Shelf Image
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+        # TVVLCKit framework headers emit -Wdocumentation and
+        # -Wquoted-include-in-framework-header noise that the iOS-equivalent
+        # MobileVLCKit modulemap doesn't surface.  Override only on this
+        # target so iOS stays strict on our own code.
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
     entitlements:
       path: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
       properties:
