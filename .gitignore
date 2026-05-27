@@ -3,3 +3,13 @@ AdagioStream.xcodeproj/xcuserdata/
 DerivedData/
 .build/
 build/
+
+# macOS
+.DS_Store
+
+# beads local state — only .beads/issues.jsonl is portable
+.beads/.beads-credential-key
+.beads/backup/
+.beads/dolt-server.*
+.beads/embeddeddolt/
+.beads/export-state.json
