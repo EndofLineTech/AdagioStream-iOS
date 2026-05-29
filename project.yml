@@ -86,7 +86,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "156"
+        CURRENT_PROJECT_VERSION: "157"
         SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
@@ -121,7 +121,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "156"
+        CURRENT_PROJECT_VERSION: "157"
         MARKETING_VERSION: "1.1"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services
@@ -168,9 +168,9 @@ targets:
     settings:
       base:
         CODE_SIGN_ENTITLEMENTS: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
-        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.tvos
         MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "156"
+        CURRENT_PROJECT_VERSION: "157"
         TARGETED_DEVICE_FAMILY: "3"
         SDKROOT: appletvos
         SUPPORTED_PLATFORMS: "appletvos appletvsimulator"
@@ -194,10 +194,8 @@ targets:
     entitlements:
       path: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
       properties:
-        com.apple.security.application-groups:
-          - group.com.adagiostream.app
         keychain-access-groups:
-          - $(AppIdentifierPrefix)com.adagiostream.app
+          - $(AppIdentifierPrefix)com.adagiostream.app.tvos
 
   AdagioStreamTests:
     type: bundle.unit-test
