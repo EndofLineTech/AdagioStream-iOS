@@ -20,6 +20,7 @@ class CarPlayTemplateManager {
     private var feedTracksCancellable: AnyCancellable?
     private var espnCancellable: AnyCancellable?
     private var epgCancellable: AnyCancellable?
+    private var groupSortCancellables = Set<AnyCancellable>()
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
@@ -73,6 +74,15 @@ class CarPlayTemplateManager {
                 self.updateNowPlayingButtons()
                 self.attemptStartupStream()
             }
+
+        providerManager.$groupSortOrder
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+            .store(in: &groupSortCancellables)
 
         channelCancellable = audioPlayer.$currentChannel
             .receive(on: DispatchQueue.main)
@@ -290,8 +300,14 @@ class CarPlayTemplateManager {
             favoritesItem = nil
         }
 
-        let groups = Dictionary(grouping: providerManager.visibleChannels, by: \.group)
+        let visibleChannels = providerManager.visibleChannels
+        let groups = Dictionary(grouping: visibleChannels, by: \.group)
         let favOrder = providerManager.favoriteGroupOrder
+        let grpSort = providerManager.groupSortOrder
+        var groupFirstIndex: [String: Int] = [:]
+        for (index, channel) in visibleChannels.enumerated() where groupFirstIndex[channel.group] == nil {
+            groupFirstIndex[channel.group] = index
+        }
         let sortedGroupKeys = groups.keys.sorted { a, b in
             let aFav = favOrder.firstIndex(of: a)
             let bFav = favOrder.firstIndex(of: b)
@@ -299,7 +315,15 @@ class CarPlayTemplateManager {
             case let (.some(ai), .some(bi)): return ai < bi
             case (.some, .none): return true
             case (.none, .some): return false
-            case (.none, .none): return a < b
+            case (.none, .none):
+                switch grpSort {
+                case .providerOrder:
+                    return (groupFirstIndex[a] ?? Int.max) < (groupFirstIndex[b] ?? Int.max)
+                case .natural:
+                    return a.localizedStandardCompare(b) == .orderedAscending
+                case .alphabetical:
+                    return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+                }
             }
         }
         for group in sortedGroupKeys {
