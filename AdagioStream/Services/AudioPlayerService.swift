@@ -563,7 +563,19 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // During CarPlay reconnect, multiple PLAY commands and channel
         // selections can fire within seconds — each would needlessly
         // destroy and recreate the VLC player for no benefit.
-        if channel.id == currentChannel?.id, isActiveSession {
+        //
+        // But only skip when playback is GENUINELY alive.  After a long
+        // interruption (Siri / read-aloud), the session can be left wedged:
+        // isActiveSession stays true while VLC has stopped or the render
+        // engine was stopped by a route change.  In that state a bare PLAY
+        // or re-selecting the same station must rebuild the stream rather
+        // than be swallowed here — otherwise the only recovery is switching
+        // to a different channel.
+        let vlcLooksAlive = mediaPlayer.isPlaying
+            || mediaPlayer.state == .buffering
+            || mediaPlayer.state == .opening
+        if channel.id == currentChannel?.id, isActiveSession,
+           vlcLooksAlive, AudioOutput.shared.isRunning {
             log.log("play() skipped: \"\(channel.name)\" already active", category: .player)
             return
         }

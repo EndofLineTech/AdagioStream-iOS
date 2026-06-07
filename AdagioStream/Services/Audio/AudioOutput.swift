@@ -29,7 +29,13 @@ public final class AudioOutput {
 
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
+    private var configChangeObserver: NSObjectProtocol?
     private let log = DebugLogger.shared
+
+    /// Whether the render engine is actually running.  Callers use this to
+    /// distinguish a genuinely-live session from a wedged one (engine stopped
+    /// under us by iOS) without relying on higher-level flags.
+    public var isRunning: Bool { engine.isRunning }
 
     private init() {
         // NON-INTERLEAVED (planar) float32.  iOS's AU buses only accept
@@ -80,6 +86,29 @@ public final class AudioOutput {
 
         engine.attach(node)
         engine.connect(node, to: engine.mainMixerNode, format: format)
+
+        // Follow hardware route/format changes.  AVAudioEngine STOPS itself
+        // when the output format changes — e.g. CarPlay switching from the
+        // Siri/phone voice route (24 kHz mono) back to the media route
+        // (48 kHz stereo) after an interruption.  If we don't restart here,
+        // the engine that was started against the transient voice route stays
+        // dead: VLC keeps filling the ring buffer but nobody drains it, so the
+        // stream is "playing" with no audio.  Restart to rebind to the new route.
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.log.log("AudioOutput: engine configuration changed (route/format) — restarting engine", category: .audioSession)
+            self.start()
+        }
+    }
+
+    deinit {
+        if let configChangeObserver {
+            NotificationCenter.default.removeObserver(configChangeObserver)
+        }
     }
 
     /// Idempotent.  Checks engine.isRunning directly (rather than a
