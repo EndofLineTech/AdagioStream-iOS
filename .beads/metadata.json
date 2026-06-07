@@ -1,7 +1,7 @@
 {
   "database": "dolt",
-  "jsonl_export": "issues.jsonl",
   "backend": "dolt",
   "dolt_mode": "server",
-  "dolt_database": "beads_mobilemusic"
+  "dolt_database": "beads_mobilemusic",
+  "project_id": "1a2a3c3a-6fc9-467d-9f61-f911494743e4"
 }

@@ -13,3 +13,9 @@ build/
 .beads/dolt-server.*
 .beads/embeddeddolt/
 .beads/export-state.json
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
