@@ -32,10 +32,27 @@ public final class AudioOutput {
     private var configChangeObserver: NSObjectProtocol?
     private let log = DebugLogger.shared
 
+    /// Whether the caller currently intends audio to be playing.  The
+    /// AVAudioEngineConfigurationChange observer only resurrects the engine
+    /// while this is true — otherwise a post-stop route change (e.g. CarPlay
+    /// disconnect handing the route back to the phone speaker) would restart
+    /// the engine and leave it running idle, which reads to the user as "the
+    /// session never ended".  Set true by start(), cleared by stop().
+    private var intendedToRun = false
+
+    /// Number of consecutive engine.start() failures since the last success.
+    /// A sustained streak means the engine is wedged (iOS won't let us bind
+    /// the route) — the signature of the unrecoverable CarPlay/Siri wedge.
+    private var consecutiveStartFailures = 0
+
     /// Whether the render engine is actually running.  Callers use this to
     /// distinguish a genuinely-live session from a wedged one (engine stopped
     /// under us by iOS) without relying on higher-level flags.
     public var isRunning: Bool { engine.isRunning }
+
+    /// Consecutive start-failure count, surfaced for the wedge watchdog's
+    /// diagnostic snapshot.
+    public var startFailureStreak: Int { consecutiveStartFailures }
 
     private init() {
         // NON-INTERLEAVED (planar) float32.  iOS's AU buses only accept
@@ -100,8 +117,15 @@ public final class AudioOutput {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
+            // Only resurrect the engine if the app still intends to play.
+            // After a genuine stop (user stop / CarPlay disconnect) the route
+            // change must NOT restart us, or the engine runs idle forever.
+            guard self.intendedToRun else {
+                self.log.log("AudioOutput: configuration changed while idle — not restarting (intendedToRun=false)", category: .audioSession)
+                return
+            }
             self.log.log("AudioOutput: engine configuration changed (route/format) — restarting engine", category: .audioSession)
-            self.start()
+            self.performStart()
         }
     }
 
@@ -117,6 +141,14 @@ public final class AudioOutput {
     /// without us getting a chance to update local state.  Calling
     /// start() after that path correctly resumes audio output.
     public func start() {
+        intendedToRun = true
+        performStart()
+    }
+
+    /// The actual engine-start work, shared by the public start() and the
+    /// configuration-change observer.  Does NOT touch intendedToRun, so the
+    /// observer can restart a wanted engine without changing intent.
+    private func performStart() {
         guard sourceNode != nil else { return }
         if engine.isRunning { return }
         do {
@@ -130,12 +162,24 @@ public final class AudioOutput {
             let mixerIn  = engine.mainMixerNode.inputFormat(forBus: 0)
             let outputFmt = engine.outputNode.outputFormat(forBus: 0)
             log.log("AudioOutput: engine started, source=Float32 planar \(Self.sampleRate)Hz \(Self.channelCount)ch | mixer.in=\(Int(mixerIn.sampleRate))Hz/\(mixerIn.channelCount)ch | mixer.out=\(Int(mixerOut.sampleRate))Hz/\(mixerOut.channelCount)ch | hwOut=\(Int(outputFmt.sampleRate))Hz/\(outputFmt.channelCount)ch", category: .audioSession)
+            if consecutiveStartFailures > 0 {
+                log.log("AudioOutput: engine recovered after \(consecutiveStartFailures) consecutive start failure(s)", category: .audioSession)
+            }
+            consecutiveStartFailures = 0
         } catch {
-            log.log("AudioOutput: engine.start() FAILED: \(error.localizedDescription)", category: .audioSession)
+            consecutiveStartFailures += 1
+            log.log("AudioOutput: engine.start() FAILED (streak=\(consecutiveStartFailures)): \(error.localizedDescription)", category: .audioSession)
+            // A sustained streak while we still intend to play is the wedge
+            // fingerprint — flag it loudly so the next field log makes the
+            // unrecoverable state unambiguous.
+            if consecutiveStartFailures >= 3 {
+                log.log("AudioOutput: WEDGE — engine.start() failed \(consecutiveStartFailures)x in a row while intendedToRun=\(intendedToRun); render pipeline is starved", category: .audioSession)
+            }
         }
     }
 
     public func stop() {
+        intendedToRun = false
         guard engine.isRunning else { return }
         engine.stop()
         log.log("AudioOutput: engine stopped", category: .audioSession)

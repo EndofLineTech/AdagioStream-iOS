@@ -4,6 +4,16 @@ import CarPlay
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Install fatal-event capture as early as possible so a CarPlay-only
+        // cold launch that later crashes/wedges still leaves a marker (bd a14).
+        CrashReporter.install()
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
         configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {

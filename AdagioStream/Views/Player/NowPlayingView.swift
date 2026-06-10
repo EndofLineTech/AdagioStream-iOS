@@ -191,6 +191,13 @@ struct NowPlayingView: View {
                 }
             }
         }
+        // Self-dismiss when playback ends (user stop, or CarPlay disconnect
+        // calling stop()). The presenting MiniPlayerView is removed from the
+        // hierarchy at the same moment, which would otherwise orphan this sheet
+        // and leave the "play interface" up on the phone (bd tpu).
+        .onChange(of: audioPlayer.currentChannel?.id) { _, newID in
+            if newID == nil { dismiss() }
+        }
     }
 
     private var channelPlaceholder: some View {

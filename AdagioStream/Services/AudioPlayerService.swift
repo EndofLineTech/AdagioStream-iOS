@@ -32,6 +32,17 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var sxmCancellable: AnyCancellable?
     private var espnCancellable: AnyCancellable?
     private var stateTimer: Timer?
+
+    // MARK: - Wedge watchdog (bd a14)
+    // Diagnostic-only. Samples the render pipeline every few seconds while we
+    // believe audio is playing. If VLC reports playing but the AVAudioEngine
+    // is dead or its render thread is frozen, the stream is silently wedged —
+    // the unrecoverable CarPlay/Siri state that leaves no crash dump. We log a
+    // full snapshot so the next field capture is unambiguous; no behavior change.
+    private var wedgeWatchdogTimer: Timer?
+    private var lastRenderCallSample = 0
+    private var lastPlayCallbackSample = 0
+    private var wedgeSuspectSince: Date?
     private let fastPollInterval: TimeInterval = 0.5
     private let slowPollInterval: TimeInterval = 3.0
     private let backgroundPollInterval: TimeInterval = 10.0
@@ -190,6 +201,62 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             .sink { [weak self] _ in
                 self?.updateNowPlayingInfo()
             }
+
+        startWedgeWatchdog()
+    }
+
+    // MARK: - Wedge Watchdog
+
+    private func startWedgeWatchdog() {
+        wedgeWatchdogTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkAudioHealth() }
+        }
+        timer.tolerance = 1.0
+        wedgeWatchdogTimer = timer
+    }
+
+    /// Diagnostic-only health probe. Detects the silent wedge: we believe audio
+    /// is playing, but the render pipeline isn't draining (engine dead or render
+    /// thread frozen). Logs a full snapshot after the condition persists across
+    /// two ticks so transient buffering gaps don't trip it.
+    private func checkAudioHealth() {
+        let renderNow = VLCAudioCallbackBridge.renderCallCount
+        let playNow = VLCAudioCallbackBridge.playCallbackCount
+
+        // Only meaningful while we believe a stream is actively playing.
+        guard isActiveSession, let channel = currentChannel,
+              mediaPlayer.isPlaying || mediaPlayer.state == .buffering else {
+            wedgeSuspectSince = nil
+            lastRenderCallSample = renderNow
+            lastPlayCallbackSample = playNow
+            return
+        }
+
+        let engineRunning = AudioOutput.shared.isRunning
+        let rendersAdvancing = renderNow != lastRenderCallSample
+        lastRenderCallSample = renderNow
+        let producing = playNow != lastPlayCallbackSample
+        lastPlayCallbackSample = playNow
+
+        // Healthy: engine up AND its render block is being called.
+        if engineRunning && rendersAdvancing {
+            wedgeSuspectSince = nil
+            return
+        }
+
+        // Suspicious: VLC thinks it's playing but the pipeline is frozen.
+        let since = wedgeSuspectSince ?? Date()
+        wedgeSuspectSince = since
+        let stuckFor = Date().timeIntervalSince(since)
+        guard stuckFor >= 6 else { return }
+
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+            .map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+        log.log("WEDGE SUSPECTED for \"\(channel.name)\" — stuck \(Int(stuckFor))s | engineRunning=\(engineRunning) startFailStreak=\(AudioOutput.shared.startFailureStreak) rendersAdvancing=\(rendersAdvancing) vlcProducing=\(producing) | vlcState=\(vlcStateName(mediaPlayer.state)) isPlaying=\(mediaPlayer.isPlaying) | bufferedFrames=\(VLCAudioCallbackBridge.bufferedFrames) renderUnderruns=\(VLCAudioCallbackBridge.renderUnderrunCount) droppedFrames=\(VLCAudioCallbackBridge.droppedFrameCount) | route=[\(outputs)]", category: .audioSession)
+        // Re-arm so a persistent wedge keeps logging roughly every 6s rather
+        // than once, giving the field log a duration signal.
+        wedgeSuspectSince = Date()
     }
 
     // MARK: - Audio Session
@@ -1261,13 +1328,20 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentArtwork = nil
         sxmArtwork = nil
         if interruptedChannel != nil {
-            // Interruption — keep polling so track history stays current
+            // Interruption — keep polling so track history stays current.
+            // Leave the AVAudioEngine's intent intact: we expect to resume,
+            // and the config-change observer should still follow route flips.
             interruptionTime = Date()
             sxmService.suspendForTimeShift()
         } else {
+            // Genuine stop (user stop or CarPlay disconnect) — tear the render
+            // engine down too. Without this the config-change observer restarts
+            // it on the post-stop route change and leaves it running idle,
+            // which reads as "the session never ended" (bd tpu).
             interruptionTime = nil
             bufferPlaybackStartedAt = nil
             sxmService.stopPolling()
+            AudioOutput.shared.stop()
         }
         streamTitle = nil
         streamArtist = nil

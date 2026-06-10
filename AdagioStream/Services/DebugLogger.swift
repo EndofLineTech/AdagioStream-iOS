@@ -48,6 +48,18 @@ public final class DebugLogger: @unchecked Sendable {
         }
     }
 
+    /// Synchronous append for fatal events (uncaught exceptions). Blocks until
+    /// the line is on disk so it survives the imminent termination, and ignores
+    /// the isEnabled gate — a crash is always worth recording (bd a14).
+    public func logCritical(_ message: String) {
+        let timestamp = dateFormatter.string(from: Date())
+        let entry = "[\(timestamp)] [FATAL] \(message)\n"
+        queue.sync { [self] in
+            rotateIfNeeded()
+            appendToFile(entry)
+        }
+    }
+
     public func logFileSize() -> String {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
               let size = attrs[.size] as? UInt64 else { return "0 KB" }
