@@ -101,6 +101,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// Fires when a short interruption exceeds bufferDuration, falling back
     /// to the old stop-and-capture path.
     private var interruptionFallbackWorkItem: DispatchWorkItem?
+    /// Diagnostic counters for began/ended pairing.  A Siri-initiated call can
+    /// post multiple .began with a single .ended; the asymmetry is a clue that
+    /// another interruption (e.g. an active call) is still outstanding when we
+    /// resume.  Instrumentation only — see beads_mobilemusic-lfn.
+    private var interruptionBeganCount = 0
+    private var interruptionEndedCount = 0
 
     private var pathMonitor: NWPathMonitor?
     private let pathMonitorQueue = DispatchQueue(label: "com.adagiostream.pathmonitor")
@@ -373,7 +379,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         Task { @MainActor in
             switch type {
             case .began:
-                self.log.log("Interruption BEGAN: isActive=\(self.isActiveSession), channel=\"\(self.currentChannel?.name ?? "nil")\", vlcState=\(self.mediaPlayer.state.rawValue)", category: .interruption)
+                self.interruptionBeganCount += 1
+                self.log.log("Interruption BEGAN: isActive=\(self.isActiveSession), channel=\"\(self.currentChannel?.name ?? "nil")\", vlcState=\(self.mediaPlayer.state.rawValue), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.began")
 
                 // Keep VLC alive during short interruptions — its internal
@@ -416,9 +423,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 }
 
             case .ended:
+                self.interruptionEndedCount += 1
                 let options = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
                 let shouldResume = AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume)
-                self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume), ridingOut=\(self.isRidingOutInterruption)", category: .interruption)
+                // beganCount > endedCount means a prior .began has not yet been
+                // matched by its .ended — another interruption (e.g. an active
+                // phone call) may still own audio even though THIS .ended fired.
+                let unmatchedBegans = self.interruptionBeganCount - self.interruptionEndedCount
+                self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume), ridingOut=\(self.isRidingOutInterruption), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount), unmatchedBegans=\(unmatchedBegans)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.ended")
 
                 // Cancel the fallback timer — interruption ended in time
@@ -467,6 +479,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                             self.log.log("VLC died during interruption — cold restarting \"\(channel.name)\"", category: .interruption)
                             self.play(channel: channel)
                         }
+
+                        // Diagnostic: watch the session for a few seconds after
+                        // we resume.  If a phone call is still active, it should
+                        // reclaim audio here — the window the original log never
+                        // captured.  Instrumentation only (beads_mobilemusic-lfn).
+                        self.probePostResumeAudio(context: "short-interruption", channel: channel)
                     }
                 } else {
                     // Long interruption — fallback already stopped VLC and started capture.
@@ -596,6 +614,27 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let inputs = session.currentRoute.inputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
         let isCarPlay = session.currentRoute.outputs.contains { $0.portType == .carAudio }
         log.log("Session[\(context)]: cat=\(session.category.rawValue), mode=\(session.mode.rawValue), otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), carplay=\(isCarPlay), outputs=[\(outputs)], inputs=[\(inputs)]", category: .audioSession)
+    }
+
+    /// Diagnostic probe: after we resume from an interruption, sample the audio
+    /// session a few times over the next several seconds.  The original
+    /// CarPlay-during-call report (beads_mobilemusic-lfn) could not be confirmed
+    /// because nothing logged whether another audio source (a phone call) was
+    /// still active *after* we reactivated.  If a call reclaims audio here, the
+    /// route/otherAudio/silenceHint will shift in these samples.
+    ///
+    /// Instrumentation only — does NOT change resume behavior.  China-safe: uses
+    /// no CallKit (CallKit is an App Store risk in the China region).
+    private func probePostResumeAudio(context: String, channel: Channel) {
+        // Sample at +1s, +3s, +6s after resume.
+        for delay in [1.0, 3.0, 6.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self else { return }
+                let session = AVAudioSession.sharedInstance()
+                let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
+                self.log.log("PostResumeProbe[\(context)] +\(Int(delay))s: otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), vlcState=\(self.vlcStateName(self.mediaPlayer.state)), vlcPlaying=\(self.mediaPlayer.isPlaying), outputs=[\(outputs)], channel=\"\(channel.name)\"", category: .interruption)
+            }
+        }
     }
 
     private func reactivateAndPlay(channel: Channel, bufferFileURL: URL? = nil) {
