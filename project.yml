@@ -86,7 +86,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.2"
-        CURRENT_PROJECT_VERSION: "160"
+        CURRENT_PROJECT_VERSION: "161"
         SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
         HEADER_SEARCH_PATHS:
           - $(inherited)
@@ -102,6 +102,16 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+      configs:
+        # TEMPORARY (beads_mobilemusic-lfn, TestFlight only): enables the
+        # CallKit-based call-state diagnostics in CallStateDiagnostics.swift.
+        # CallKit is an App Store risk in China — REMOVE this configs block
+        # (one delete) before any production/App Store release. $(inherited)
+        # preserves the project-level DEBUG condition on the Debug config.
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DIAG_CALLKIT
+        Release:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DIAG_CALLKIT
     entitlements:
       path: AdagioStream/AdagioStream.entitlements
       properties:
@@ -121,7 +131,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "160"
+        CURRENT_PROJECT_VERSION: "161"
         MARKETING_VERSION: "1.2"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services
@@ -170,7 +180,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
         MARKETING_VERSION: "1.2"
-        CURRENT_PROJECT_VERSION: "160"
+        CURRENT_PROJECT_VERSION: "161"
         TARGETED_DEVICE_FAMILY: "3"
         SDKROOT: appletvos
         SUPPORTED_PLATFORMS: "appletvos appletvsimulator"

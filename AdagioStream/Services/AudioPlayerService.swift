@@ -107,6 +107,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// resume.  Instrumentation only — see beads_mobilemusic-lfn.
     private var interruptionBeganCount = 0
     private var interruptionEndedCount = 0
+    #if DIAG_CALLKIT
+    /// TestFlight-only CallKit observer — confirms whether a phone call is
+    /// active at resume.  Gated/removed before App Store release (China).
+    private let callDiagnostics = CallStateDiagnostics()
+    #endif
 
     private var pathMonitor: NWPathMonitor?
     private let pathMonitorQueue = DispatchQueue(label: "com.adagiostream.pathmonitor")
@@ -382,6 +387,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 self.interruptionBeganCount += 1
                 self.log.log("Interruption BEGAN: isActive=\(self.isActiveSession), channel=\"\(self.currentChannel?.name ?? "nil")\", vlcState=\(self.mediaPlayer.state.rawValue), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.began")
+                #if DIAG_CALLKIT
+                self.log.log("CallState[interruption.began]: \(self.callDiagnostics.summary())", category: .interruption)
+                #endif
 
                 // Keep VLC alive during short interruptions — its internal
                 // network-caching buffer (typically 8s) bridges the gap
@@ -432,6 +440,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 let unmatchedBegans = self.interruptionBeganCount - self.interruptionEndedCount
                 self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume), ridingOut=\(self.isRidingOutInterruption), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount), unmatchedBegans=\(unmatchedBegans)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.ended")
+                #if DIAG_CALLKIT
+                self.log.log("CallState[interruption.ended]: \(self.callDiagnostics.summary())", category: .interruption)
+                #endif
 
                 // Cancel the fallback timer — interruption ended in time
                 self.interruptionFallbackWorkItem?.cancel()
@@ -632,7 +643,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 guard let self else { return }
                 let session = AVAudioSession.sharedInstance()
                 let outputs = session.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")
-                self.log.log("PostResumeProbe[\(context)] +\(Int(delay))s: otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), vlcState=\(self.vlcStateName(self.mediaPlayer.state)), vlcPlaying=\(self.mediaPlayer.isPlaying), outputs=[\(outputs)], channel=\"\(channel.name)\"", category: .interruption)
+                #if DIAG_CALLKIT
+                let callState = " callState=\(self.callDiagnostics.summary())"
+                #else
+                let callState = ""
+                #endif
+                self.log.log("PostResumeProbe[\(context)] +\(Int(delay))s: otherAudio=\(session.isOtherAudioPlaying), silenceHint=\(session.secondaryAudioShouldBeSilencedHint), vlcState=\(self.vlcStateName(self.mediaPlayer.state)), vlcPlaying=\(self.mediaPlayer.isPlaying), outputs=[\(outputs)]\(callState), channel=\"\(channel.name)\"", category: .interruption)
             }
         }
     }
