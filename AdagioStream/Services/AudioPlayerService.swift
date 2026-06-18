@@ -122,6 +122,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// or tower handoff can fire several path events in quick succession;
     /// without a cooldown we'd tear down and rebuild the player repeatedly.
     private let pathReconnectCooldown: TimeInterval = 5
+    /// Pending retry for an automatic reconnect that was deferred because
+    /// other audio (a phone call, a nav prompt, another media app) owned the
+    /// session at takeover time.  Polls until that audio releases.
+    private var deferredReconnectWorkItem: DispatchWorkItem?
+    /// How long an automatic reconnect keeps waiting for other audio to
+    /// release before giving up (leaving the channel set for manual resume).
+    private let deferredReconnectMaxAttempts = 90
 
     public var channels: [Channel] = []
     public var bufferDuration: TimeInterval = Constants.defaultBufferDuration
@@ -488,7 +495,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                         } else {
                             // VLC died during the interruption — cold restart
                             self.log.log("VLC died during interruption — cold restarting \"\(channel.name)\"", category: .interruption)
-                            self.play(channel: channel)
+                            self.play(channel: channel, userInitiated: false)
                         }
 
                         // Diagnostic: watch the session for a few seconds after
@@ -589,7 +596,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // play(channel:) early-exits when the channel matches and the session
         // is active.  Clear the flag so the full teardown/restart runs.
         isActiveSession = false
-        play(channel: channel)
+        play(channel: channel, userInitiated: false)
     }
 
     private func primaryInterfaceType(for path: NWPath) -> NWInterface.InterfaceType? {
@@ -674,13 +681,22 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         if let bufferFileURL {
             playBufferedFile(bufferFileURL, for: channel)
         } else {
-            play(channel: channel)
+            play(channel: channel, userInitiated: false)
         }
     }
 
     // MARK: - Playback
 
-    public func play(channel: Channel) {
+    /// - Parameter userInitiated: `true` for an explicit user action (channel
+    ///   tap, next/prev, Play/resume) — only these may pull audio focus away
+    ///   from another app or an active phone call.  `false` for automatic
+    ///   plays (network-path reconnects, retries, interruption recovery): these
+    ///   must never seize the session from other audio; they defer and retry
+    ///   once it releases.  See beads_mobilemusic-lfn.
+    public func play(channel: Channel, userInitiated: Bool = true) {
+        // A fresh play() supersedes any deferred automatic reconnect.
+        deferredReconnectWorkItem?.cancel()
+        deferredReconnectWorkItem = nil
         // Don't tear down an active stream to restart the same channel.
         // During CarPlay reconnect, multiple PLAY commands and channel
         // selections can fire within seconds — each would needlessly
@@ -759,7 +775,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // the session at all, so we only need the explicit takeover at
         // the moment of first-play; channel-to-channel transitions never
         // release ownership in the first place.
-        assertSessionOwnership(context: "play(): takeover")
+        //
+        // An automatic play must NOT pull focus from other audio here — an
+        // incoming call's cellular-path flap can fire a reconnect, and seizing
+        // the session would deactivate the call's audio.  Defer the takeover to
+        // startStream's guard, which re-checks after the debounce.
+        if userInitiated || !AVAudioSession.sharedInstance().isOtherAudioPlaying {
+            assertSessionOwnership(context: "play(): takeover")
+        } else {
+            log.log("play(): takeover skipped — automatic play while other audio active", category: .audioSession)
+        }
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
@@ -811,7 +836,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             }
             let otherNow = AVAudioSession.sharedInstance().isOtherAudioPlaying
             self.log.log("startStream entry: otherAudio=\(otherNow)", category: .audioSession)
-            self.startStream(for: channel)
+            self.startStream(for: channel, userInitiated: userInitiated)
         }
         pendingPlayWorkItem = workItem
 
@@ -870,7 +895,36 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         #endif
     }
 
-    private func startStream(for channel: Channel) {
+    /// Re-attempt an automatic reconnect that was deferred because other audio
+    /// (an active phone call, a nav prompt, another media app) owned the
+    /// session.  Polls `isOtherAudioPlaying` once a second; fires the play as
+    /// soon as that audio releases, or gives up after
+    /// `deferredReconnectMaxAttempts` seconds (channel stays set for a manual
+    /// resume).  Aborts if the user has since moved to a different channel.
+    private func scheduleDeferredReconnect(for channel: Channel, attempt: Int = 0) {
+        deferredReconnectWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            guard self.currentChannel?.id == channel.id else {
+                self.log.log("Deferred reconnect aborted — channel changed from \"\(channel.name)\"", category: .player)
+                return
+            }
+            if AVAudioSession.sharedInstance().isOtherAudioPlaying {
+                if attempt >= self.deferredReconnectMaxAttempts {
+                    self.log.log("Deferred reconnect gave up for \"\(channel.name)\" — other audio still active after \(self.deferredReconnectMaxAttempts)s", category: .audioSession)
+                    return
+                }
+                self.scheduleDeferredReconnect(for: channel, attempt: attempt + 1)
+                return
+            }
+            self.log.log("Deferred reconnect firing for \"\(channel.name)\" — other audio released", category: .audioSession)
+            self.play(channel: channel, userInitiated: false)
+        }
+        deferredReconnectWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
+    }
+
+    private func startStream(for channel: Channel, userInitiated: Bool) {
         streamStartTime = Date()
         wasAwaitingInitialBuffer = false
         hasReceivedData = false
@@ -891,6 +945,20 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             interruptionFallbackWorkItem?.cancel()
             interruptionFallbackWorkItem = nil
         }
+        // An automatic reconnect/retry must never seize the session from other
+        // audio.  This is the reliable guard point: it runs after play()'s
+        // debounce, by which time an incoming call's audio has actually engaged
+        // (isOtherAudioPlaying becomes true ~1s after the path flap that
+        // triggered the reconnect).  Seizing here is exactly what played music
+        // over a live call (beads_mobilemusic-lfn).  Defer and retry instead.
+        if !userInitiated, AVAudioSession.sharedInstance().isOtherAudioPlaying {
+            log.log("startStream deferred: other audio owns the session during an automatic reconnect for \"\(channel.name)\" — not seizing", category: .audioSession)
+            isActiveSession = false
+            isBuffering = false
+            scheduleDeferredReconnect(for: channel)
+            return
+        }
+
         // Belt-and-braces: play() already asserted ownership before the
         // debounce timer.  This handles the retry paths that call
         // startStream() directly (reconnect / channel-change retry).
@@ -1071,7 +1139,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                         guard let self, self.currentChannel?.id == channel.id else { return }
                         self.probeStartTime = nil
                         self.lastLoggedVLCState = nil
-                        self.startStream(for: channel)
+                        self.startStream(for: channel, userInitiated: false)
                     }
                 }
             }
@@ -1185,7 +1253,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         interruptionTime = nil
         timeShiftBuffer.cancelAndCleanup()
 
-        play(channel: channel)
+        play(channel: channel, userInitiated: false)
     }
 
     /// Reschedule the state timer at a new interval if it differs from the current one.
@@ -1351,6 +1419,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         isRidingOutInterruption = false
         interruptionFallbackWorkItem?.cancel()
         interruptionFallbackWorkItem = nil
+        // A stop cancels any pending automatic reconnect so it can't resurrect
+        // playback after the user (or the system) has stopped.
+        deferredReconnectWorkItem?.cancel()
+        deferredReconnectWorkItem = nil
         let wasPlayingBuffer = isPlayingBufferedFile
         if let oldURL = currentBufferFileURL {
             timeShiftBuffer.deleteBufferFile(at: oldURL)
@@ -1683,7 +1755,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     log.log("Silent dropout detected — no data flow for \(Int(dataFlowStaleTimeout))s after \(lastActiveDecodedAudio) decoded frames, reconnecting channel=\"\(channel.name)\"", category: .player)
                     lastLoggedVLCState = nil
                     isReducedBufferRetry = false
-                    startStream(for: channel)
+                    startStream(for: channel, userInitiated: false)
                 }
                 // Timeout: if buffering too long with no meaningful data, retry with smaller buffer
                 else if let start = streamStartTime, !hasReceivedData,
@@ -1693,7 +1765,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     log.log("Buffering timeout (\(Int(bufferingTimeoutInterval))s with no data) — retrying with reduced buffer (\(Int(reducedBufferDuration))s), channel=\"\(channel.name)\"", category: .player)
                     isReducedBufferRetry = true
                     lastLoggedVLCState = nil
-                    startStream(for: channel)
+                    startStream(for: channel, userInitiated: false)
                 } else if let start = streamStartTime, !hasReceivedData,
                           isReducedBufferRetry,
                           Date().timeIntervalSince(start) > bufferingTimeoutInterval,
@@ -1775,7 +1847,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                         stateTimer?.invalidate()
                         stateTimer = nil
                         timeShiftBuffer.cancelAndCleanup()
-                        play(channel: channel)
+                        play(channel: channel, userInitiated: false)
                     }
                 }
             default:
