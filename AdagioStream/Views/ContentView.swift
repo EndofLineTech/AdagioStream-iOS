@@ -12,6 +12,17 @@ struct ContentView: View {
     @State private var splashOpacity: Double = 1
     @State private var sharedURLEntry: SharedURLEntry?
     @State private var showingSetup = false
+    /// Controls visibility of the one-time "We reorganized" banner (0xy.5).
+    @State private var showingTabReorgTip = false
+
+    // Tab indices — centralised so the onChange logic stays in sync.
+    private enum Tab {
+        static let live = 0
+        static let music = 1
+        static let library = 2
+        static let playlists = 3
+        static let settings = 4
+    }
 
     var body: some View {
         ZStack {
@@ -25,12 +36,13 @@ struct ContentView: View {
             }
             .glassContainer()
             .onChange(of: selectedTab) { _, newValue in
-                let channelsVisible = newValue == 0 || newValue == 1
+                // SXM feed polling is only needed on the Live tab.
+                let channelsVisible = newValue == Tab.live
                 sxmService.setFeedPollingEnabled(channelsVisible)
                 ESPNScoreService.shared.setPollingEnabled(channelsVisible)
             }
             .onAppear {
-                let channelsVisible = selectedTab == 0 || selectedTab == 1
+                let channelsVisible = selectedTab == Tab.live
                 sxmService.setFeedPollingEnabled(channelsVisible)
                 ESPNScoreService.shared.setPollingEnabled(channelsVisible)
             }
@@ -46,6 +58,8 @@ struct ContentView: View {
                 }
                 if !settingsViewModel.settings.hasCompletedSetup {
                     showingSetup = true
+                } else if !settingsViewModel.settings.hasSeenTabReorgTip {
+                    showingTabReorgTip = true
                 }
             }
         }
@@ -67,32 +81,40 @@ struct ContentView: View {
             selectedTab = 0
             showingSetup = true
         }
+        .alert("We Reorganized", isPresented: $showingTabReorgTip) {
+            Button("Got It") {
+                Task { await settingsViewModel.markTabReorgTipSeen() }
+            }
+        } message: {
+            Text("Favorites and Loved are now together in the Library tab. Playlists is the new name for My M3Us.")
+        }
     }
 
     // MARK: - Tab Content
+    // Tab order: Live (0) · Music (1) · Library (2) · Playlists (3) · Settings (4)
 
     private var tabContent: some View {
         TabView(selection: $selectedTab) {
             ChannelListView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
-                .tabItem { Label("Channels", systemImage: "radio") }
-                .tag(0)
-            FavoritesView()
+                .tabItem { Label("Live", systemImage: "radio") }
+                .tag(Tab.live)
+            MusicLibraryView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
-                .tabItem { Label("Favorites", systemImage: "star.fill") }
-                .tag(1)
-            SavedSongsView()
+                .tabItem { Label("Music", systemImage: "music.note.list") }
+                .tag(Tab.music)
+            LibraryView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
-                .tabItem { Label("Loved", systemImage: "heart.fill") }
-                .tag(2)
+                .tabItem { Label("Library", systemImage: "heart.fill") }
+                .tag(Tab.library)
             CustomPlaylistListView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
-                .tabItem { Label("My M3Us", systemImage: "music.note.list") }
-                .tag(3)
+                .tabItem { Label("Playlists", systemImage: "list.bullet") }
+                .tag(Tab.playlists)
             SettingsView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
                 .tabItem { Label("Settings", systemImage: "gear") }
-                .tag(4)
+                .tag(Tab.settings)
         }
         .environment(\.horizontalSizeClass, .compact)
     }

@@ -173,6 +173,11 @@ public final class SettingsViewModel: ObservableObject {
         await saveSettings()
     }
 
+    public func markTabReorgTipSeen() async {
+        settings.hasSeenTabReorgTip = true
+        await saveSettings()
+    }
+
     public func updateESPNLivePollInterval(_ interval: ESPNLivePollInterval) async {
         settings.espnLivePollInterval = interval
         ESPNScoreService.shared.setLivePollInterval(interval.interval)

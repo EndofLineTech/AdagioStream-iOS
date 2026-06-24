@@ -154,6 +154,7 @@
 		C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */; };
 		CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */; };
 		CB5A676A08CF467E5A9F5776 /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
+		CF865ECD832DFF39D8D5C8FA /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9476852B5E296954656D6FA /* LibraryView.swift */; };
 		D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A879148E50912620B26D03 /* ProviderManagerTests.swift */; };
 		D1C6975823782DAB7458EB59 /* CustomPlaylistGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */; };
 		D3E64054FDAF984ADC9B424A /* CustomPlaylist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF95CAE631C108797282E82 /* CustomPlaylist.swift */; };
@@ -329,6 +330,7 @@
 		D317808303BD060CB0340505 /* DataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataExportService.swift; sourceTree = "<group>"; };
 		D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		D903CA55661DD9736AA33128 /* AddManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddManualEntryView.swift; sourceTree = "<group>"; };
+		D9476852B5E296954656D6FA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParser.swift; sourceTree = "<group>"; };
 		DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeShiftBufferService.swift; sourceTree = "<group>"; };
 		DC965CA67735F73D26E34C17 /* NoProvidersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoProvidersView.swift; sourceTree = "<group>"; };
@@ -625,6 +627,7 @@
 				A97EE5CFDF1DFF2BB9D2E698 /* CustomPlaylists */,
 				A2A244448F29868096069FC2 /* EPG */,
 				6FBC5F09C97033D356ED66F5 /* Favorites */,
+				C9DE8084A97AE8031B28FF14 /* Library */,
 				3934901030B551CF06A6A537 /* Music */,
 				2A145E596DEF592D695C7EDE /* Player */,
 				D59910D0C5EDB56EBE3B834E /* Provider */,
@@ -699,6 +702,14 @@
 				A6F69CDDC9AE4D176E8B131E /* Views */,
 			);
 			path = AdagioStream;
+			sourceTree = "<group>";
+		};
+		C9DE8084A97AE8031B28FF14 /* Library */ = {
+			isa = PBXGroup;
+			children = (
+				D9476852B5E296954656D6FA /* LibraryView.swift */,
+			);
+			path = Library;
 			sourceTree = "<group>";
 		};
 		D59910D0C5EDB56EBE3B834E /* Provider */ = {
@@ -1015,6 +1026,7 @@
 				BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */,
 				F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */,
 				B45A9541815DECB5D20BC5E8 /* KeychainSyncMigrator.swift in Sources */,
+				CF865ECD832DFF39D8D5C8FA /* LibraryView.swift in Sources */,
 				652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */,
 				F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,

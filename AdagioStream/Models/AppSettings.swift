@@ -155,6 +155,9 @@ public struct AppSettings: Codable {
     public var espnLivePollInterval: ESPNLivePollInterval
     public var channelGroupingMode: ChannelGroupingMode
     public var hasCompletedSetup: Bool
+    /// Set to true after the one-time "We reorganized" tab tip is dismissed.
+    /// False on first launch after the 0xy.5 tab restructure; persists thereafter.
+    public var hasSeenTabReorgTip: Bool
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -168,7 +171,8 @@ public struct AppSettings: Codable {
         artworkDisplayMode: ArtworkDisplayMode = .coverArt,
         espnLivePollInterval: ESPNLivePollInterval = .fifteen,
         channelGroupingMode: ChannelGroupingMode = .allGroups,
-        hasCompletedSetup: Bool = false
+        hasCompletedSetup: Bool = false,
+        hasSeenTabReorgTip: Bool = false
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -182,6 +186,7 @@ public struct AppSettings: Codable {
         self.espnLivePollInterval = espnLivePollInterval
         self.channelGroupingMode = channelGroupingMode
         self.hasCompletedSetup = hasCompletedSetup
+        self.hasSeenTabReorgTip = hasSeenTabReorgTip
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -201,6 +206,7 @@ public struct AppSettings: Codable {
         espnLivePollInterval = try container.decodeIfPresent(ESPNLivePollInterval.self, forKey: .espnLivePollInterval) ?? .fifteen
         channelGroupingMode = try container.decodeIfPresent(ChannelGroupingMode.self, forKey: .channelGroupingMode) ?? .allGroups
         hasCompletedSetup = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedSetup) ?? false
+        hasSeenTabReorgTip = try container.decodeIfPresent(Bool.self, forKey: .hasSeenTabReorgTip) ?? false
     }
 }
 
