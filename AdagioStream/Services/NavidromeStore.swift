@@ -238,3 +238,56 @@ public final class NavidromeStore {
         return m
     }()
 }
+
+// MARK: - Typed CRUD
+
+extension NavidromeStore {
+
+    // MARK: Upsert (insert or replace)
+
+    /// Upserts an array of `Artist` records.  Each record is saved using
+    /// GRDB's `save(_:)` which performs INSERT OR REPLACE based on primary key.
+    public func upsert(artists: [Artist]) throws {
+        try writer.write { db in
+            for artist in artists { try artist.save(db) }
+        }
+    }
+
+    /// Upserts an array of `Album` records.
+    public func upsert(albums: [Album]) throws {
+        try writer.write { db in
+            for album in albums { try album.save(db) }
+        }
+    }
+
+    /// Upserts an array of `Track` records.
+    public func upsert(tracks: [Track]) throws {
+        try writer.write { db in
+            for track in tracks { try track.save(db) }
+        }
+    }
+
+    // MARK: Fetch helpers
+
+    /// Returns all albums belonging to the given artist, ordered by year then
+    /// title.
+    public func albums(forArtist artistId: String) throws -> [Album] {
+        try writer.read { db in
+            try Album
+                .filter(Column("artistId") == artistId)
+                .order(Column("year"), Column("title"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Returns all tracks belonging to the given album, ordered by disc number
+    /// then track number.
+    public func tracks(forAlbum albumId: String) throws -> [Track] {
+        try writer.read { db in
+            try Track
+                .filter(Column("albumId") == albumId)
+                .order(Column("discNumber"), Column("trackNumber"))
+                .fetchAll(db)
+        }
+    }
+}

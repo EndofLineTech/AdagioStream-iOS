@@ -45,6 +45,7 @@
 		3C2B222875C0ABEDB7365A50 /* DataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D317808303BD060CB0340505 /* DataExportService.swift */; };
 		403FD2102DB1357FB4DF8348 /* CustomPlaylistEntryRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */; };
 		40DCCC69DD226BEBBEBADDFE /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74E1BC12E2BCD838B7CC68B /* AppearanceSettingsView.swift */; };
+		4193BA80B429CAB452283E97 /* NavidromeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D292EB2856F819A576B56777 /* NavidromeModels.swift */; };
 		42EAF3D1801B1E1BCC65599C /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20796E24826A70D504E871C4 /* PersistenceService.swift */; };
 		42FAA3DE827586853F4FFE08 /* NavidromeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25370B7690C8CA5BBE607459 /* NavidromeStoreTests.swift */; };
 		4533891205192A239243047A /* SXMTrack.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7434EFB265DF59B08B4394B3 /* SXMTrack.swift */; };
@@ -70,6 +71,7 @@
 		5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */; };
 		5D04CF82D46CED101C42C799 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
 		5FE9B30F9278ECEC73760044 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4A8EA6B740258F38380CBFB8 /* GRDB */; };
+		64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D292EB2856F819A576B56777 /* NavidromeModels.swift */; };
 		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
 		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
 		6AEDCD88BA06E999C0BC2D30 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */; };
@@ -96,6 +98,7 @@
 		877C934280C4239CFAEB9AE7 /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */; };
 		88EA1D9FAA4BC82E5F1EC27D /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
+		8A6DE48A3E9BDB70FFD4F13A /* NavidromeModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */; };
 		8A9CC3A1D200A0C0DDF275C0 /* CallStateDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 179793B15F27B43C9455E8B2 /* CallStateDiagnostics.swift */; };
 		8F65506BDA72BC28D1162110 /* VLCAudioCallbackBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */; };
 		903AB7D66FED2024F9516131 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
@@ -240,6 +243,7 @@
 		42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SXMMetadataService.swift; sourceTree = "<group>"; };
 		4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetryableAsyncImage.swift; sourceTree = "<group>"; };
 		469BD42D1E9241B001F27A94 /* NowPlayingTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingTabView.swift; sourceTree = "<group>"; };
+		48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeModelsTests.swift; sourceTree = "<group>"; };
 		48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListViewModel.swift; sourceTree = "<group>"; };
 		4B04F3504B6EB6AAE7863CE0 /* SubsonicAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsonicAuth.swift; sourceTree = "<group>"; };
 		4CD580FC83CC64AAAFBBDEBF /* AdagioStream-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "AdagioStream-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -301,6 +305,7 @@
 		D099586458688D813DF57122 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D13AE0D7CADA8063277C899D /* XtreamCodesAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPI.swift; sourceTree = "<group>"; };
 		D27383F186EB3DC4FC9B8C0C /* MaskedTextField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaskedTextField.swift; sourceTree = "<group>"; };
+		D292EB2856F819A576B56777 /* NavidromeModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeModels.swift; sourceTree = "<group>"; };
 		D317808303BD060CB0340505 /* DataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataExportService.swift; sourceTree = "<group>"; };
 		D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		D903CA55661DD9736AA33128 /* AddManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddManualEntryView.swift; sourceTree = "<group>"; };
@@ -549,6 +554,7 @@
 				177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */,
 				BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */,
 				1CB6CC077DE7865648EC949C /* ESPNModels.swift */,
+				D292EB2856F819A576B56777 /* NavidromeModels.swift */,
 				4253D682909B25CB052AED9C /* Provider.swift */,
 				C7713A3C47F3B23E57849347 /* SavedSong.swift */,
 				7434EFB265DF59B08B4394B3 /* SXMTrack.swift */,
@@ -630,6 +636,7 @@
 			isa = PBXGroup;
 			children = (
 				99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */,
+				48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -904,6 +911,7 @@
 				E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */,
 				BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */,
 				9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */,
+				8A6DE48A3E9BDB70FFD4F13A /* NavidromeModelsTests.swift in Sources */,
 				42FAA3DE827586853F4FFE08 /* NavidromeStoreTests.swift in Sources */,
 				4C9527682263E4F04129BF19 /* PersistenceServiceTests.swift in Sources */,
 				D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */,
@@ -971,6 +979,7 @@
 				47911B7F0C6396628A25C035 /* MaskedTextField.swift in Sources */,
 				4EA878465057E1C26D33A0E8 /* MigrationDiagnostics.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
+				4193BA80B429CAB452283E97 /* NavidromeModels.swift in Sources */,
 				9B9B71470CE809C09FAC29BF /* NavidromeStore.swift in Sources */,
 				23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */,
 				F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */,
@@ -1038,6 +1047,7 @@
 				FE7BEB23314503599322A8EC /* M3UExporter.swift in Sources */,
 				B4E5DE3101F142674E43546F /* M3UParser.swift in Sources */,
 				0A2389BA8F472425FD0C9015 /* MigrationDiagnostics.swift in Sources */,
+				64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */,
 				F0B15617AD537B8D9973782A /* NavidromeStore.swift in Sources */,
 				7917CA44193478337496D3F8 /* NoProvidersView.swift in Sources */,
 				45CF11D348F8E12ACDD1C5D8 /* NowPlayingTabView.swift in Sources */,
