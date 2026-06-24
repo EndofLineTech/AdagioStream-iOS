@@ -41,13 +41,23 @@ public struct MusicLibraryView: View {
     // Current browse mode — persists across tab switches.
     @State private var browseMode: MusicBrowseMode = .artists
 
+    // Search query text — bound to the .searchable modifier.
+    // Non-empty → show SearchResultsView; empty → show normal browse.
+    @State private var searchText: String = ""
+
     public init() {}
 
     public var body: some View {
         NavigationStack {
             Group {
                 if let vm = viewModel, let resolvedAPI = api {
-                    libraryBrowser(vm: vm, api: resolvedAPI)
+                    // Show search results when there is a non-empty query;
+                    // otherwise show the normal browse UI unchanged.
+                    if isSearchActive {
+                        SearchResultsView(viewModel: vm, api: resolvedAPI)
+                    } else {
+                        libraryBrowser(vm: vm, api: resolvedAPI)
+                    }
                 } else if providerManager.subsonicAPI == nil {
                     ScrollView {
                         EmptyStateView(
@@ -65,9 +75,22 @@ public struct MusicLibraryView: View {
             .navigationTitle("Music")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    browseModeSelector
+                // Hide the browse-mode selector while searching so the toolbar
+                // isn't crowded with both the search bar and the picker.
+                if !isSearchActive {
+                    ToolbarItem(placement: .principal) {
+                        browseModeSelector
+                    }
                 }
+            }
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search artists, albums, songs"
+            )
+            .accessibilityLabel("Search music library")
+            .onChange(of: searchText) { _, newValue in
+                viewModel?.updateSearch(query: newValue)
             }
             .task {
                 guard let resolved = providerManager.subsonicAPI else { return }
@@ -79,6 +102,11 @@ public struct MusicLibraryView: View {
                 }
             }
         }
+    }
+
+    /// True when the search field has non-empty (non-whitespace) text.
+    private var isSearchActive: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: - Mode selector

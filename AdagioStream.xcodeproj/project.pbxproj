@@ -101,6 +101,7 @@
 		7A11D46D2A8071F1D2C7F23C /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
 		7C3AEE80890B1C650C67086B /* AdagioStreamTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27924384C8E4F5B4A4E37EA3 /* AdagioStreamTVApp.swift */; };
 		7DA31C5B2FD1C9760F2788D3 /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
+		81309FDC907C4498CA44535D /* SearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B48DC2BAF144D6832406885 /* SearchResultsView.swift */; };
 		818614EC1C13D0D3A221B095 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7473223A3E7D4A8A7C63A3 /* CrashReporter.swift */; };
 		820E29811BA7C70BB58A791D /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7473223A3E7D4A8A7C63A3 /* CrashReporter.swift */; };
 		822CBD96D23302FB5AF7A3F8 /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
@@ -230,6 +231,7 @@
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongRowView.swift; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
+		0B48DC2BAF144D6832406885 /* SearchResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultsView.swift; sourceTree = "<group>"; };
 		0BBED509BBD437DCE5F1823C /* InterruptionRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterruptionRecoveryTests.swift; sourceTree = "<group>"; };
 		0F67E823749582BB0256C664 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		10E220456DACC5137EA0F00B /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
@@ -509,6 +511,7 @@
 				D663E9B0E8D477B2AB96374E /* BrowseAlbumsView.swift */,
 				FF42FE4E355FDB76ED8BD76D /* GenreBrowseView.swift */,
 				BAEEB586D30C3867A74F7B11 /* MusicLibraryView.swift */,
+				0B48DC2BAF144D6832406885 /* SearchResultsView.swift */,
 				4764DC58A87DECEFE53BB799 /* SubsonicCoverArt.swift */,
 			);
 			path = Music;
@@ -1096,6 +1099,7 @@
 				887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */,
 				54FED6DF6F6733D6BDC056D2 /* SavedSongsManager.swift in Sources */,
 				987AA9ADB45C60F54C55F54E /* SavedSongsView.swift in Sources */,
+				81309FDC907C4498CA44535D /* SearchResultsView.swift in Sources */,
 				52087B78E099DB1DF5E26356 /* SettingsView.swift in Sources */,
 				DE4680A0F80ECD7335DA0F96 /* SettingsViewModel.swift in Sources */,
 				75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */,
