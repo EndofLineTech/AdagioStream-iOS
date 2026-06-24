@@ -14,6 +14,19 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private let log = DebugLogger.shared
 
     @Published public var currentChannel: Channel?
+
+    // MARK: - PlaybackSource seam (d6q.7, Phase 1)
+    //
+    // Additive — currentChannel is kept exactly as-is; playbackSource mirrors
+    // it.  Phase 1 always sets .radio; .library is reserved for d6q.2.
+    @Published public var playbackSource: PlaybackSource?
+
+    /// The item currently displayed in the Now Playing / mini-player UI.
+    /// Derives from `playbackSource`; returns nil when nothing is playing.
+    public var nowPlaying: (any NowPlayingItem)? {
+        playbackSource?.currentItem
+    }
+
     @Published public var isPlaying = false
     @Published public var isBuffering = false
     @Published public var error: String?
@@ -770,6 +783,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
+        playbackSource = .radio(channel)   // d6q.7: mirror into PlaybackSource seam
         UserDefaults.standard.set(channel.id, forKey: "lastPlayedChannelID")
         isActiveSession = false
         isBuffering = true
@@ -1273,6 +1287,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
 
         currentChannel = channel
+        playbackSource = .radio(channel)   // d6q.7: mirror into PlaybackSource seam
         isPlayingBufferedFile = true
         bufferedChannel = channel
         currentBufferFileURL = fileURL
@@ -1432,6 +1447,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         timed("stop(): mediaPlayer.media=nil") { mediaPlayer.media = nil }
         lastPlayedChannel = currentChannel
         currentChannel = nil
+        playbackSource = nil               // d6q.7: mirror into PlaybackSource seam
         isPlaying = false
         isBuffering = false
         currentArtwork = nil

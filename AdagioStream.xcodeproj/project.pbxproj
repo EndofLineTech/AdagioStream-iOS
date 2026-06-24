@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		00839B13F7A96D6BBF96DF26 /* SubsonicAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B04F3504B6EB6AAE7863CE0 /* SubsonicAuth.swift */; };
+		082C24BA4D5890A3DEE3ED77 /* PlaybackSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */; };
 		0A2389BA8F472425FD0C9015 /* MigrationDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */; };
 		0C023121A064BEA7468A8957 /* ChannelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */; };
 		0DAC568BE7B0C8BC2172B719 /* ChannelRowTVView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAB79854EF16906B0C6713E /* ChannelRowTVView.swift */; };
@@ -98,6 +99,7 @@
 		822CBD96D23302FB5AF7A3F8 /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
 		83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411FC365142BB95B070F2EEA /* PinnedURLSession.swift */; };
 		840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
+		852CBCEA973A3313D827AA98 /* PlaybackSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81245276C98A5709B721113 /* PlaybackSource.swift */; };
 		877C934280C4239CFAEB9AE7 /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */; };
 		88EA1D9FAA4BC82E5F1EC27D /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
@@ -138,6 +140,7 @@
 		C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D317808303BD060CB0340505 /* DataExportService.swift */; };
 		C2B54041F3BEB8534F71011A /* DataDeletionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */; };
 		C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */; };
+		C35C0860690F7370E71A853C /* PlaybackSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81245276C98A5709B721113 /* PlaybackSource.swift */; };
 		C3B00CA635577BDD69A6001B /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CCAE274A593BD7364C5F6FD /* Channel.swift */; };
 		C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */; };
 		C733EDA151EC0DF936A3D4E9 /* PlaybackSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE137FF651110189C708941D /* PlaybackSettingsView.swift */; };
@@ -272,6 +275,7 @@
 		820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistManager.swift; sourceTree = "<group>"; };
 		8C93442E1C179CA8C65AE6D8 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		8FB864F08076A1C5C5CFA8F5 /* NavidromeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeStore.swift; sourceTree = "<group>"; };
+		90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSourceTests.swift; sourceTree = "<group>"; };
 		91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerService.swift; sourceTree = "<group>"; };
 		93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsView.swift; sourceTree = "<group>"; };
 		9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesViewModel.swift; sourceTree = "<group>"; };
@@ -299,6 +303,7 @@
 		BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntry.swift; sourceTree = "<group>"; };
 		BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		C7713A3C47F3B23E57849347 /* SavedSong.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSong.swift; sourceTree = "<group>"; };
+		C81245276C98A5709B721113 /* PlaybackSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSource.swift; sourceTree = "<group>"; };
 		CA8FBFCBC5F7D6224976D34F /* ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ShareExtension.entitlements; sourceTree = "<group>"; };
 		CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "LGPL-2.1.txt"; sourceTree = "<group>"; };
 		CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntry.swift; sourceTree = "<group>"; };
@@ -558,6 +563,7 @@
 				BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */,
 				1CB6CC077DE7865648EC949C /* ESPNModels.swift */,
 				D292EB2856F819A576B56777 /* NavidromeModels.swift */,
+				C81245276C98A5709B721113 /* PlaybackSource.swift */,
 				4253D682909B25CB052AED9C /* Provider.swift */,
 				C7713A3C47F3B23E57849347 /* SavedSong.swift */,
 				7434EFB265DF59B08B4394B3 /* SXMTrack.swift */,
@@ -640,6 +646,7 @@
 			children = (
 				99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */,
 				48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */,
+				90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -918,6 +925,7 @@
 				8A6DE48A3E9BDB70FFD4F13A /* NavidromeModelsTests.swift in Sources */,
 				42FAA3DE827586853F4FFE08 /* NavidromeStoreTests.swift in Sources */,
 				4C9527682263E4F04129BF19 /* PersistenceServiceTests.swift in Sources */,
+				082C24BA4D5890A3DEE3ED77 /* PlaybackSourceTests.swift in Sources */,
 				D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */,
 				ACD0D3D11F441CE56CC8982A /* SubsonicAuthTests.swift in Sources */,
 				1B7FBCE2515815B7E0C64087 /* XtreamCodesAPITests.swift in Sources */,
@@ -989,6 +997,7 @@
 				F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */,
 				83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */,
 				C733EDA151EC0DF936A3D4E9 /* PlaybackSettingsView.swift in Sources */,
+				852CBCEA973A3313D827AA98 /* PlaybackSource.swift in Sources */,
 				9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */,
 				4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */,
 				129D39FCB60C075DFBF45289 /* Provider.swift in Sources */,
@@ -1057,6 +1066,7 @@
 				45CF11D348F8E12ACDD1C5D8 /* NowPlayingTabView.swift in Sources */,
 				42EAF3D1801B1E1BCC65599C /* PersistenceService.swift in Sources */,
 				3B3274170BE4ADF188DAC40A /* PinnedURLSession.swift in Sources */,
+				C35C0860690F7370E71A853C /* PlaybackSource.swift in Sources */,
 				F895F24EFAD016A036FD6A50 /* PlayerViewModel.swift in Sources */,
 				701227A8D261E3BFC31A11B0 /* Provider.swift in Sources */,
 				127A06FD9E4B599F89777C73 /* ProviderListViewModel.swift in Sources */,

@@ -18,7 +18,7 @@ struct ContentView: View {
             ZStack(alignment: .bottom) {
                 tabContent
 
-                if audioPlayer.currentChannel != nil {
+                if audioPlayer.nowPlaying != nil {
                     MiniPlayerView()
                         .padding(.bottom, 49)
                 }
@@ -100,7 +100,7 @@ struct ContentView: View {
     // MARK: - Helpers
 
     private var miniPlayerBottomInset: CGFloat {
-        audioPlayer.currentChannel != nil ? 60 : 0
+        audioPlayer.nowPlaying != nil ? 60 : 0
     }
 
     private func checkForSharedURLs() {
