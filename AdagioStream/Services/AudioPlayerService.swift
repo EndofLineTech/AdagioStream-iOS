@@ -149,6 +149,30 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
     private var lastPlayedChannel: Channel?
     private var interruptedChannel: Channel?
+
+    // MARK: - Interruption capture state (d6q.8)
+    //
+    // Full PlaybackSource snapshot taken at interruption .began.  The legacy
+    // `interruptedChannel` field is kept intact because `stop()` checks it to
+    // decide whether to preserve the AVAudioEngine (interruption path vs. user
+    // stop).  The new fields carry what `interruptedChannel` cannot: the full
+    // library queue + index + API needed to cold-restart a library track.
+    //
+    // Invariants:
+    //   - Both are set together at .began and cleared together at .ended/.resume.
+    //   - For `.radio`, `interruptedSource` mirrors `interruptedChannel`; the
+    //     `.ended` path still routes through `reactivateAndPlay(channel:)` so
+    //     existing radio behaviour is provably unchanged.
+    //   - For `.library`, `interruptedSource` carries the full queue snapshot
+    //     captured *before* any `stop()` tears it down.  `interruptedQueueAPI`
+    //     carries the NavidromeAPI reference (also cleared by `stop()`).
+    //   - `interruptedElapsedSeconds`: VLC elapsed at capture (seconds, ≥ 0).
+    //     Nil if position was not yet known (track just started).  Used only
+    //     for `.library`; ignored for radio.
+    private var interruptedSource: PlaybackSource?
+    private var interruptedQueueAPI: NavidromeAPI?
+    private var interruptedElapsedSeconds: Double?
+
     private var isActiveSession = false
     private var lastToggleTime: Date = .distantPast
     private var lastLoggedVLCState: VLCMediaPlayerState?
@@ -426,15 +450,40 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Safety fallback: if .ended interruption never fires (common with
         // CarPlay Siri), the .end hint tells us the other audio stopped.
         // Treat it as the interruption ending and resume.
+        // d6q.8: dispatch on interruptedSource (not just interruptedChannel)
+        // so library playback also resumes via this path.
         if type == .end {
             Task { @MainActor in
-                guard let channel = self.interruptedChannel else { return }
-                self.log.log("Secondary audio hint .end: resuming interrupted channel \"\(channel.name)\"", category: .interruption)
+                guard let capturedSource = self.interruptedSource else { return }
+                let sourceDesc: String = {
+                    switch capturedSource {
+                    case .radio(let ch): return "radio(\"\(ch.name)\")"
+                    case .library(_, let idx): return "library(index=\(idx))"
+                    }
+                }()
+                self.log.log("Secondary audio hint .end: resuming \(sourceDesc)", category: .interruption)
                 self.interruptedChannel = nil
-                let bufferFileURL = self.timeShiftBuffer.stopCapture()
-                self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
+                self.interruptedSource = nil
+                let savedAPI = self.interruptedQueueAPI
+                let savedElapsed = self.interruptedElapsedSeconds
+                self.interruptedQueueAPI = nil
+                self.interruptedElapsedSeconds = nil
+
+                switch capturedSource {
+                case .radio(let channel):
+                    let bufferFileURL = self.timeShiftBuffer.stopCapture()
+                    self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
+                    }
+                case .library(let queue, let index):
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        guard let api = savedAPI, index < queue.count else {
+                            self.log.log("Secondary hint library resume: missing API or index OOB — safe no-op", category: .interruption)
+                            return
+                        }
+                        self.reactivateAndPlayLibraryTrack(queue[index], inQueue: queue, at: index, via: api, seekTo: savedElapsed)
+                    }
                 }
             }
         }
@@ -493,35 +542,93 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 // network-caching buffer (typically 8s) bridges the gap
                 // without needing a cold restart.  Only fall back to
                 // stop-and-capture if the interruption exceeds bufferDuration.
-                if self.isActiveSession, let channel = self.currentChannel {
-                    self.interruptedChannel = channel
+                //
+                // d6q.8: capture the full PlaybackSource at .began so the
+                // .ended handler can restore radio OR library correctly.
+                // The legacy interruptedChannel guard in stop() requires the
+                // channel to be set for radio; for library we set it to nil
+                // (no radio buffer capture needed) but still set isRidingOut.
+                if self.isActiveSession,
+                   let snapshot = self.captureInterruptionSnapshot() {
+                    // d6q.8: snapshot full source + position BEFORE any teardown.
+                    self.interruptedSource = snapshot.source
+                    self.interruptedQueueAPI = snapshot.queueAPI
+                    self.interruptedElapsedSeconds = snapshot.elapsedSeconds
+
+                    // Legacy channel field: set for radio so stop()'s engine-
+                    // preservation guard fires; nil for library (no time-shift).
+                    if case .radio(let channel) = snapshot.source {
+                        self.interruptedChannel = channel
+                    } else {
+                        self.interruptedChannel = nil
+                    }
+
                     self.isRidingOutInterruption = true
+
+                    // Convenience alias for the fallback closure (radio only).
+                    let radioChannel: Channel? = {
+                        if case .radio(let ch) = snapshot.source { return ch }
+                        return nil
+                    }()
                     let currentBitrate = self.streamBitrateKbps
-                    self.log.log("Riding out interruption for \"\(channel.name)\" (VLC cache \(Int(self.bufferDuration))s)", category: .interruption)
+
+                    if let channel = radioChannel {
+                        self.log.log("Riding out interruption for radio \"\(channel.name)\" (VLC cache \(Int(self.bufferDuration))s)", category: .interruption)
+                    } else {
+                        self.log.log("Riding out interruption for library source (VLC cache \(Int(self.bufferDuration))s)", category: .interruption)
+                    }
 
                     // Safety net: if the interruption runs longer than VLC's
                     // cache, fall back to the old stop+capture path.
                     let interruptionStarted = Date()
+                    let capturedSource = snapshot.source   // captured for fallback closure
+                    let capturedAPI = snapshot.queueAPI
+                    let capturedElapsed = snapshot.elapsedSeconds
                     let fallback = DispatchWorkItem { [weak self] in
-                        guard let self, self.isRidingOutInterruption,
-                              self.interruptedChannel?.id == channel.id else { return }
+                        guard let self, self.isRidingOutInterruption else { return }
+                        // Verify we are still in the same interruption context.
+                        let sourceStillMatches: Bool = {
+                            switch (capturedSource, self.interruptedSource) {
+                            case (.radio(let a), .radio(let b)): return a.id == b.id
+                            case (.library(_, let ai), .library(_, let bi)): return ai == bi
+                            default: return false
+                            }
+                        }()
+                        guard sourceStillMatches else { return }
+
                         let elapsed = Date().timeIntervalSince(interruptionStarted)
                         self.log.log("Interruption exceeded VLC cache (\(Int(self.bufferDuration))s) — elapsed \(Int(elapsed))s, falling back to stop+capture", category: .interruption)
                         self.isRidingOutInterruption = false
-                        self.stop()
-                        self.interruptedChannel = channel
-                        // Only attempt time-shift capture if the interruption
-                        // is recent enough that the stream URL is likely still
-                        // connectable.  If the app was suspended for minutes,
-                        // the server has long closed the connection — capturing
-                        // would just get 0 bytes.
-                        if elapsed <= 30 {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                guard self.interruptedChannel?.id == channel.id else { return }
-                                self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+
+                        if let channel = radioChannel {
+                            // Radio: existing stop+capture path.
+                            // Re-set interruptedChannel so stop()'s engine-guard fires.
+                            self.interruptedChannel = channel
+                            self.stop()
+                            self.interruptedChannel = channel
+                            self.interruptedSource = capturedSource
+                            self.interruptedQueueAPI = nil  // not used for radio
+                            self.interruptedElapsedSeconds = nil
+                            if elapsed <= 30 {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    guard case .radio(let ch) = self.interruptedSource,
+                                          ch.id == channel.id else { return }
+                                    self.timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: currentBitrate)
+                                }
+                            } else {
+                                self.log.log("Skipping time-shift capture — interruption too stale (\(Int(elapsed))s)", category: .interruption)
                             }
                         } else {
-                            self.log.log("Skipping time-shift capture — interruption too stale (\(Int(elapsed))s)", category: .interruption)
+                            // Library: stop the player; preserve the source snapshot
+                            // (stop() clears playbackSource/queueAPI — we already
+                            // captured what we need above).
+                            self.interruptedChannel = nil   // no time-shift for library
+                            self.stop()
+                            // Restore the full snapshot so .ended can restart the track.
+                            self.interruptedSource = capturedSource
+                            self.interruptedQueueAPI = capturedAPI
+                            self.interruptedElapsedSeconds = capturedElapsed
+                            self.log.log("Library interruption exceeded VLC cache — source captured, waiting for .ended", category: .interruption)
                         }
                     }
                     self.interruptionFallbackWorkItem = fallback
@@ -536,15 +643,25 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 // matched by its .ended — another interruption (e.g. an active
                 // phone call) may still own audio even though THIS .ended fired.
                 let unmatchedBegans = self.interruptionBeganCount - self.interruptionEndedCount
-                self.log.log("Interruption ENDED: interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume), ridingOut=\(self.isRidingOutInterruption), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount), unmatchedBegans=\(unmatchedBegans)", category: .interruption)
+                // d6q.8: log both the legacy channel and the full source for diagnosis.
+                let sourceDesc: String = {
+                    switch self.interruptedSource {
+                    case .radio(let ch): return "radio(\"\(ch.name)\")"
+                    case .library(_, let idx): return "library(index=\(idx))"
+                    case nil: return "nil"
+                    }
+                }()
+                self.log.log("Interruption ENDED: interruptedSource=\(sourceDesc), interruptedChannel=\"\(self.interruptedChannel?.name ?? "nil")\", shouldResume=\(shouldResume), ridingOut=\(self.isRidingOutInterruption), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount), unmatchedBegans=\(unmatchedBegans)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.ended")
 
                 // Cancel the fallback timer — interruption ended in time
                 self.interruptionFallbackWorkItem?.cancel()
                 self.interruptionFallbackWorkItem = nil
 
-                guard let channel = self.interruptedChannel else {
-                    self.log.log("Interruption ended but no interrupted channel, skipping resume", category: .interruption)
+                // d6q.8: gate on interruptedSource (not just interruptedChannel).
+                // Safe no-op guard: if nothing was captured at .began, do nothing.
+                guard let capturedSource = self.interruptedSource else {
+                    self.log.log("Interruption ended but no captured source — safe no-op", category: .interruption)
                     self.isRidingOutInterruption = false
                     return
                 }
@@ -554,55 +671,123 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     // Just reactivate the audio session so VLC can output again.
                     self.isRidingOutInterruption = false
                     self.interruptedChannel = nil
-                    self.log.log("Short interruption ended — reactivating audio session for \"\(channel.name)\"", category: .interruption)
+                    self.interruptedSource = nil
+                    self.interruptedQueueAPI = nil
+                    self.interruptedElapsedSeconds = nil
 
-                    // Delay to let the audio route settle (CarPlay route transitions
-                    // need time to switch back from phone/Siri to media output).
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        let session = AVAudioSession.sharedInstance()
-                        // Cycle through deactivate to clear the stale route
-                        // that the interruption left behind, then go through
-                        // assertSessionOwnership for the activate side — that
-                        // helper also restarts AVAudioEngine, which iOS will
-                        // have stopped when the session went inactive.
-                        do {
-                            try session.setActive(false, options: .notifyOthersOnDeactivation)
-                            self.log.log("Short interruption: session deactivated to clear stale route", category: .audioSession)
-                        } catch {
-                            self.log.log("Short interruption: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
+                    switch capturedSource {
+                    case .radio(let channel):
+                        self.log.log("Short interruption ended — reactivating audio session for radio \"\(channel.name)\"", category: .interruption)
+                        // Delay to let the audio route settle (CarPlay route transitions
+                        // need time to switch back from phone/Siri to media output).
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            let session = AVAudioSession.sharedInstance()
+                            // Cycle through deactivate to clear the stale route
+                            // that the interruption left behind, then go through
+                            // assertSessionOwnership for the activate side — that
+                            // helper also restarts AVAudioEngine, which iOS will
+                            // have stopped when the session went inactive.
+                            do {
+                                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                                self.log.log("Short interruption: session deactivated to clear stale route", category: .audioSession)
+                            } catch {
+                                self.log.log("Short interruption: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
+                            }
+                            self.assertSessionOwnership(context: "short interruption")
+
+                            // Check if VLC survived the interruption
+                            let vlcAlive = self.isActiveSession && (self.mediaPlayer.isPlaying || self.mediaPlayer.state == .buffering || self.mediaPlayer.state == .opening)
+                            self.log.log("VLC post-interruption: alive=\(vlcAlive), state=\(self.vlcStateName(self.mediaPlayer.state)), isPlaying=\(self.mediaPlayer.isPlaying)", category: .interruption)
+
+                            if vlcAlive {
+                                // VLC is fine — nothing else to do, audio resumes from cache
+                                self.log.log("VLC survived interruption — seamless resume", category: .interruption)
+                            } else {
+                                // VLC died during the interruption — cold restart
+                                self.log.log("VLC died during interruption — cold restarting \"\(channel.name)\"", category: .interruption)
+                                self.play(channel: channel, userInitiated: false)
+                            }
+
+                            // Diagnostic: watch the session for a few seconds after
+                            // we resume.  If a phone call is still active, it should
+                            // reclaim audio here — the window the original log never
+                            // captured.  Instrumentation only (beads_mobilemusic-lfn).
+                            self.probePostResumeAudio(context: "short-interruption", channel: channel)
                         }
-                        self.assertSessionOwnership(context: "short interruption")
 
-                        // Check if VLC survived the interruption
-                        let vlcAlive = self.isActiveSession && (self.mediaPlayer.isPlaying || self.mediaPlayer.state == .buffering || self.mediaPlayer.state == .opening)
-                        self.log.log("VLC post-interruption: alive=\(vlcAlive), state=\(self.vlcStateName(self.mediaPlayer.state)), isPlaying=\(self.mediaPlayer.isPlaying)", category: .interruption)
+                    case .library(let queue, let index):
+                        self.log.log("Short interruption ended — reactivating audio session for library track index=\(index)", category: .interruption)
+                        // Library short interruption: same session reactivation as radio,
+                        // then check if VLC survived.  If not, cold-restart the track.
+                        let savedAPI = self.interruptedQueueAPI ?? self.queueAPI
+                        let savedElapsed = self.interruptedElapsedSeconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            let session = AVAudioSession.sharedInstance()
+                            do {
+                                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                                self.log.log("Short interruption (library): session deactivated to clear stale route", category: .audioSession)
+                            } catch {
+                                self.log.log("Short interruption (library): session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
+                            }
+                            self.assertSessionOwnership(context: "short interruption library")
 
-                        if vlcAlive {
-                            // VLC is fine — nothing else to do, audio resumes from cache
-                            self.log.log("VLC survived interruption — seamless resume", category: .interruption)
-                        } else {
-                            // VLC died during the interruption — cold restart
-                            self.log.log("VLC died during interruption — cold restarting \"\(channel.name)\"", category: .interruption)
-                            self.play(channel: channel, userInitiated: false)
+                            let vlcAlive = self.isActiveSession && (self.mediaPlayer.isPlaying || self.mediaPlayer.state == .buffering || self.mediaPlayer.state == .opening)
+                            self.log.log("VLC post-interruption (library): alive=\(vlcAlive), state=\(self.vlcStateName(self.mediaPlayer.state)), isPlaying=\(self.mediaPlayer.isPlaying)", category: .interruption)
+
+                            if vlcAlive {
+                                self.log.log("VLC survived library interruption — seamless resume at index=\(index)", category: .interruption)
+                            } else {
+                                self.log.log("VLC died during library interruption — cold restarting track at index=\(index)", category: .interruption)
+                                guard let api = savedAPI, index < queue.count else {
+                                    self.log.log("Library interruption resume: missing API or index out of bounds — safe no-op", category: .interruption)
+                                    return
+                                }
+                                self.startLibraryTrack(queue[index], inQueue: queue, at: index, via: api)
+                                // Seek to saved position after a brief delay for VLC to buffer.
+                                if let elapsed = savedElapsed, elapsed > 0 {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                        let ms = Int32(exactly: max(0, elapsed * 1000).rounded()) ?? Int32(max(0, elapsed * 1000))
+                                        self.mediaPlayer.time = VLCTime(int: ms)
+                                        self.log.log("Library interruption resume: seeked to \(String(format: "%.1f", elapsed))s", category: .interruption)
+                                    }
+                                }
+                            }
                         }
-
-                        // Diagnostic: watch the session for a few seconds after
-                        // we resume.  If a phone call is still active, it should
-                        // reclaim audio here — the window the original log never
-                        // captured.  Instrumentation only (beads_mobilemusic-lfn).
-                        self.probePostResumeAudio(context: "short-interruption", channel: channel)
                     }
+
                 } else {
-                    // Long interruption — fallback already stopped VLC and started capture.
-                    // Use the existing time-shift buffer path.
+                    // Long interruption — fallback already stopped VLC (and started
+                    // time-shift capture for radio).  Dispatch on source type.
                     self.interruptedChannel = nil
+                    self.interruptedSource = nil
+                    self.interruptedQueueAPI = nil
+                    self.interruptedElapsedSeconds = nil
 
-                    let bufferFileURL = self.timeShiftBuffer.stopCapture()
-                    self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+                    switch capturedSource {
+                    case .radio(let channel):
+                        // Existing time-shift buffer path — unchanged.
+                        let bufferFileURL = self.timeShiftBuffer.stopCapture()
+                        self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+                        self.log.log("Scheduling 500ms delayed restart for radio \"\(channel.name)\"", category: .interruption)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
+                        }
 
-                    self.log.log("Scheduling 500ms delayed restart for \"\(channel.name)\"", category: .interruption)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
+                    case .library(let queue, let index):
+                        // d6q.8: library long interruption — VLC was stopped by
+                        // the fallback; no time-shift buffer is involved.
+                        // Restart the track at the captured index and seek to
+                        // the saved position.
+                        let savedAPI = self.interruptedQueueAPI
+                        let savedElapsed = self.interruptedElapsedSeconds
+                        self.log.log("Scheduling 500ms delayed restart for library track index=\(index)", category: .interruption)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            guard let api = savedAPI, index < queue.count else {
+                                self.log.log("Library long-interruption resume: missing API or index OOB — safe no-op", category: .interruption)
+                                return
+                            }
+                            self.reactivateAndPlayLibraryTrack(queue[index], inQueue: queue, at: index, via: api, seekTo: savedElapsed)
+                        }
                     }
                 }
 
@@ -767,6 +952,75 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
 
+    // MARK: - Interruption capture/restore helpers (d6q.8)
+
+    /// Snapshot of the player state at interruption .began.
+    /// Extracted into a named struct so unit tests can exercise the
+    /// capture logic without instantiating a live audio session.
+    struct InterruptionSnapshot {
+        let source: PlaybackSource
+        /// NavidromeAPI retained for library-track URL construction.
+        /// Nil for radio sources.
+        let queueAPI: NavidromeAPI?
+        /// VLC elapsed position at capture (seconds ≥ 0), nil if unknown.
+        let elapsedSeconds: Double?
+    }
+
+    /// Captures the current playback state into an `InterruptionSnapshot`.
+    ///
+    /// Called at AVAudioSession interruption `.began` to record what should
+    /// be restored when the interruption ends.  Returns `nil` if nothing is
+    /// playing (safe no-op guard).
+    ///
+    /// This method is `internal` (not `private`) so unit tests can call it
+    /// directly and assert snapshot contents.
+    func captureInterruptionSnapshot() -> InterruptionSnapshot? {
+        guard let source = playbackSource else { return nil }
+        // VLC elapsed: intValue is -1 when unknown; clamp to nil.
+        let vlcMs = mediaPlayer.time.intValue
+        let elapsed: Double? = vlcMs > 0 ? Double(vlcMs) / 1000.0 : nil
+        // queueAPI is only meaningful for library sources.
+        let api: NavidromeAPI? = {
+            if case .library = source { return queueAPI }
+            return nil
+        }()
+        return InterruptionSnapshot(source: source, queueAPI: api, elapsedSeconds: elapsed)
+    }
+
+    /// Reactivates the audio session and cold-restarts a library track, then
+    /// seeks to `elapsedSeconds` (if available and > 0) after a brief buffer
+    /// delay.
+    ///
+    /// Mirrors `reactivateAndPlay(channel:bufferFileURL:)` for the library path.
+    private func reactivateAndPlayLibraryTrack(
+        _ track: Track,
+        inQueue queue: [Track],
+        at index: Int,
+        via api: NavidromeAPI,
+        seekTo elapsedSeconds: Double?
+    ) {
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+            log.log("reactivateAndPlayLibraryTrack: session deactivated to clear stale route", category: .audioSession)
+        } catch {
+            log.log("reactivateAndPlayLibraryTrack: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
+        }
+        assertSessionOwnership(context: "reactivateAndPlayLibraryTrack")
+        startLibraryTrack(track, inQueue: queue, at: index, via: api)
+        // Seek to saved position after VLC has had time to buffer.
+        // A 1-second delay is heuristic; VLC needs to parse the media
+        // before time-setting is honoured.
+        if let elapsed = elapsedSeconds, elapsed > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                let ms = Int32(exactly: max(0, elapsed * 1000).rounded()) ?? Int32(max(0, elapsed * 1000))
+                self.mediaPlayer.time = VLCTime(int: ms)
+                self.log.log("Library interruption resume: seeked to \(String(format: "%.1f", elapsed))s after restart", category: .interruption)
+            }
+        }
+    }
+
     // MARK: - Playback
 
     /// - Parameter userInitiated: `true` for an explicit user action (channel
@@ -809,6 +1063,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         streamProbeTask = nil
         probeStartTime = nil
         interruptedChannel = nil
+        interruptedSource = nil        // d6q.8
+        interruptedQueueAPI = nil      // d6q.8
+        interruptedElapsedSeconds = nil // d6q.8
         isRidingOutInterruption = false
         interruptionFallbackWorkItem?.cancel()
         interruptionFallbackWorkItem = nil
@@ -1379,6 +1636,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         streamProbeTask = nil
         probeStartTime = nil
         interruptedChannel = nil
+        interruptedSource = nil        // d6q.8
+        interruptedQueueAPI = nil      // d6q.8
+        interruptedElapsedSeconds = nil // d6q.8
         isRidingOutInterruption = false
         interruptionFallbackWorkItem?.cancel()
         interruptionFallbackWorkItem = nil
@@ -1700,6 +1960,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("Clearing stale interruption state before stream start", category: .audioSession)
             isRidingOutInterruption = false
             interruptedChannel = nil
+            interruptedSource = nil        // d6q.8
+            interruptedQueueAPI = nil      // d6q.8
+            interruptedElapsedSeconds = nil // d6q.8
             interruptionFallbackWorkItem?.cancel()
             interruptionFallbackWorkItem = nil
         }
@@ -2008,6 +2271,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         interruptionFallbackWorkItem?.cancel()
         interruptionFallbackWorkItem = nil
         interruptedChannel = nil
+        interruptedSource = nil        // d6q.8
+        interruptedQueueAPI = nil      // d6q.8
+        interruptedElapsedSeconds = nil // d6q.8
         interruptionTime = nil
         timeShiftBuffer.cancelAndCleanup()
 
@@ -2034,6 +2300,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         pendingPlayWorkItem?.cancel()
         pendingPlayWorkItem = nil
         interruptedChannel = nil
+        interruptedSource = nil        // d6q.8
+        interruptedQueueAPI = nil      // d6q.8
+        interruptedElapsedSeconds = nil // d6q.8
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
 
@@ -2099,6 +2368,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     public func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         interruptedChannel = nil
+        interruptedSource = nil        // d6q.8
+        interruptedQueueAPI = nil      // d6q.8
+        interruptedElapsedSeconds = nil // d6q.8
         isRidingOutInterruption = false
         interruptionFallbackWorkItem?.cancel()
         interruptionFallbackWorkItem = nil
@@ -2172,15 +2444,20 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// explicitly ends a session (e.g. CarPlay disconnect).
     public func stopAndClearInterruption() {
         interruptedChannel = nil
+        interruptedSource = nil        // d6q.8
+        interruptedQueueAPI = nil      // d6q.8
+        interruptedElapsedSeconds = nil // d6q.8
         interruptionTime = nil
         stop()
     }
 
     public func stop() {
         log.log("stop() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
-        // Note: do NOT clear interruptedChannel here — stop() is called
-        // by the interruption handler after saving the channel to resume.
-        // Only pause() and play() should clear it (explicit user actions).
+        // Note: do NOT clear interruptedChannel / interruptedSource here —
+        // stop() is called by the interruption handler after saving the source
+        // to resume.  Only pause() and play() should clear them (explicit user
+        // actions).  The d6q.8 fields (interruptedSource, interruptedQueueAPI,
+        // interruptedElapsedSeconds) follow the same rule.
         isRidingOutInterruption = false
         interruptionFallbackWorkItem?.cancel()
         interruptionFallbackWorkItem = nil
