@@ -934,8 +934,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Note: sxmService is radio-specific; not notified for library tracks.
 
         // Fetch cover art asynchronously; update now-playing when it arrives.
-        if let coverArtID = track.coverArt, let artURL = api.coverArtURL(id: coverArtID, size: 300) {
-            fetchTrackArtwork(url: artURL, trackID: track.id)
+        // 0xy.2: use stable-key cache path so per-request auth salts don't bust
+        // the cache. fetchTrackArtwork was previously keyed by the authed URL
+        // (which changes every call); now converged onto ImageCacheService's
+        // coverArtImage(stableKey:fetchURL:) via NavidromeAPI.fetchCoverArtImage.
+        if let coverArtID = track.coverArt {
+            fetchTrackArtwork(coverArtID: coverArtID, size: 300, via: api, trackID: track.id)
         }
 
         startTrackStream(url: streamURL)
@@ -997,9 +1001,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
 
-    private func fetchTrackArtwork(url: URL, trackID: String) {
+    /// Fetches track artwork through ImageCacheService using the stable cover-art
+    /// key (host + coverArtID + size), so per-request auth salts do not bust the
+    /// cache.  Replaces the previous URL-keyed `ephemeralImage(for:)` call.
+    private func fetchTrackArtwork(coverArtID: String, size: Int, via api: NavidromeAPI, trackID: String) {
         Task {
-            guard let image = await ImageCacheService.shared.ephemeralImage(for: url) else { return }
+            guard let image = await api.fetchCoverArtImage(id: coverArtID, size: size) else { return }
             guard self.currentTrack?.id == trackID else { return }
             self.currentTrackArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             self.updateNowPlayingInfoForTrack()

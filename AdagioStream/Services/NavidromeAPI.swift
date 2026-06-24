@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Navidrome / Subsonic REST API client skeleton.
 ///
@@ -298,6 +301,35 @@ public struct NavidromeAPI {
         if let size { params["size"] = String(size) }
         return buildURL(endpoint: "getCoverArt", params: params)
     }
+
+    // MARK: - Cover-art cache fetch (0xy.2)
+
+    /// Fetches a cover-art image through `ImageCacheService` using a stable
+    /// cache key, bypassing the per-request auth-salt cache-busting problem.
+    ///
+    /// Subsonic auth includes a random salt in every URL, so two calls to
+    /// `coverArtURL(id:size:)` for the same artwork produce different URLs.
+    /// Keying the cache by those URLs would miss on every render.  Instead this
+    /// method derives a stable key from the server host, cover-art ID, and size,
+    /// then uses that key for all cache lookups.  Only on a miss is an authed
+    /// URL built and used for the network fetch.
+    ///
+    /// - Parameters:
+    ///   - id: The Subsonic cover-art identifier.
+    ///   - size: Optional thumbnail pixel size.
+    /// - Returns: A `UIImage` from the cache or network, or `nil` on failure.
+    #if canImport(UIKit)
+    public func fetchCoverArtImage(id: String, size: Int? = nil) async -> UIImage? {
+        let hostString = host.absoluteString
+        let stableKey = ImageCacheService.coverArtCacheKey(
+            host: hostString,
+            coverArtID: id,
+            size: size
+        )
+        guard let fetchURL = coverArtURL(id: id, size: size) else { return nil }
+        return await ImageCacheService.shared.coverArtImage(stableKey: stableKey, fetchURL: fetchURL)
+    }
+    #endif
 
     /// Fetches songs by genre from `getSongsByGenre.view`.
     ///

@@ -80,6 +80,7 @@
 		698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */; };
 		6AEDCD88BA06E999C0BC2D30 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */; };
 		6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B258B0EF620197CC9833E0 /* ChannelListView.swift */; };
+		6C0B44C5423E755FA74385E5 /* SubsonicCoverArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C352A665488155F33D02341 /* SubsonicCoverArt.swift */; };
 		6CABC39D02DBF5872AB91F75 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32076461D1698393DE4F46B /* AppSettings.swift */; };
 		6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */; };
 		6E1002B73E53AD77F5B7ED25 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
@@ -137,6 +138,7 @@
 		BF0BA9D2C186EE0CB94C6A5B /* ESPNModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB6CC077DE7865648EC949C /* ESPNModels.swift */; };
 		BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */; };
 		C0814BA417A9237B8348F95F /* EPGView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */; };
+		C0E7776D7FC720F1A7830948 /* SubsonicCoverArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C352A665488155F33D02341 /* SubsonicCoverArt.swift */; };
 		C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D317808303BD060CB0340505 /* DataExportService.swift */; };
 		C2B54041F3BEB8534F71011A /* DataDeletionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */; };
 		C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */; };
@@ -161,6 +163,7 @@
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
 		E6770E028819F7C202725955 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
+		EB47F7DCB341A894170BDD66 /* ImageCacheServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 985EB398F70876CEEC467643 /* ImageCacheServiceTests.swift */; };
 		ECDD62C8BAF9CFD1ECB0867C /* DebugLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 765A8A0DEFED7A8EB256D991 /* DebugLogger.swift */; };
 		F032F791F857172966EDBD77 /* CustomPlaylist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EF95CAE631C108797282E82 /* CustomPlaylist.swift */; };
 		F0B15617AD537B8D9973782A /* NavidromeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB864F08076A1C5C5CFA8F5 /* NavidromeStore.swift */; };
@@ -273,6 +276,7 @@
 		7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeAPI.swift; sourceTree = "<group>"; };
 		818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsManager.swift; sourceTree = "<group>"; };
 		820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistManager.swift; sourceTree = "<group>"; };
+		8C352A665488155F33D02341 /* SubsonicCoverArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsonicCoverArt.swift; sourceTree = "<group>"; };
 		8C93442E1C179CA8C65AE6D8 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		8FB864F08076A1C5C5CFA8F5 /* NavidromeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeStore.swift; sourceTree = "<group>"; };
 		90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSourceTests.swift; sourceTree = "<group>"; };
@@ -280,6 +284,7 @@
 		93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsView.swift; sourceTree = "<group>"; };
 		9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesViewModel.swift; sourceTree = "<group>"; };
 		9593372A158F40D59BB914AC /* LicensesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicensesView.swift; sourceTree = "<group>"; };
+		985EB398F70876CEEC467643 /* ImageCacheServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageCacheServiceTests.swift; sourceTree = "<group>"; };
 		99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntryTests.swift; sourceTree = "<group>"; };
 		9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
 		9B7473223A3E7D4A8A7C63A3 /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
@@ -384,6 +389,7 @@
 				654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */,
 				275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */,
 				A1CF4778448EC75225E98912 /* EPGParserTests.swift */,
+				985EB398F70876CEEC467643 /* ImageCacheServiceTests.swift */,
 				D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */,
 				1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */,
 				F02043870B8775DF9E809C5C /* NavidromeAPITests.swift */,
@@ -615,6 +621,7 @@
 				B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */,
 				4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */,
 				7DD913E9A26B3322688E877D /* ShareSheet.swift */,
+				8C352A665488155F33D02341 /* SubsonicCoverArt.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -919,6 +926,7 @@
 				B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */,
 				64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */,
 				E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */,
+				EB47F7DCB341A894170BDD66 /* ImageCacheServiceTests.swift in Sources */,
 				BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */,
 				9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */,
 				5125632E411DA909494556AB /* NavidromeAPITests.swift in Sources */,
@@ -1017,6 +1025,7 @@
 				75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */,
 				FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */,
 				FEAA16B8A3ABF58137633631 /* SubsonicAuth.swift in Sources */,
+				C0E7776D7FC720F1A7830948 /* SubsonicCoverArt.swift in Sources */,
 				F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */,
 				8F65506BDA72BC28D1162110 /* VLCAudioCallbackBridge.m in Sources */,
 				931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */,
@@ -1081,6 +1090,7 @@
 				6E1002B73E53AD77F5B7ED25 /* SettingsViewModel.swift in Sources */,
 				2EE1DEE0837F88B97D9BE1A5 /* ShareSheet.swift in Sources */,
 				00839B13F7A96D6BBF96DF26 /* SubsonicAuth.swift in Sources */,
+				6C0B44C5423E755FA74385E5 /* SubsonicCoverArt.swift in Sources */,
 				317E2E1B94776EC672A84A01 /* TimeShiftBufferService.swift in Sources */,
 				9623E67CA7985B8FA11275FB /* VLCAudioCallbackBridge.m in Sources */,
 				4BD65EC8F28664E6BE808F1C /* XtreamCodesAPI.swift in Sources */,
