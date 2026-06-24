@@ -114,6 +114,7 @@
 		822CBD96D23302FB5AF7A3F8 /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
 		83F5A7C11D47B4C14E3F6927 /* PinnedURLSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411FC365142BB95B070F2EEA /* PinnedURLSession.swift */; };
 		840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
+		8432DCB7AEC1149AD0CE3B16 /* CarPlayMusicBrowseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */; };
 		852CBCEA973A3313D827AA98 /* PlaybackSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81245276C98A5709B721113 /* PlaybackSource.swift */; };
 		877C934280C4239CFAEB9AE7 /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		887D128D10404952F62F291A /* SavedSongRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */; };
@@ -288,6 +289,7 @@
 		5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UExporter.swift; sourceTree = "<group>"; };
 		5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDeletionService.swift; sourceTree = "<group>"; };
 		5D4EB311F106E7633D4C135D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayMusicBrowseTests.swift; sourceTree = "<group>"; };
 		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
 		63DAC15D313E0DBD1A3DA2D3 /* SettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTabView.swift; sourceTree = "<group>"; };
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
@@ -635,6 +637,7 @@
 		9E85522650FFA4CE86645183 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */,
 				2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */,
 			);
 			path = Utilities;
@@ -1016,6 +1019,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */,
+				8432DCB7AEC1149AD0CE3B16 /* CarPlayMusicBrowseTests.swift in Sources */,
 				C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */,
 				02D5AF11F671CAFAD103B89E /* DownloadManagerTests.swift in Sources */,
 				B4352E12C839218FF584655F /* EPGEntryTests.swift in Sources */,

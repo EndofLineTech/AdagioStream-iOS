@@ -352,6 +352,11 @@ class CarPlayTemplateManager {
             items.append(item)
         }
 
+        // Music library entry — only when a Subsonic provider is configured.
+        if providerManager.subsonicAPI != nil {
+            items.append(makeMusicRootItem())
+        }
+
         if items.isEmpty {
             let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
             placeholder.handler = { _, completion in completion() }
@@ -588,5 +593,317 @@ class CarPlayTemplateManager {
 
         let template = CPListTemplate(title: title, sections: sections)
         interfaceController.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    // MARK: - Music Library Browse (8rg.1)
+
+    /// Adds a "Music" entry to the root item list when a Subsonic provider is configured.
+    /// Called from `buildRootSections()` only when `providerManager.subsonicAPI != nil`.
+    private func makeMusicRootItem() -> CPListItem {
+        let item = CPListItem(text: "Music", detailText: "Navidrome library")
+        item.accessoryType = .disclosureIndicator
+        item.handler = { [weak self] _, completion in
+            self?.pushMusicBrowse()
+            completion()
+        }
+        return item
+    }
+
+    /// Pushes the Music browse template: a single CPListTemplate with three
+    /// sections (Artists / Albums / Playlists) so we don't consume an extra
+    /// level of template-stack depth for a bare category menu.
+    ///
+    /// Depth budget:
+    ///   Root (1) → Music (2) → Artist/Album/Playlist list (3)
+    ///   → Album tracks (4) → tap = play + NowPlaying singleton (5)
+    ///   Total push depth ≤ 5 (CarPlay limit).
+    private func pushMusicBrowse() {
+        guard let api = providerManager.subsonicAPI else { return }
+        log.log("Music: pushMusicBrowse", category: .carplay)
+
+        // Build a loading placeholder — sections will be updated once async fetches return.
+        let loadingItem = CPListItem(text: "Loading…", detailText: nil)
+        loadingItem.handler = { _, completion in completion() }
+        let loadingSection = CPListSection(items: [loadingItem])
+        let template = CPListTemplate(title: "Music", sections: [loadingSection])
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            async let artistsResult   = self.fetchArtistItems(api: api)
+            async let albumsResult    = self.fetchAlbumItems(api: api)
+            async let playlistsResult = self.fetchPlaylistItems(api: api)
+
+            let (artistItems, albumItems, playlistItems) = await (artistsResult, albumsResult, playlistsResult)
+
+            var sections: [CPListSection] = []
+            if !artistItems.isEmpty {
+                sections.append(CPListSection(items: artistItems, header: "Artists", sectionIndexTitle: nil))
+            }
+            if !albumItems.isEmpty {
+                sections.append(CPListSection(items: albumItems, header: "Albums", sectionIndexTitle: nil))
+            }
+            if !playlistItems.isEmpty {
+                sections.append(CPListSection(items: playlistItems, header: "Playlists", sectionIndexTitle: nil))
+            }
+            if sections.isEmpty {
+                let empty = CPListItem(text: "No music found", detailText: "Add music to your Navidrome library")
+                empty.handler = { _, c in c() }
+                sections = [CPListSection(items: [empty])]
+            }
+            template.updateSections(sections)
+        }
+    }
+
+    // MARK: Artists
+
+    private func fetchArtistItems(api: NavidromeAPI) async -> [CPListItem] {
+        do {
+            let artists = try await api.getArtists()
+            return artists.map { artist in
+                let detail = artist.albumCount > 0 ? "\(artist.albumCount) albums" : nil
+                let item = CPListItem(text: artist.name, detailText: detail)
+                item.accessoryType = .disclosureIndicator
+                item.handler = { [weak self] _, completion in
+                    self?.pushArtistAlbums(artist: artist, api: api)
+                    completion()
+                }
+                if let coverArtID = artist.coverArt {
+                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                } else {
+                    item.setImage(musicNoteImage())
+                }
+                return item
+            }
+        } catch {
+            log.log("Music: getArtists failed — \(error)", category: .carplay)
+            return []
+        }
+    }
+
+    // MARK: Albums (top-level: newest 50)
+
+    private func fetchAlbumItems(api: NavidromeAPI) async -> [CPListItem] {
+        do {
+            let albums = try await api.getAlbumList2(type: .newest, size: 50)
+            return albums.map { album in
+                let item = CPListItem(text: album.title, detailText: nil)
+                item.accessoryType = .disclosureIndicator
+                item.handler = { [weak self] _, completion in
+                    self?.pushAlbumTracks(album: album, artistName: nil, api: api)
+                    completion()
+                }
+                if let coverArtID = album.coverArt {
+                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                } else {
+                    item.setImage(musicNoteImage())
+                }
+                return item
+            }
+        } catch {
+            log.log("Music: getAlbumList2 failed — \(error)", category: .carplay)
+            return []
+        }
+    }
+
+    // MARK: Playlists
+
+    private func fetchPlaylistItems(api: NavidromeAPI) async -> [CPListItem] {
+        do {
+            let playlists = try await api.getPlaylists()
+            return playlists.map { playlist in
+                let detail = playlist.songCount > 0 ? "\(playlist.songCount) tracks" : nil
+                let item = CPListItem(text: playlist.name, detailText: detail)
+                item.accessoryType = .disclosureIndicator
+                item.handler = { [weak self] _, completion in
+                    self?.pushPlaylistTracks(playlist: playlist, api: api)
+                    completion()
+                }
+                if let coverArtID = playlist.coverArt {
+                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                } else {
+                    item.setImage(musicNoteImage())
+                }
+                return item
+            }
+        } catch {
+            log.log("Music: getPlaylists failed — \(error)", category: .carplay)
+            return []
+        }
+    }
+
+    // MARK: Artist → Albums
+
+    private func pushArtistAlbums(artist: Artist, api: NavidromeAPI) {
+        log.log("Music: pushArtistAlbums artist=\"\(artist.name)\"", category: .carplay)
+
+        let loadingItem = CPListItem(text: "Loading…", detailText: nil)
+        loadingItem.handler = { _, completion in completion() }
+        let template = CPListTemplate(title: artist.name, sections: [CPListSection(items: [loadingItem])])
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let (_, albums) = try await api.getArtist(id: artist.id)
+                let items = albums.map { album in
+                    let detail = album.year.map { String($0) }
+                    let item = CPListItem(text: album.title, detailText: detail)
+                    item.accessoryType = .disclosureIndicator
+                    item.handler = { [weak self] _, completion in
+                        self?.pushAlbumTracks(album: album, artistName: artist.name, api: api)
+                        completion()
+                    }
+                    if let coverArtID = album.coverArt {
+                        self.loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                    } else {
+                        item.setImage(self.musicNoteImage())
+                    }
+                    return item
+                }
+                let section = CPListSection(items: items.isEmpty
+                    ? [self.emptyMusicItem("No albums")]
+                    : items)
+                template.updateSections([section])
+            } catch {
+                self.log.log("Music: getArtist failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
+        }
+    }
+
+    // MARK: Album → Tracks → play
+
+    private func pushAlbumTracks(album: Album, artistName: String?, api: NavidromeAPI) {
+        log.log("Music: pushAlbumTracks album=\"\(album.title)\"", category: .carplay)
+
+        let loadingItem = CPListItem(text: "Loading…", detailText: nil)
+        loadingItem.handler = { _, completion in completion() }
+        let template = CPListTemplate(title: album.title, sections: [CPListSection(items: [loadingItem])])
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let (_, tracks) = try await api.getAlbum(id: album.id)
+                let items = tracks.enumerated().map { (index, track) in
+                    let duration = track.duration.map { Self.formatDuration($0) }
+                    let item = CPListItem(text: track.title, detailText: duration)
+                    item.handler = { [weak self] _, completion in
+                        guard let self else { completion(); return }
+                        self.log.log("Music: play album \"\(album.title)\" track \(index) \"\(track.title)\"", category: .carplay)
+                        self.audioPlayer.setQueue(tracks, startIndex: index, displayArtistName: artistName, via: api)
+                        self.pushNowPlaying()
+                        completion()
+                    }
+                    if let coverArtID = track.coverArt {
+                        self.loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                    } else if let coverArtID = album.coverArt {
+                        self.loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                    } else {
+                        item.setImage(self.musicNoteImage())
+                    }
+                    return item
+                }
+                let section = CPListSection(items: items.isEmpty
+                    ? [self.emptyMusicItem("No tracks")]
+                    : items)
+                template.updateSections([section])
+            } catch {
+                self.log.log("Music: getAlbum failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
+        }
+    }
+
+    // MARK: Playlist → Tracks → play
+
+    private func pushPlaylistTracks(playlist: Playlist, api: NavidromeAPI) {
+        log.log("Music: pushPlaylistTracks playlist=\"\(playlist.name)\"", category: .carplay)
+
+        let loadingItem = CPListItem(text: "Loading…", detailText: nil)
+        loadingItem.handler = { _, completion in completion() }
+        let template = CPListTemplate(title: playlist.name, sections: [CPListSection(items: [loadingItem])])
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let (_, tracks) = try await api.getPlaylist(id: playlist.id)
+                let items = tracks.enumerated().map { (index, track) in
+                    let duration = track.duration.map { Self.formatDuration($0) }
+                    let item = CPListItem(text: track.title, detailText: duration)
+                    item.handler = { [weak self] _, completion in
+                        guard let self else { completion(); return }
+                        self.log.log("Music: play playlist \"\(playlist.name)\" track \(index) \"\(track.title)\"", category: .carplay)
+                        self.audioPlayer.setQueue(tracks, startIndex: index, via: api)
+                        self.pushNowPlaying()
+                        completion()
+                    }
+                    if let coverArtID = track.coverArt {
+                        self.loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                    } else {
+                        item.setImage(self.musicNoteImage())
+                    }
+                    return item
+                }
+                let section = CPListSection(items: items.isEmpty
+                    ? [self.emptyMusicItem("No tracks")]
+                    : items)
+                template.updateSections([section])
+            } catch {
+                self.log.log("Music: getPlaylist failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
+        }
+    }
+
+    // MARK: Cover Art
+
+    /// Asynchronously loads cover art via `NavidromeAPI.fetchCoverArtImage` and
+    /// sets it on the given `CPListItem` when available.  Falls back to the
+    /// music-note placeholder if the fetch fails or returns nil.
+    private func loadMusicCoverArt(id: String, api: NavidromeAPI, into item: CPListItem) {
+        let size = 40
+        Task {
+            guard let image = await api.fetchCoverArtImage(id: id, size: size) else {
+                // Placeholder already shown; nothing to update
+                return
+            }
+            let targetSize = CGSize(width: CGFloat(size), height: CGFloat(size))
+            let renderer = UIGraphicsImageRenderer(size: targetSize)
+            let scaled = renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: targetSize))
+            }
+            item.setImage(scaled)
+        }
+    }
+
+    /// A small music note SF Symbol used as a placeholder for music library items
+    /// that have no cover art ID.
+    private func musicNoteImage() -> UIImage {
+        let size = CGSize(width: 40, height: 40)
+        return renderSFSymbol("music.note", size: size)
+    }
+
+    /// A non-tappable placeholder item for empty or failed list states.
+    private func emptyMusicItem(_ text: String) -> CPListItem {
+        let item = CPListItem(text: text, detailText: nil)
+        item.handler = { _, completion in completion() }
+        return item
+    }
+
+    // MARK: Duration Formatting
+
+    /// Formats a track duration in seconds as `m:ss` or `h:mm:ss`.
+    nonisolated static func formatDuration(_ seconds: Int) -> String {
+        let h = seconds / 3600
+        let m = (seconds % 3600) / 60
+        let s = seconds % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        } else {
+            return String(format: "%d:%02d", m, s)
+        }
     }
 }
