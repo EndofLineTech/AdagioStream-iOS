@@ -239,6 +239,71 @@ public final class NavidromeStore {
     }()
 }
 
+// MARK: - Download record type
+
+/// The valid status values for a download row, matching the CHECK constraint
+/// in the v2 `downloads` migration.
+///
+/// The raw values are the exact strings stored in the database — do not
+/// change them without a corresponding schema migration.
+public enum DownloadStatus: String, Codable, CaseIterable {
+    /// Queued and waiting for an available download slot.
+    case queued
+    /// Actively being transferred from the server.
+    case downloading
+    /// Transfer suspended (e.g. user pause or connectivity loss).
+    case paused
+    /// Transfer finished; `localPath` points to the on-disk file.
+    case completed
+    /// Transfer ended with an error; `error` carries the failure message.
+    case failed
+}
+
+/// A row in the `downloads` table (v2 schema).
+///
+/// The `id` is the Navidrome track ID — there is intentionally NO foreign key
+/// to the `tracks` table so the download index survives a library-cache wipe.
+///
+/// Conforms to `FetchableRecord` and `PersistableRecord` using the default
+/// Codable synthesis.  All column names use camelCase matching the schema
+/// (GRDB maps Swift property names 1-to-1 to SQLite column names).
+public struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Equatable {
+    public static let databaseTableName = "downloads"
+
+    /// Navidrome track ID (PRIMARY KEY).
+    public var id: String
+    /// Current lifecycle status.
+    public var status: DownloadStatus
+    /// Absolute path to the on-disk file; non-nil when `status == .completed`.
+    public var localPath: String?
+    /// Bytes already received — used to store a resume position.
+    public var resumeOffset: Int
+    /// Human-readable error message; non-nil when `status == .failed`.
+    public var error: String?
+    /// Unix timestamp (seconds) when the row was first inserted.
+    public var createdAt: Int
+    /// Unix timestamp (seconds) of the last status update.
+    public var updatedAt: Int
+
+    public init(
+        id: String,
+        status: DownloadStatus,
+        localPath: String? = nil,
+        resumeOffset: Int = 0,
+        error: String? = nil,
+        createdAt: Int,
+        updatedAt: Int
+    ) {
+        self.id = id
+        self.status = status
+        self.localPath = localPath
+        self.resumeOffset = resumeOffset
+        self.error = error
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 // MARK: - Typed CRUD
 
 extension NavidromeStore {
@@ -288,6 +353,105 @@ extension NavidromeStore {
                 .filter(Column("albumId") == albumId)
                 .order(Column("discNumber"), Column("trackNumber"))
                 .fetchAll(db)
+        }
+    }
+
+    // MARK: - Download CRUD (v2 schema)
+
+    /// Upserts a `DownloadRecord` — inserts a new row or replaces an existing
+    /// row with the same `id`.
+    public func upsert(download: DownloadRecord) throws {
+        try writer.write { db in
+            try download.save(db)
+        }
+    }
+
+    /// Returns the `DownloadRecord` for the given track ID, or `nil` if not found.
+    public func download(forTrackID trackID: String) throws -> DownloadRecord? {
+        try writer.read { db in
+            try DownloadRecord.fetchOne(db, key: trackID)
+        }
+    }
+
+    /// Returns all download rows, ordered by creation time ascending.
+    public func allDownloads() throws -> [DownloadRecord] {
+        try writer.read { db in
+            try DownloadRecord
+                .order(Column("createdAt"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Returns all download rows matching the given status, ordered by creation
+    /// time ascending.
+    public func downloads(withStatus status: DownloadStatus) throws -> [DownloadRecord] {
+        try writer.read { db in
+            try DownloadRecord
+                .filter(Column("status") == status.rawValue)
+                .order(Column("createdAt"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Updates the status (and optionally localPath, error, resumeOffset) of an
+    /// existing download row.  The `updatedAt` timestamp is always set to the
+    /// current Unix epoch seconds.
+    ///
+    /// If no row exists for `trackID` this is a no-op (returns without throwing).
+    public func updateDownload(
+        trackID: String,
+        status: DownloadStatus,
+        localPath: String? = nil,
+        error: String? = nil,
+        resumeOffset: Int? = nil
+    ) throws {
+        let now = Int(Date().timeIntervalSince1970)
+        try writer.write { db in
+            guard var record = try DownloadRecord.fetchOne(db, key: trackID) else {
+                return
+            }
+            record.status = status
+            if let localPath { record.localPath = localPath }
+            if let error { record.error = error }
+            if let resumeOffset { record.resumeOffset = resumeOffset }
+            record.updatedAt = now
+            try record.save(db)
+        }
+    }
+
+    /// Deletes the download row for the given track ID.  Idempotent — missing
+    /// rows are silently ignored.
+    public func deleteDownload(forTrackID trackID: String) throws {
+        try writer.write { db in
+            _ = try DownloadRecord.deleteOne(db, key: trackID)
+        }
+    }
+
+    /// Returns the total number of bytes stored across all completed downloads,
+    /// computed from the file sizes on disk.  Rows without a `localPath` or
+    /// whose file no longer exists contribute 0.
+    public func totalDownloadedBytes() throws -> Int64 {
+        let records = try downloads(withStatus: .completed)
+        return records.reduce(Int64(0)) { total, record in
+            guard let path = record.localPath else { return total }
+            let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+            let size = attrs?[.size] as? Int64 ?? 0
+            return total + size
+        }
+    }
+
+    /// Deletes every download row and the associated on-disk files.
+    ///
+    /// Files that fail to delete are silently ignored (the row is still removed).
+    public func deleteAllDownloads() throws {
+        let records = try allDownloads()
+        for record in records {
+            if let path = record.localPath {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+        try writer.write { db in
+            _ = try DownloadRecord.deleteAll(db)
         }
     }
 }

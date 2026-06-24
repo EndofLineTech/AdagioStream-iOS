@@ -530,6 +530,23 @@ public struct NavidromeAPI {
         return buildURL(endpoint: "getCoverArt", params: params)
     }
 
+    /// Builds a `download.view` URL for the given track ID.
+    ///
+    /// Unlike `stream.view` (which can transcode to a different format/bitrate),
+    /// `download.view` always returns the original, untranscoded file as stored
+    /// on the server.  Use this for offline downloads; use `streamURL` for
+    /// real-time playback where transcoding is acceptable.
+    ///
+    /// The URL embeds Subsonic token auth (u/t/s/c/v/f) so it can be used
+    /// directly in a `URLSession` download task without additional headers.
+    ///
+    /// - Parameter trackID: The Subsonic/Navidrome track identifier.
+    /// - Returns: A fully-formed URL ready for a download task, or `nil` if the
+    ///   host URL is malformed.
+    public func downloadURL(trackID: String) -> URL? {
+        buildURL(endpoint: "download", params: ["id": trackID])
+    }
+
     // MARK: - Cover-art cache fetch (0xy.2)
 
     /// Fetches a cover-art image through `ImageCacheService` using a stable
