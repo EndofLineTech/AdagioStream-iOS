@@ -353,6 +353,79 @@ public struct NavidromeAPI {
         return payload.songsByGenre.song.map { $0.toRecord(updatedAt: now) }
     }
 
+    // MARK: - Search
+
+    /// Result of a `search3` call — artists, albums, and songs that match the query.
+    public struct SearchResults {
+        public let artists: [Artist]
+        public let albums: [Album]
+        public let songs: [Track]
+
+        public init(artists: [Artist], albums: [Album], songs: [Track]) {
+            self.artists = artists
+            self.albums = albums
+            self.songs = songs
+        }
+
+        /// Convenience empty result — all three arrays are empty.
+        public static let empty = SearchResults(artists: [], albums: [], songs: [])
+    }
+
+    /// Searches the library via `search3.view`.
+    ///
+    /// Returns artists, albums, and songs whose names contain `query`.
+    ///
+    /// Blank-query behaviour: a nil, empty, or whitespace-only query returns
+    /// `SearchResults.empty` immediately without making a network call.  The
+    /// UI is expected to debounce, but this provides a defensive safety net.
+    ///
+    /// Subsonic quirk: when a category has no matches the corresponding array
+    /// key is absent from the response entirely.  Each array is decoded as
+    /// optional and defaults to `[]`, so all-empty results do not throw.
+    ///
+    /// - Parameters:
+    ///   - query: Search string.
+    ///   - artistCount: Maximum number of artist results (default: 20).
+    ///   - albumCount: Maximum number of album results (default: 20).
+    ///   - songCount: Maximum number of song results (default: 20).
+    ///   - artistOffset: Offset into artist results for pagination (default: 0).
+    ///   - albumOffset: Offset into album results for pagination (default: 0).
+    ///   - songOffset: Offset into song results for pagination (default: 0).
+    /// - Returns: A `SearchResults` value containing matched artists, albums, and songs.
+    /// - Throws: `APIError` on network or server errors.
+    public func search3(
+        query: String,
+        artistCount: Int = 20,
+        albumCount: Int = 20,
+        songCount: Int = 20,
+        artistOffset: Int = 0,
+        albumOffset: Int = 0,
+        songOffset: Int = 0
+    ) async throws -> SearchResults {
+        // Blank-query short-circuit: return empty without hitting the network.
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .empty
+        }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = [
+            "query":        query,
+            "artistCount":  String(artistCount),
+            "albumCount":   String(albumCount),
+            "songCount":    String(songCount),
+            "artistOffset": String(artistOffset),
+            "albumOffset":  String(albumOffset),
+            "songOffset":   String(songOffset),
+        ]
+        let payload = try await fetch("search3", params: params, as: Search3Payload.self)
+        let result = payload.searchResult3
+        return SearchResults(
+            artists: result.artist.map { $0.toRecord(updatedAt: now) },
+            albums:  result.album.map  { $0.toRecord(updatedAt: now) },
+            songs:   result.song.map   { $0.toRecord(updatedAt: now) }
+        )
+    }
+
     // MARK: - AlbumListType enum
 
     /// Ordering/filter modes for `getAlbumList2`.
@@ -477,6 +550,26 @@ public struct NavidromeAPI {
             }
 
             enum CodingKeys: String, CodingKey { case genre }
+        }
+    }
+
+    // search3
+    private struct Search3Payload: Decodable {
+        let searchResult3: SearchResult3Wrapper
+
+        struct SearchResult3Wrapper: Decodable {
+            let artist: [SubsonicArtistDTO]
+            let album: [SubsonicAlbumDTO]
+            let song: [SubsonicTrackDTO]
+
+            init(from decoder: Decoder) throws {
+                let c  = try decoder.container(keyedBy: CodingKeys.self)
+                artist = (try? c.decode([SubsonicArtistDTO].self, forKey: .artist)) ?? []
+                album  = (try? c.decode([SubsonicAlbumDTO].self,  forKey: .album))  ?? []
+                song   = (try? c.decode([SubsonicTrackDTO].self,  forKey: .song))   ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case artist, album, song }
         }
     }
 
