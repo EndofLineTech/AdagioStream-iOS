@@ -81,4 +81,74 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertEqual(ProviderManager.stripStreamIDPrefix("CNN HD"), "CNN HD")
         XCTAssertEqual(ProviderManager.stripStreamIDPrefix("999| ESPN"), "ESPN")
     }
+
+    // MARK: - Subsonic Codec Tests
+
+    func testMixedProviderArrayRoundTrip() throws {
+        // Encode a mixed array containing all three ProviderType cases, then
+        // decode it and verify every case round-trips intact with correct
+        // associated values.
+        let subsonicHost = URL(string: "https://music.example.com")!
+        let m3uURL = URL(string: "https://example.com/list.m3u")!
+        let xcHost = URL(string: "https://xc.example.com")!
+
+        let providers: [Provider] = [
+            Provider(
+                name: "M3U Source",
+                type: .m3u(url: m3uURL, epgURL: nil)
+            ),
+            Provider(
+                name: "Xtream Source",
+                type: .xtreamCodes(host: xcHost, username: "xcuser", password: "xcpass")
+            ),
+            Provider(
+                name: "Subsonic Source",
+                type: .subsonic(host: subsonicHost, username: "subuser", password: "subpass")
+            ),
+        ]
+
+        let data = try JSONEncoder().encode(providers)
+        let decoded = try JSONDecoder().decode([Provider].self, from: data)
+
+        XCTAssertEqual(decoded.count, 3)
+
+        // M3U case
+        XCTAssertEqual(decoded[0].name, "M3U Source")
+        guard case .m3u(let decodedM3UURL, _) = decoded[0].type else {
+            return XCTFail("Expected .m3u for decoded[0]")
+        }
+        XCTAssertEqual(decodedM3UURL, m3uURL)
+
+        // Xtream Codes case
+        XCTAssertEqual(decoded[1].name, "Xtream Source")
+        guard case .xtreamCodes(let decodedXCHost, let decodedXCUser, let decodedXCPass) = decoded[1].type else {
+            return XCTFail("Expected .xtreamCodes for decoded[1]")
+        }
+        XCTAssertEqual(decodedXCHost, xcHost)
+        XCTAssertEqual(decodedXCUser, "xcuser")
+        XCTAssertEqual(decodedXCPass, "xcpass")
+
+        // Subsonic case
+        XCTAssertEqual(decoded[2].name, "Subsonic Source")
+        guard case .subsonic(let decodedSubHost, let decodedSubUser, let decodedSubPass) = decoded[2].type else {
+            return XCTFail("Expected .subsonic for decoded[2]")
+        }
+        XCTAssertEqual(decodedSubHost, subsonicHost)
+        XCTAssertEqual(decodedSubUser, "subuser")
+        XCTAssertEqual(decodedSubPass, "subpass")
+    }
+
+    func testSubsonicProviderHashable() {
+        let host = URL(string: "https://music.example.com")!
+        let a = Provider.ProviderType.subsonic(host: host, username: "u", password: "p")
+        let b = Provider.ProviderType.subsonic(host: host, username: "u", password: "p")
+        let c = Provider.ProviderType.subsonic(host: host, username: "other", password: "p")
+        XCTAssertEqual(a, b)
+        XCTAssertNotEqual(a, c)
+
+        var set = Set<Provider.ProviderType>()
+        set.insert(a)
+        set.insert(b)
+        XCTAssertEqual(set.count, 1, "Identical subsonic types should deduplicate in a Set")
+    }
 }

@@ -129,6 +129,9 @@ struct AddProviderView: View {
             xcHost = host.absoluteString
             xcUsername = username
             xcPassword = password
+        case .subsonic:
+            // TODO(a6f.10): Subsonic add/edit form
+            break
         }
         stripStreamIDs = provider.stripStreamIDs
     }

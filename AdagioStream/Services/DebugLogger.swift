@@ -39,7 +39,7 @@ public final class DebugLogger: @unchecked Sendable {
         guard isEnabled else { return }
         let timestamp = dateFormatter.string(from: Date())
         let fileName = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
-        let redacted = Self.redactXtreamCodesCredentials(message())
+        let redacted = Self.redactCredentials(message())
         let entry = "[\(timestamp)] [\(category.rawValue)] [\(fileName):\(line)] \(redacted)\n"
 
         queue.async { [self] in
@@ -96,9 +96,11 @@ public final class DebugLogger: @unchecked Sendable {
 
     // MARK: - Redaction
 
-    /// Redacts Xtream Codes credentials from log messages.
-    /// Handles stream URLs (`/live/user/pass/id.ext`) and API URLs (`?username=...&password=...`).
-    public static func redactXtreamCodesCredentials(_ message: String) -> String {
+    /// Redacts provider credentials from log messages.
+    /// Handles Xtream Codes stream URLs (`/live/user/pass/id.ext`), API URLs
+    /// (`?username=...&password=...`), and Subsonic query params (`u=`, `t=`,
+    /// `s=`, `p=`).
+    public static func redactCredentials(_ message: String) -> String {
         var result = message
         // Stream URLs: https://host:port/live/user/pass/id.ext → https://***/live/***/***/id.ext
         result = result.replacingOccurrences(
@@ -123,7 +125,35 @@ public final class DebugLogger: @unchecked Sendable {
             with: "password=***",
             options: .regularExpression
         )
+        // Subsonic query params: u= (username), t= (token), s= (salt), p= (legacy password)
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])u=[^&\s]+"#,
+            with: "u=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])t=[^&\s]+"#,
+            with: "t=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])s=[^&\s]+"#,
+            with: "s=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])p=[^&\s]+"#,
+            with: "p=***",
+            options: .regularExpression
+        )
         return result
+    }
+
+    /// Deprecated alias for `redactCredentials(_:)`. Kept for backward
+    /// compatibility; new callers should use `redactCredentials`.
+    @available(*, deprecated, renamed: "redactCredentials")
+    public static func redactXtreamCodesCredentials(_ message: String) -> String {
+        redactCredentials(message)
     }
 
     // MARK: - Private

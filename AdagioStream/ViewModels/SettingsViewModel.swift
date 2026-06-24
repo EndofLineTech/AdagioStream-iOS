@@ -59,15 +59,17 @@ public final class SettingsViewModel: ObservableObject {
         } else {
             var xtreamCount = 0
             var m3uCount = 0
+            var subsonicCount = 0
             var enabledCount = 0
             for provider in providers {
                 if provider.isEnabled { enabledCount += 1 }
                 switch provider.type {
                 case .xtreamCodes: xtreamCount += 1
                 case .m3u: m3uCount += 1
+                case .subsonic: subsonicCount += 1
                 }
             }
-            providerSummary = "total=\(providers.count), enabled=\(enabledCount), xtreamCodes=\(xtreamCount), m3u=\(m3uCount)"
+            providerSummary = "total=\(providers.count), enabled=\(enabledCount), xtreamCodes=\(xtreamCount), m3u=\(m3uCount), subsonic=\(subsonicCount)"
         }
         let channels = ProviderManager.shared.channels.count
         let snapshot = """

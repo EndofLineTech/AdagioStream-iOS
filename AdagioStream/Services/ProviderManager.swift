@@ -260,8 +260,9 @@ public final class ProviderManager: ObservableObject {
         let enabled = providers.filter(\.isEnabled)
         let m3uCount = enabled.filter { if case .m3u = $0.type { return true } else { return false } }.count
         let xcCount = enabled.filter { if case .xtreamCodes = $0.type { return true } else { return false } }.count
+        let subsonicCount = enabled.filter { if case .subsonic = $0.type { return true } else { return false } }.count
         DebugLogger.shared.log(
-            "loadChannels: starting — \(enabled.count) enabled providers (\(m3uCount) M3U, \(xcCount) XC)",
+            "loadChannels: starting — \(enabled.count) enabled providers (\(m3uCount) M3U, \(xcCount) XC, \(subsonicCount) Subsonic)",
             category: .providers
         )
 
@@ -274,6 +275,7 @@ public final class ProviderManager: ObservableObject {
                 switch provider.type {
                 case .m3u: return "M3U"
                 case .xtreamCodes: return "XC"
+                case .subsonic: return "Subsonic"
                 }
             }()
             DebugLogger.shared.log(
@@ -426,6 +428,14 @@ public final class ProviderManager: ObservableObject {
             }
 
             return api.convertToChannels(streams: streams, categories: categories)
+
+        case .subsonic:
+            // TODO(a6f.10): implement Subsonic library loading
+            throw NSError(
+                domain: "ProviderManager",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Subsonic provider loading not yet implemented"]
+            )
         }
     }
 

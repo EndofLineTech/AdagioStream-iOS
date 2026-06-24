@@ -35,9 +35,10 @@ public struct Provider: Codable, Identifiable {
         stripStreamIDs = try container.decodeIfPresent(Bool.self, forKey: .stripStreamIDs) ?? false
     }
 
-    /// Discriminator for the two supported provider integrations.
+    /// Discriminator for the three supported provider integrations.
     public enum ProviderType: Codable, Hashable {
         case m3u(url: URL, epgURL: URL?)
         case xtreamCodes(host: URL, username: String, password: String)
+        case subsonic(host: URL, username: String, password: String)
     }
 }

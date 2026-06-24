@@ -41,6 +41,14 @@ public struct DataExportService {
                     serverURL: host.absoluteString,
                     username: username
                 )
+            case .subsonic(let host, let username, _):
+                return ExportedProvider(
+                    name: provider.name,
+                    type: "Subsonic",
+                    isEnabled: provider.isEnabled,
+                    serverURL: host.absoluteString,
+                    username: username
+                )
             }
         }
 
