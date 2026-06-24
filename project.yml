@@ -126,16 +126,6 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-      configs:
-        # TEMPORARY (beads_mobilemusic-lfn, TestFlight only): enables the
-        # CallKit-based call-state diagnostics in CallStateDiagnostics.swift.
-        # CallKit is an App Store risk in China — REMOVE this configs block
-        # (one delete) before any production/App Store release. $(inherited)
-        # preserves the project-level DEBUG condition on the Debug config.
-        Debug:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DIAG_CALLKIT
-        Release:
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) DIAG_CALLKIT
     entitlements:
       path: AdagioStream/AdagioStream.entitlements
       properties:
