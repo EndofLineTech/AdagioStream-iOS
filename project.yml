@@ -46,6 +46,9 @@ packages:
   VLCKitSPM:
     url: https://github.com/tylerjonesio/vlckit-spm
     exactVersion: "3.6.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    exactVersion: "6.29.3"
 
 targets:
   AdagioStream:
@@ -55,6 +58,7 @@ targets:
       - AdagioStream
     dependencies:
       - package: VLCKitSPM
+      - package: GRDB
       - target: ShareExtension
     info:
       path: AdagioStream/Info.plist
@@ -167,6 +171,7 @@ targets:
       - AdagioStream-tvOS
     dependencies:
       - package: VLCKitSPM
+      - package: GRDB
     info:
       path: AdagioStream-tvOS/Info.plist
       properties:
@@ -216,6 +221,7 @@ targets:
       - AdagioStreamTests
     dependencies:
       - target: AdagioStream
+      - package: GRDB
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true

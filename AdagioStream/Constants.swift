@@ -25,6 +25,8 @@ public enum Constants {
         public static let favoriteGroups = "favoriteGroups.json"
         public static let savedSongs = "savedSongs.json"
         public static let customPlaylists = "customPlaylists.json"
+        /// SQLite database file for the Navidrome library cache + download index.
+        public static let navidromeCache = "navidrome.sqlite"
     }
 
     /// Time-shift buffer tunables.
