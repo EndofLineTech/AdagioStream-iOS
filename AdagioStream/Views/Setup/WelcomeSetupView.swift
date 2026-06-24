@@ -5,7 +5,7 @@ struct WelcomeSetupView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
 
     @State private var step: SetupStep = .welcome
-    @State private var connectionType: Int = 0 // 0 = M3U, 1 = Xtream Codes
+    @State private var connectionType: SetupConnectionType = .m3u
 
     // Shared fields
     @State private var name = ""
@@ -19,6 +19,11 @@ struct WelcomeSetupView: View {
     @State private var xcUsername = ""
     @State private var xcPassword = ""
 
+    // Subsonic / Navidrome fields
+    @State private var subsonicHost = ""
+    @State private var subsonicUsername = ""
+    @State private var subsonicPassword = ""
+
     @State private var error: String?
     @State private var isSaving = false
 
@@ -31,6 +36,12 @@ struct WelcomeSetupView: View {
         case connectionType
         case credentials
         case groupSelection
+    }
+
+    private enum SetupConnectionType {
+        case m3u
+        case xtreamCodes
+        case subsonic
     }
 
     var body: some View {
@@ -145,7 +156,7 @@ struct WelcomeSetupView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             } else {
-                Text("Stream your favorite audio channels from M3U playlists or Xtream Codes providers.")
+                Text("Stream your favorite audio channels from M3U playlists, Xtream Codes providers, or your Navidrome music server.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -199,7 +210,7 @@ struct WelcomeSetupView: View {
                     description: "Connect using a playlist URL",
                     icon: "music.note.list"
                 ) {
-                    connectionType = 0
+                    connectionType = .m3u
                     withAnimation { step = .credentials }
                 }
 
@@ -208,7 +219,16 @@ struct WelcomeSetupView: View {
                     description: "Connect with server URL, username, and password",
                     icon: "server.rack"
                 ) {
-                    connectionType = 1
+                    connectionType = .xtreamCodes
+                    withAnimation { step = .credentials }
+                }
+
+                connectionCard(
+                    title: "Navidrome",
+                    description: "Connect to a Navidrome or Subsonic music server",
+                    icon: "music.note"
+                ) {
+                    connectionType = .subsonic
                     withAnimation { step = .credentials }
                 }
             }
@@ -250,10 +270,18 @@ struct WelcomeSetupView: View {
 
     // MARK: - Credentials
 
+    private var credentialsViewTitle: String {
+        switch connectionType {
+        case .m3u: return "M3U Playlist"
+        case .xtreamCodes: return "Xtream Codes"
+        case .subsonic: return "Navidrome"
+        }
+    }
+
     private var credentialsView: some View {
         VStack(spacing: 0) {
             VStack(spacing: 8) {
-                Text(connectionType == 0 ? "M3U Playlist" : "Xtream Codes")
+                Text(credentialsViewTitle)
                     .font(.title.bold())
                 Text("Enter your connection details")
                     .font(.body)
@@ -267,31 +295,70 @@ struct WelcomeSetupView: View {
                     TextField("My Provider", text: $name)
                 }
 
-                if connectionType == 0 {
+                switch connectionType {
+                case .m3u:
                     Section("Playlist Settings") {
                         TextField("Playlist URL", text: $m3uURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Playlist URL")
                         TextField("EPG URL (optional)", text: $epgURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("EPG URL, optional")
                     }
-                } else {
+
+                case .xtreamCodes:
                     Section("Server Settings") {
                         TextField("Server URL", text: $xcHost)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Xtream Codes server URL")
                         TextField("Username", text: $xcUsername)
                             .textContentType(.init(rawValue: ""))
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Xtream Codes username")
                         MaskedTextField(placeholder: "Password", text: $xcPassword)
+                            .accessibilityLabel("Xtream Codes password")
+                    }
+
+                case .subsonic:
+                    Section {
+                        TextField("Server URL", text: $subsonicHost)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Navidrome server URL")
+                        TextField("Username", text: $subsonicUsername)
+                            .textContentType(.init(rawValue: ""))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Navidrome username")
+                        MaskedTextField(placeholder: "Password", text: $subsonicPassword)
+                            .accessibilityLabel("Navidrome password")
+                    } header: {
+                        Text("Server Settings")
+                    } footer: {
+                        Text("Include http:// or https://, e.g. http://nas.local:4533")
+                    }
+
+                    if isSubsonicHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
                     }
                 }
 
@@ -399,18 +466,31 @@ struct WelcomeSetupView: View {
 
     private static let allowedSchemes: Set<String> = ["http", "https"]
 
+    private var isSubsonicHTTP: Bool {
+        guard connectionType == .subsonic,
+              let url = URL(string: subsonicHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
     private var isValid: Bool {
         guard !name.isEmpty else { return false }
-        if connectionType == 0 {
+        switch connectionType {
+        case .m3u:
             guard let url = URL(string: m3uURL),
                   let scheme = url.scheme?.lowercased(),
                   Self.allowedSchemes.contains(scheme) else { return false }
             return true
-        } else {
+        case .xtreamCodes:
             guard let url = URL(string: xcHost),
                   let scheme = url.scheme?.lowercased(),
                   Self.allowedSchemes.contains(scheme) else { return false }
             return !xcUsername.isEmpty && !xcPassword.isEmpty
+        case .subsonic:
+            guard let url = URL(string: subsonicHost),
+                  let scheme = url.scheme?.lowercased(),
+                  Self.allowedSchemes.contains(scheme) else { return false }
+            return !subsonicUsername.isEmpty && !subsonicPassword.isEmpty
         }
     }
 
@@ -419,7 +499,8 @@ struct WelcomeSetupView: View {
         error = nil
 
         let type: Provider.ProviderType
-        if connectionType == 0 {
+        switch connectionType {
+        case .m3u:
             guard let url = URL(string: m3uURL) else {
                 error = "Invalid playlist URL"
                 isSaving = false
@@ -432,13 +513,22 @@ struct WelcomeSetupView: View {
                 return u
             }()
             type = .m3u(url: url, epgURL: epg)
-        } else {
+
+        case .xtreamCodes:
             guard let host = URL(string: xcHost) else {
                 error = "Invalid server URL"
                 isSaving = false
                 return
             }
             type = .xtreamCodes(host: host, username: xcUsername, password: xcPassword)
+
+        case .subsonic:
+            guard let host = URL(string: subsonicHost) else {
+                error = "Invalid server URL"
+                isSaving = false
+                return
+            }
+            type = .subsonic(host: host, username: subsonicUsername, password: subsonicPassword)
         }
 
         let provider = Provider(name: name, type: type)
@@ -448,11 +538,20 @@ struct WelcomeSetupView: View {
                 error = loadError
                 isSaving = false
             } else {
-                newGroupNames = providerManager.allGroupCounts.keys.sorted {
+                // Subsonic returns 0 channels (library loading is E2).
+                // If there are no groups, skip the group-selection step and
+                // complete setup directly — don't strand the user on an empty list.
+                let groups = providerManager.allGroupCounts.keys.sorted {
                     $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
                 }
                 isSaving = false
-                withAnimation { step = .groupSelection }
+                if groups.isEmpty {
+                    await settingsViewModel.completeSetup()
+                    onComplete()
+                } else {
+                    newGroupNames = groups
+                    withAnimation { step = .groupSelection }
+                }
             }
         }
     }

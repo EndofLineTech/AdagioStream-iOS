@@ -151,4 +151,81 @@ final class ProviderManagerTests: XCTestCase {
         set.insert(b)
         XCTAssertEqual(set.count, 1, "Identical subsonic types should deduplicate in a Set")
     }
+
+    // MARK: - Subsonic addProvider / updateProvider validation via seam
+    //
+    // ProviderManager constructs NavidromeAPI internally, so injecting a real
+    // mock URLSession through ProviderManager would require a larger refactor.
+    // The chosen seam is a `subsonicPingValidator` closure on ProviderManager
+    // (nil in production, overridden in tests). This keeps the seam minimal
+    // and avoids changing the production init path.
+
+    @MainActor
+    func testAddSubsonicProviderSucceedsPersistsProvider() async {
+        let manager = ProviderManager()
+        // Inject a ping validator that always succeeds.
+        manager.subsonicPingValidator = { _, _, _ in /* success */ }
+
+        let provider = Provider(
+            name: "My Navidrome",
+            type: .subsonic(
+                host: URL(string: "http://nas.local:4533")!,
+                username: "alice",
+                password: "secret"
+            )
+        )
+
+        await manager.addProvider(provider)
+
+        XCTAssertNil(manager.error, "No error should be set after a successful ping")
+        XCTAssertTrue(
+            manager.providers.contains(where: { $0.name == "My Navidrome" }),
+            "Provider should be persisted after ping succeeds"
+        )
+    }
+
+    @MainActor
+    func testAddSubsonicProviderPingFailureDoesNotPersist() async {
+        let manager = ProviderManager()
+        // Inject a ping validator that always fails with an auth error.
+        manager.subsonicPingValidator = { _, _, _ in
+            throw NavidromeAPI.APIError.authenticationFailed
+        }
+
+        let provider = Provider(
+            name: "Bad Navidrome",
+            type: .subsonic(
+                host: URL(string: "http://nas.local:4533")!,
+                username: "wrong",
+                password: "wrongpass"
+            )
+        )
+
+        await manager.addProvider(provider)
+
+        XCTAssertNotNil(manager.error, "Error should be set after ping failure")
+        XCTAssertFalse(
+            manager.providers.contains(where: { $0.name == "Bad Navidrome" }),
+            "Provider must NOT be persisted when ping fails"
+        )
+    }
+
+    // MARK: - loadChannels(from:) for .subsonic returns [] without throwing
+
+    @MainActor
+    func testLoadChannelsFromSubsonicReturnsEmptyWithoutThrowing() async throws {
+        let manager = ProviderManager()
+        let provider = Provider(
+            name: "Subsonic Library",
+            type: .subsonic(
+                host: URL(string: "https://music.example.com")!,
+                username: "u",
+                password: "p"
+            )
+        )
+
+        // Should NOT throw and MUST return an empty array.
+        let channels = try await manager.loadChannels(from: provider)
+        XCTAssertTrue(channels.isEmpty, "Subsonic must return [] from loadChannels(from:) in E1 — library loading is deferred to E2")
+    }
 }

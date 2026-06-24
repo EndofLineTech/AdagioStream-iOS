@@ -75,8 +75,28 @@ targets:
             UTTypeConformsTo:
               - public.data
             UTTypeTagSpecification: {}
+        # ATS NOTE: NSAllowsArbitraryLoads is required because user-supplied
+        # Navidrome/Subsonic hosts often run plain HTTP on a LAN (e.g.
+        # http://nas.local:4533). We cannot enumerate those hosts statically.
+        # The app's own hardcoded API endpoints are re-pinned via
+        # NSExceptionDomains with NSExceptionAllowsInsecureHTTPLoads=false
+        # so NSAllowsArbitraryLoads does NOT silently downgrade them to HTTP.
         NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
           NSAllowsArbitraryLoadsForMedia: true
+          NSExceptionDomains:
+            # xmplaylist.com — SiriusXM track metadata (PinnedURLSession.xmplaylist)
+            xmplaylist.com:
+              NSExceptionAllowsInsecureHTTPLoads: false
+              NSIncludesSubdomains: true
+            # site.api.espn.com — ESPN live scores (PinnedURLSession.espn)
+            espn.com:
+              NSExceptionAllowsInsecureHTTPLoads: false
+              NSIncludesSubdomains: true
+            # itunes.apple.com — iTunes song search (SavedSongRowView)
+            itunes.apple.com:
+              NSExceptionAllowsInsecureHTTPLoads: false
+              NSIncludesSubdomains: false
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
@@ -178,8 +198,21 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         UIBackgroundModes: [audio]
         CFBundleDisplayName: Adagio Stream
+        # ATS NOTE: mirrors iOS target — NSAllowsArbitraryLoads for user-supplied
+        # Navidrome hosts, app's own API endpoints re-pinned to TLS.
         NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
           NSAllowsArbitraryLoadsForMedia: true
+          NSExceptionDomains:
+            xmplaylist.com:
+              NSExceptionAllowsInsecureHTTPLoads: false
+              NSIncludesSubdomains: true
+            espn.com:
+              NSExceptionAllowsInsecureHTTPLoads: false
+              NSIncludesSubdomains: true
+            itunes.apple.com:
+              NSExceptionAllowsInsecureHTTPLoads: false
+              NSIncludesSubdomains: false
     settings:
       base:
         CODE_SIGN_ENTITLEMENTS: AdagioStream-tvOS/AdagioStream-tvOS.entitlements

@@ -8,7 +8,7 @@ struct AddProviderView: View {
     var editing: Provider?
 
     @State private var name = ""
-    @State private var providerType = 0 // 0 = M3U, 1 = Xtream Codes
+    @State private var formProviderType: FormProviderType = .m3u
 
     // M3U fields
     @State private var m3uURL = ""
@@ -20,55 +20,118 @@ struct AddProviderView: View {
     @State private var xcPassword = ""
     @State private var stripStreamIDs = false
 
+    // Subsonic fields
+    @State private var subsonicHost = ""
+    @State private var subsonicUsername = ""
+    @State private var subsonicPassword = ""
+
     @State private var error: String?
     @State private var isSaving = false
 
     private var isEditing: Bool { editing != nil }
+
+    // MARK: - Typed provider-form enum (replaces fragile Int picker)
+
+    private enum FormProviderType: CaseIterable {
+        case m3u
+        case xtreamCodes
+        case subsonic
+
+        var label: String {
+            switch self {
+            case .m3u: return "M3U"
+            case .xtreamCodes: return "Xtream Codes"
+            case .subsonic: return "Navidrome"
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Account Details") {
                     TextField("Name", text: $name)
-                    Picker("Type", selection: $providerType) {
-                        Text("M3U Playlist").tag(0)
-                        Text("Xtream Codes").tag(1)
+                        .accessibilityLabel("Account name")
+                    Picker("Type", selection: $formProviderType) {
+                        ForEach(FormProviderType.allCases, id: \.self) { type in
+                            Text(type.label).tag(type)
+                        }
                     }
                     .pickerStyle(.segmented)
                     .disabled(isEditing)
+                    .accessibilityLabel("Provider type")
                 }
 
-                if providerType == 0 {
+                switch formProviderType {
+                case .m3u:
                     Section("M3U Settings") {
                         TextField("Playlist URL", text: $m3uURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Playlist URL")
                         TextField("EPG URL (optional)", text: $epgURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("EPG URL, optional")
                     }
-                } else {
+
+                case .xtreamCodes:
                     Section("Xtream Codes Settings") {
                         TextField("Server URL", text: $xcHost)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Xtream Codes server URL")
                         TextField("Username", text: $xcUsername)
                             .textContentType(.init(rawValue: ""))
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Xtream Codes username")
                         MaskedTextField(placeholder: "Password", text: $xcPassword)
+                            .accessibilityLabel("Xtream Codes password")
                     }
 
                     Section {
                         Toggle("Strip numeric prefix from channel names", isOn: $stripStreamIDs)
                     } footer: {
                         Text("Enable this if your channel names start with a number and pipe (e.g. \"5204 | Radio: Bruins\"). This strips the prefix so channels display and match correctly.")
+                    }
+
+                case .subsonic:
+                    Section {
+                        TextField("Server URL", text: $subsonicHost)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Navidrome server URL")
+                        TextField("Username", text: $subsonicUsername)
+                            .textContentType(.init(rawValue: ""))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Navidrome username")
+                        MaskedTextField(placeholder: "Password", text: $subsonicPassword)
+                            .accessibilityLabel("Navidrome password")
+                    } header: {
+                        Text("Navidrome / Subsonic Settings")
+                    } footer: {
+                        Text("Include http:// or https://, e.g. http://nas.local:4533")
+                    }
+
+                    if isSubsonicHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
                     }
                 }
 
@@ -99,49 +162,71 @@ struct AddProviderView: View {
         }
     }
 
+    // MARK: - Validation
+
     private static let allowedSchemes: Set<String> = ["http", "https"]
+
+    private var isSubsonicHTTP: Bool {
+        guard formProviderType == .subsonic,
+              let url = URL(string: subsonicHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
 
     private var isValid: Bool {
         guard !name.isEmpty else { return false }
-        if providerType == 0 {
+        switch formProviderType {
+        case .m3u:
             guard let url = URL(string: m3uURL),
                   let scheme = url.scheme?.lowercased(),
                   Self.allowedSchemes.contains(scheme) else { return false }
             return true
-        } else {
+        case .xtreamCodes:
             guard let url = URL(string: xcHost),
                   let scheme = url.scheme?.lowercased(),
                   Self.allowedSchemes.contains(scheme) else { return false }
             return !xcUsername.isEmpty && !xcPassword.isEmpty
+        case .subsonic:
+            guard let url = URL(string: subsonicHost),
+                  let scheme = url.scheme?.lowercased(),
+                  Self.allowedSchemes.contains(scheme) else { return false }
+            return !subsonicUsername.isEmpty && !subsonicPassword.isEmpty
         }
     }
+
+    // MARK: - Populate from editing
 
     private func populateFromEditing() {
         guard let provider = editing else { return }
         name = provider.name
         switch provider.type {
         case .m3u(let url, let epg):
-            providerType = 0
+            formProviderType = .m3u
             m3uURL = url.absoluteString
             epgURL = epg?.absoluteString ?? ""
         case .xtreamCodes(let host, let username, let password):
-            providerType = 1
+            formProviderType = .xtreamCodes
             xcHost = host.absoluteString
             xcUsername = username
             xcPassword = password
-        case .subsonic:
-            // TODO(a6f.10): Subsonic add/edit form
-            break
+        case .subsonic(let host, let username, let password):
+            formProviderType = .subsonic
+            subsonicHost = host.absoluteString
+            subsonicUsername = username
+            subsonicPassword = password
         }
         stripStreamIDs = provider.stripStreamIDs
     }
+
+    // MARK: - Save
 
     private func save() {
         isSaving = true
         error = nil
 
         let type: Provider.ProviderType
-        if providerType == 0 {
+        switch formProviderType {
+        case .m3u:
             guard let url = URL(string: m3uURL) else {
                 error = "Invalid playlist URL"
                 isSaving = false
@@ -154,17 +239,32 @@ struct AddProviderView: View {
                 return u
             }()
             type = .m3u(url: url, epgURL: epg)
-        } else {
+
+        case .xtreamCodes:
             guard let host = URL(string: xcHost) else {
                 error = "Invalid server URL"
                 isSaving = false
                 return
             }
             type = .xtreamCodes(host: host, username: xcUsername, password: xcPassword)
+
+        case .subsonic:
+            guard let host = URL(string: subsonicHost) else {
+                error = "Invalid server URL"
+                isSaving = false
+                return
+            }
+            type = .subsonic(host: host, username: subsonicUsername, password: subsonicPassword)
         }
 
         if let existing = editing {
-            let updated = Provider(id: existing.id, name: name, type: type, isEnabled: existing.isEnabled, stripStreamIDs: stripStreamIDs)
+            let updated = Provider(
+                id: existing.id,
+                name: name,
+                type: type,
+                isEnabled: existing.isEnabled,
+                stripStreamIDs: stripStreamIDs
+            )
             Task {
                 await providerManager.updateProvider(updated)
                 if let loadError = providerManager.error {
