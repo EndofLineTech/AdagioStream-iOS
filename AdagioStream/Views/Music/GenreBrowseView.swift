@@ -201,7 +201,12 @@ struct GenreDetailView: View {
         let tracks = viewModel.genreTracks
         return List {
             ForEach(tracks, id: \.id) { track in
-                GenreTrackRowView(track: track, api: api) {
+                GenreTrackRowView(
+                    track: track,
+                    api: api,
+                    // 65x.3: pass star state for starred indicator
+                    starState: viewModel.genreTrackStarStates[track.id]
+                ) {
                     // d6q.1: enqueue the full genre song list starting at the
                     // tapped track so next/previous steps through the genre.
                     // Artist display name: Track only carries artistId in v1
@@ -225,15 +230,25 @@ struct GenreDetailView: View {
             parts.append("Track \(number)")
         }
         parts.append(track.title)
+        // 65x.3: Include starred/play-count in accessibility label
+        let state = viewModel.genreTrackStarStates[track.id]
+        if state?.starred == true { parts.append("starred") }
+        if let count = state?.playCount, count > 0 {
+            parts.append("played \(count) \(count == 1 ? "time" : "times")")
+        }
         return parts.joined(separator: ", ")
     }
 }
 
 // MARK: - Genre track row
 
+/// Track row for genre-browse song lists.
+/// 65x.3: Accepts optional star state to show a small starred indicator.
 struct GenreTrackRowView: View {
     let track: Track
     let api: NavidromeAPI
+    /// 65x.3: When non-nil, enables the starred indicator in the title row.
+    var starState: NavidromeAPI.StarState? = nil
     let onPlay: () -> Void
 
     var body: some View {
@@ -250,10 +265,16 @@ struct GenreTrackRowView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                // Title + optional starred indicator
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(track.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let state = starState, state.starred {
+                        NavidromeStarIndicator(starred: true)
+                    }
+                }
 
                 if let genre = track.genre {
                     Text(genre)

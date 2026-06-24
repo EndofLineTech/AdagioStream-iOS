@@ -312,8 +312,8 @@ public struct SubsonicArtistDTO: Decodable {
 /// (e.g. album-detail header and now-playing subtitle); `artistId` is the
 /// foreign key used for DB relations.
 ///
-/// `starred` and `userRating` are transient display fields — not persisted to
-/// the GRDB `albums` table (no v1 columns exist for them).
+/// `starred`, `userRating`, and `playCount` are transient display fields — not
+/// persisted to the GRDB `albums` table (no v1 columns exist for them).
 public struct SubsonicAlbumDTO: Decodable {
     public let id: String
     public let artistId: String
@@ -337,6 +337,11 @@ public struct SubsonicAlbumDTO: Decodable {
     /// User-assigned 0–5 star rating from the Subsonic `userRating` field.
     /// Transient — not persisted to the GRDB `albums` table.
     public let userRating: Int?
+    /// Number of times the album has been played as reported by the server.
+    /// Transient — not persisted to the GRDB `albums` table.
+    /// Present in `getAlbumList2` (`frequent` / `recent` list types) and
+    /// `getAlbum` detail responses; absent from `getArtist` album lists.
+    public let playCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -350,6 +355,7 @@ public struct SubsonicAlbumDTO: Decodable {
         case coverArt
         case starredField  = "starred"
         case userRating
+        case playCount
     }
 
     public init(from decoder: Decoder) throws {
@@ -364,6 +370,7 @@ public struct SubsonicAlbumDTO: Decodable {
         songCount  = try? c.decodeIfPresent(Int.self,    forKey: .songCount)
         coverArt   = try? c.decodeIfPresent(String.self, forKey: .coverArt)
         userRating = try? c.decodeIfPresent(Int.self,    forKey: .userRating)
+        playCount  = try? c.decodeIfPresent(Int.self,    forKey: .playCount)
         // starred: present (any non-null string) → true; absent → false
         let starredValue = try? c.decodeIfPresent(String.self, forKey: .starredField)
         starred = starredValue != nil
@@ -397,8 +404,8 @@ public struct SubsonicAlbumDTO: Decodable {
 ///   • `artist` (name string) is discarded — `artistId` is used
 ///   • `album` (name string) is discarded — `albumId` is used
 ///
-/// `starred` and `userRating` are transient display fields — not persisted to
-/// the GRDB `tracks` table (no v1 columns exist for them).
+/// `starred`, `userRating`, and `playCount` are transient display fields — not
+/// persisted to the GRDB `tracks` table (no v1 columns exist for them).
 public struct SubsonicTrackDTO: Decodable {
     public let id: String
     public let albumId: String
@@ -420,6 +427,10 @@ public struct SubsonicTrackDTO: Decodable {
     /// User-assigned 0–5 star rating from the Subsonic `userRating` field.
     /// Transient — not persisted to the GRDB `tracks` table.
     public let userRating: Int?
+    /// Number of times the track has been played as reported by the server.
+    /// Transient — not persisted to the GRDB `tracks` table.
+    /// Present in `getAlbum` track lists and `search3` song results.
+    public let playCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -438,6 +449,7 @@ public struct SubsonicTrackDTO: Decodable {
         case path
         case starredField = "starred"
         case userRating
+        case playCount
     }
 
     public init(from decoder: Decoder) throws {
@@ -457,6 +469,7 @@ public struct SubsonicTrackDTO: Decodable {
         contentType = try? c.decodeIfPresent(String.self, forKey: .contentType)
         path        = try? c.decodeIfPresent(String.self, forKey: .path)
         userRating  = try? c.decodeIfPresent(Int.self,    forKey: .userRating)
+        playCount   = try? c.decodeIfPresent(Int.self,    forKey: .playCount)
         // starred: present (any non-null string) → true; absent → false
         let starredValue = try? c.decodeIfPresent(String.self, forKey: .starredField)
         starred = starredValue != nil

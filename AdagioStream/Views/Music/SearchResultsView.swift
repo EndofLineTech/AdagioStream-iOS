@@ -107,9 +107,14 @@ struct SearchResultsView: View {
                         NavigationLink {
                             AlbumDetailView(viewModel: viewModel, album: album, api: api)
                         } label: {
-                            SearchAlbumRowView(album: album, api: api)
+                            // 65x.3: Pass star state for starred indicator
+                            SearchAlbumRowView(
+                                album: album,
+                                api: api,
+                                starState: viewModel.searchAlbumStarStates[album.id]
+                            )
                         }
-                        .accessibilityLabel("\(album.title), album")
+                        // 65x.3: Accessibility label built inside the row view
                         .accessibilityHint("Opens album")
                     }
                 } header: {
@@ -123,7 +128,12 @@ struct SearchResultsView: View {
                 let songs = results.songs
                 Section {
                     ForEach(Array(songs.enumerated()), id: \.element.id) { index, track in
-                        SearchSongRowView(track: track, api: api) {
+                        // 65x.3: Pass star state for starred indicator + play count
+                        SearchSongRowView(
+                            track: track,
+                            api: api,
+                            starState: viewModel.searchSongStarStates[track.id]
+                        ) {
                             audioPlayer.setQueue(
                                 songs,
                                 startIndex: index,
@@ -131,7 +141,7 @@ struct SearchResultsView: View {
                                 via: api
                             )
                         }
-                        .accessibilityLabel("\(track.title), song")
+                        // 65x.3: Accessibility label built inside the row view
                         .accessibilityHint("Plays song")
                     }
                 } header: {
@@ -147,9 +157,12 @@ struct SearchResultsView: View {
 // MARK: - Search album row
 
 /// Compact album row: thumbnail + title + year subtitle.
+/// 65x.3: Accepts optional star state to show starred indicator alongside title.
 private struct SearchAlbumRowView: View {
     let album: Album
     let api: NavidromeAPI
+    /// 65x.3: When non-nil, enables the starred indicator in the title row.
+    var starState: NavidromeAPI.StarState? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -164,10 +177,16 @@ private struct SearchAlbumRowView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(album.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                // Title + optional starred indicator
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(album.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let state = starState, state.starred {
+                        NavidromeStarIndicator(starred: true)
+                    }
+                }
 
                 if let year = album.year {
                     Text(String(year))
@@ -177,6 +196,15 @@ private struct SearchAlbumRowView: View {
             }
         }
         .padding(.vertical, 2)
+        // 65x.3: Accessibility label includes starred state
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(searchAlbumAccessibilityLabel)
+    }
+
+    private var searchAlbumAccessibilityLabel: String {
+        var parts: [String] = ["\(album.title), album"]
+        if let state = starState, state.starred { parts.append("starred") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -184,9 +212,12 @@ private struct SearchAlbumRowView: View {
 
 /// Song row: thumbnail + title + tap-to-play button.
 /// Tapping anywhere on the row (or the button) invokes onPlay.
+/// 65x.3: Accepts optional star state to show starred indicator and play count.
 private struct SearchSongRowView: View {
     let track: Track
     let api: NavidromeAPI
+    /// 65x.3: When non-nil, enables the starred indicator and play-count caption.
+    var starState: NavidromeAPI.StarState? = nil
     let onPlay: () -> Void
 
     var body: some View {
@@ -202,16 +233,30 @@ private struct SearchSongRowView: View {
             .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                // Title + optional starred indicator
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(track.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let state = starState, state.starred {
+                        NavidromeStarIndicator(starred: true)
+                    }
+                }
 
-                if let duration = track.duration {
-                    Text(formatDuration(duration))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                // Duration + optional play count
+                HStack(spacing: 6) {
+                    if let duration = track.duration {
+                        Text(formatDuration(duration))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    if let playText = navidromePlayCountText(starState?.playCount) {
+                        Text(playText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -232,6 +277,20 @@ private struct SearchSongRowView: View {
         .onTapGesture {
             onPlay()
         }
+        // 65x.3: Accessibility element for the whole row
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(searchSongAccessibilityLabel)
+    }
+
+    private var searchSongAccessibilityLabel: String {
+        var parts: [String] = ["\(track.title), song"]
+        if let state = starState {
+            if state.starred { parts.append("starred") }
+            if let count = state.playCount, count > 0 {
+                parts.append("played \(count) \(count == 1 ? "time" : "times")")
+            }
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func formatDuration(_ seconds: Int) -> String {

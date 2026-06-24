@@ -235,7 +235,7 @@ public struct NavidromeAPI {
 
     // MARK: - Star-state-aware fetch variants (65x.2)
 
-    /// A per-item star/rating snapshot from the server response.
+    /// A per-item star/rating/play-count snapshot from the server response.
     ///
     /// Carried on the DTO layer only — never persisted to the GRDB v1 schema.
     /// Keyed by the item's Subsonic `id`; used by the browse UI to display and
@@ -245,10 +245,14 @@ public struct NavidromeAPI {
         public var starred: Bool
         /// 0–5 user rating; `nil` when no rating has been set.
         public var userRating: Int?
+        /// Number of times the item has been played (server-side).
+        /// `nil` when the endpoint did not return a play count.
+        public var playCount: Int?
 
-        public init(starred: Bool, userRating: Int?) {
+        public init(starred: Bool, userRating: Int?, playCount: Int? = nil) {
             self.starred = starred
             self.userRating = userRating
+            self.playCount = playCount
         }
     }
 
@@ -268,12 +272,17 @@ public struct NavidromeAPI {
         let album = payload.album.toRecord(updatedAt: now)
         let albumStarState = StarState(
             starred: payload.album.albumDTO.starred,
-            userRating: payload.album.albumDTO.userRating
+            userRating: payload.album.albumDTO.userRating,
+            playCount: payload.album.albumDTO.playCount
         )
         let tracks = payload.album.song.map { $0.toRecord(updatedAt: now) }
         var trackStarStates: [String: StarState] = [:]
         for dto in payload.album.song {
-            trackStarStates[dto.id] = StarState(starred: dto.starred, userRating: dto.userRating)
+            trackStarStates[dto.id] = StarState(
+                starred: dto.starred,
+                userRating: dto.userRating,
+                playCount: dto.playCount
+            )
         }
         return (album, albumStarState, tracks, trackStarStates)
     }
@@ -307,7 +316,11 @@ public struct NavidromeAPI {
         let tracks = payload.playlist.entry.map { $0.toRecord(updatedAt: now) }
         var trackStarStates: [String: StarState] = [:]
         for dto in payload.playlist.entry {
-            trackStarStates[dto.id] = StarState(starred: dto.starred, userRating: dto.userRating)
+            trackStarStates[dto.id] = StarState(
+                starred: dto.starred,
+                userRating: dto.userRating,
+                playCount: dto.playCount
+            )
         }
         return (payload.playlist.playlistMeta, tracks, trackStarStates)
     }
@@ -332,6 +345,142 @@ public struct NavidromeAPI {
         ]
         let payload = try await fetch("getAlbumList2", params: params, as: GetAlbumList2Payload.self)
         return payload.albumList2.album.map { $0.toRecord(updatedAt: now) }
+    }
+
+    /// Like `getAlbumList2` but also returns per-album `StarState` keyed by album ID.
+    ///
+    /// Used by BrowseAlbumsView to show starred indicators and play counts in
+    /// album grid cells without storing those values in the GRDB schema.
+    public func getAlbumList2WithStarState(
+        type: AlbumListType,
+        size: Int = 10,
+        offset: Int = 0
+    ) async throws -> (albums: [Album], starStates: [String: StarState]) {
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = [
+            "type":   type.rawValue,
+            "size":   String(size),
+            "offset": String(offset),
+        ]
+        let payload = try await fetch("getAlbumList2", params: params, as: GetAlbumList2Payload.self)
+        let albums = payload.albumList2.album.map { $0.toRecord(updatedAt: now) }
+        var starStates: [String: StarState] = [:]
+        for dto in payload.albumList2.album {
+            starStates[dto.id] = StarState(
+                starred: dto.starred,
+                userRating: dto.userRating,
+                playCount: dto.playCount
+            )
+        }
+        return (albums, starStates)
+    }
+
+    /// Like `search3` but also returns per-album and per-song `StarState` keyed by ID.
+    ///
+    /// Used by SearchResultsView to show starred indicators in search results.
+    public struct SearchResultsWithStarState {
+        public let artists: [Artist]
+        public let albums: [Album]
+        public let songs: [Track]
+        public let albumStarStates: [String: StarState]
+        public let songStarStates: [String: StarState]
+
+        public init(
+            artists: [Artist],
+            albums: [Album],
+            songs: [Track],
+            albumStarStates: [String: StarState],
+            songStarStates: [String: StarState]
+        ) {
+            self.artists = artists
+            self.albums = albums
+            self.songs = songs
+            self.albumStarStates = albumStarStates
+            self.songStarStates = songStarStates
+        }
+
+        public static let empty = SearchResultsWithStarState(
+            artists: [], albums: [], songs: [],
+            albumStarStates: [:], songStarStates: [:]
+        )
+    }
+
+    /// Searches the library and returns star/play-count state alongside the results.
+    public func search3WithStarState(
+        query: String,
+        artistCount: Int = 20,
+        albumCount: Int = 20,
+        songCount: Int = 20,
+        artistOffset: Int = 0,
+        albumOffset: Int = 0,
+        songOffset: Int = 0
+    ) async throws -> SearchResultsWithStarState {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return .empty
+        }
+
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = [
+            "query":        query,
+            "artistCount":  String(artistCount),
+            "albumCount":   String(albumCount),
+            "songCount":    String(songCount),
+            "artistOffset": String(artistOffset),
+            "albumOffset":  String(albumOffset),
+            "songOffset":   String(songOffset),
+        ]
+        let payload = try await fetch("search3", params: params, as: Search3Payload.self)
+        let result = payload.searchResult3
+        var albumStarStates: [String: StarState] = [:]
+        for dto in result.album {
+            albumStarStates[dto.id] = StarState(
+                starred: dto.starred,
+                userRating: dto.userRating,
+                playCount: dto.playCount
+            )
+        }
+        var songStarStates: [String: StarState] = [:]
+        for dto in result.song {
+            songStarStates[dto.id] = StarState(
+                starred: dto.starred,
+                userRating: dto.userRating,
+                playCount: dto.playCount
+            )
+        }
+        return SearchResultsWithStarState(
+            artists: result.artist.map { $0.toRecord(updatedAt: now) },
+            albums:  result.album.map  { $0.toRecord(updatedAt: now) },
+            songs:   result.song.map   { $0.toRecord(updatedAt: now) },
+            albumStarStates: albumStarStates,
+            songStarStates:  songStarStates
+        )
+    }
+
+    /// Like `getSongsByGenre` but also returns per-song `StarState` keyed by track ID.
+    ///
+    /// Used by GenreDetailView to show starred indicators in genre song lists.
+    public func getSongsByGenreWithStarState(
+        genre: String,
+        count: Int = 10,
+        offset: Int = 0
+    ) async throws -> (tracks: [Track], starStates: [String: StarState]) {
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = [
+            "genre":  genre,
+            "count":  String(count),
+            "offset": String(offset),
+        ]
+        let payload = try await fetch("getSongsByGenre", params: params, as: GetSongsByGenrePayload.self)
+        let tracks = payload.songsByGenre.song.map { $0.toRecord(updatedAt: now) }
+        var starStates: [String: StarState] = [:]
+        for dto in payload.songsByGenre.song {
+            starStates[dto.id] = StarState(
+                starred: dto.starred,
+                userRating: dto.userRating,
+                playCount: dto.playCount
+            )
+        }
+        return (tracks, starStates)
     }
 
     /// Fetches all genres from `getGenres.view`.

@@ -44,6 +44,9 @@ public final class NavidromeLibraryViewModel: ObservableObject {
     @Published public private(set) var browseAlbumsType: NavidromeAPI.AlbumListType = .newest
     @Published public private(set) var browseAlbums: [Album] = []
     @Published public private(set) var browseAlbumsState: LoadState = .idle
+    /// Per-album star/play-count states for the current browse-albums page.
+    /// Keyed by album ID. Populated alongside browseAlbums on each load. (65x.3)
+    @Published public private(set) var browseAlbumStarStates: [String: NavidromeAPI.StarState] = [:]
 
     // MARK: - Genre list (0xy.4)
 
@@ -55,6 +58,9 @@ public final class NavidromeLibraryViewModel: ObservableObject {
     @Published public private(set) var selectedGenre: Genre?
     @Published public private(set) var genreTracks: [Track] = []
     @Published public private(set) var genreTracksState: LoadState = .idle
+    /// Per-song star/play-count states for the current genre track page.
+    /// Keyed by track ID. Populated alongside genreTracks on each load. (65x.3)
+    @Published public private(set) var genreTrackStarStates: [String: NavidromeAPI.StarState] = [:]
 
     // MARK: - Page sizes (single-page, no pagination in 0xy.4)
 
@@ -300,14 +306,16 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         guard browseAlbumsState != .loading else { return }
         browseAlbumsType = type
         browseAlbums = []
+        browseAlbumStarStates = [:]
         browseAlbumsState = .loading
         do {
-            let albums = try await api.getAlbumList2(
+            let (albums, starStates) = try await api.getAlbumList2WithStarState(
                 type: type,
                 size: NavidromeLibraryViewModel.albumBrowsePageSize,
                 offset: 0
             )
             browseAlbums = albums
+            browseAlbumStarStates = starStates
             browseAlbumsState = albums.isEmpty ? .empty : .loaded
         } catch let apiErr as NavidromeAPI.APIError {
             browseAlbumsState = .error(apiErr.errorDescription ?? "Unknown error")
@@ -344,14 +352,16 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         guard genreTracksState != .loading else { return }
         selectedGenre = genre
         genreTracks = []
+        genreTrackStarStates = [:]
         genreTracksState = .loading
         do {
-            let tracks = try await api.getSongsByGenre(
+            let (tracks, starStates) = try await api.getSongsByGenreWithStarState(
                 genre: genre.name,
                 count: NavidromeLibraryViewModel.genreSongsPageSize,
                 offset: 0
             )
             genreTracks = tracks
+            genreTrackStarStates = starStates
             genreTracksState = tracks.isEmpty ? .empty : .loaded
         } catch let apiErr as NavidromeAPI.APIError {
             genreTracksState = .error(apiErr.errorDescription ?? "Unknown error")
@@ -520,12 +530,14 @@ public final class NavidromeLibraryViewModel: ObservableObject {
 
     public func resetBrowseAlbums() {
         browseAlbums = []
+        browseAlbumStarStates = [:]
         browseAlbumsState = .idle
     }
 
     public func resetGenreDetail() {
         selectedGenre = nil
         genreTracks = []
+        genreTrackStarStates = [:]
         genreTracksState = .idle
     }
 
@@ -537,6 +549,10 @@ public final class NavidromeLibraryViewModel: ObservableObject {
     @Published public private(set) var searchResults: NavidromeAPI.SearchResults = .empty
     /// Load state for the search request.
     @Published public private(set) var searchState: LoadState = .idle
+    /// Per-album star/play-count states for the most recent search results. (65x.3)
+    @Published public private(set) var searchAlbumStarStates: [String: NavidromeAPI.StarState] = [:]
+    /// Per-song star/play-count states for the most recent search results. (65x.3)
+    @Published public private(set) var searchSongStarStates: [String: NavidromeAPI.StarState] = [:]
 
     /// In-flight search task — cancelled when a new keystroke arrives.
     private var searchTask: Task<Void, Never>?
@@ -573,10 +589,17 @@ public final class NavidromeLibraryViewModel: ObservableObject {
             await MainActor.run { self?.searchState = .loading }
 
             do {
-                let results = try await api.search3(query: trimmed)
+                let results = try await api.search3WithStarState(query: trimmed)
                 guard !Task.isCancelled else { return }
+                let plain = NavidromeAPI.SearchResults(
+                    artists: results.artists,
+                    albums:  results.albums,
+                    songs:   results.songs
+                )
                 await MainActor.run {
-                    self?.searchResults = results
+                    self?.searchResults = plain
+                    self?.searchAlbumStarStates = results.albumStarStates
+                    self?.searchSongStarStates  = results.songStarStates
                     let hasAny = !results.artists.isEmpty || !results.albums.isEmpty || !results.songs.isEmpty
                     self?.searchState = hasAny ? .loaded : .empty
                 }
@@ -600,6 +623,8 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         searchTask = nil
         searchQuery = ""
         searchResults = .empty
+        searchAlbumStarStates = [:]
+        searchSongStarStates  = [:]
         searchState = .idle
     }
 

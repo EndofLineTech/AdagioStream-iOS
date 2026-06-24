@@ -333,6 +333,142 @@ final class NavidromeModelsTests: XCTestCase {
         XCTAssertEqual(record.updatedAt,   now)
     }
 
+    // MARK: - 65x.3: playCount parsing (SubsonicAlbumDTO)
+
+    func testAlbumDTOPlayCountPresent() throws {
+        let json = """
+        {
+            "id": "alb-200",
+            "artistId": "art-1",
+            "name": "Play Often",
+            "playCount": 42
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.playCount, 42,
+                       "playCount should be decoded when present in the album JSON")
+    }
+
+    func testAlbumDTOPlayCountAbsent() throws {
+        let json = """
+        {
+            "id": "alb-201",
+            "artistId": "art-1",
+            "name": "No Plays"
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: Data(json.utf8))
+        XCTAssertNil(dto.playCount,
+                     "playCount should be nil when absent from the album JSON")
+    }
+
+    func testAlbumDTOPlayCountZero() throws {
+        let json = """
+        {
+            "id": "alb-202",
+            "artistId": "art-1",
+            "name": "Never Played",
+            "playCount": 0
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.playCount, 0,
+                       "playCount of 0 should decode as 0, not nil")
+    }
+
+    // MARK: - 65x.3: playCount parsing (SubsonicTrackDTO)
+
+    func testTrackDTOPlayCountPresent() throws {
+        let json = """
+        {
+            "id": "trk-600",
+            "albumId": "alb-100",
+            "artistId": "art-1",
+            "title": "Frequent Track",
+            "playCount": 99
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.playCount, 99,
+                       "playCount should be decoded when present in the track JSON")
+    }
+
+    func testTrackDTOPlayCountAbsent() throws {
+        let json = """
+        {
+            "id": "trk-601",
+            "albumId": "alb-100",
+            "artistId": "art-1",
+            "title": "Unplayed Track"
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: Data(json.utf8))
+        XCTAssertNil(dto.playCount,
+                     "playCount should be nil when absent from the track JSON")
+    }
+
+    // MARK: - 65x.3: starred state still derives correctly
+
+    func testAlbumDTOStarredPresent() throws {
+        let json = """
+        {
+            "id": "alb-300",
+            "artistId": "art-1",
+            "name": "Starred Album",
+            "starred": "2024-01-15T12:00:00"
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: Data(json.utf8))
+        XCTAssertTrue(dto.starred,
+                      "starred should be true when the 'starred' date-string field is present")
+    }
+
+    func testAlbumDTOStarredAbsent() throws {
+        let json = """
+        {
+            "id": "alb-301",
+            "artistId": "art-1",
+            "name": "Unstarred Album"
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: Data(json.utf8))
+        XCTAssertFalse(dto.starred,
+                       "starred should be false when the 'starred' field is absent")
+    }
+
+    func testTrackDTOStarredPresent() throws {
+        let json = """
+        {
+            "id": "trk-700",
+            "albumId": "alb-1",
+            "artistId": "art-1",
+            "title": "Starred Track",
+            "starred": "2025-03-01T09:00:00"
+        }
+        """
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: Data(json.utf8))
+        XCTAssertTrue(dto.starred,
+                      "starred should be true when 'starred' date-string is present on a track")
+    }
+
+    // MARK: - 65x.3: navidromePlayCountText helper
+
+    func testPlayCountTextNil() {
+        XCTAssertNil(navidromePlayCountText(nil),
+                     "navidromePlayCountText should return nil for nil input")
+    }
+
+    func testPlayCountTextZero() {
+        XCTAssertNil(navidromePlayCountText(0),
+                     "navidromePlayCountText should return nil for zero plays")
+    }
+
+    func testPlayCountTextPositive() {
+        XCTAssertEqual(navidromePlayCountText(1),  "▶ 1")
+        XCTAssertEqual(navidromePlayCountText(42), "▶ 42")
+        XCTAssertEqual(navidromePlayCountText(999), "▶ 999")
+    }
+
     // MARK: - Subsonic JSON decoding: Genre
 
     func testGenreDTODecoding() throws {

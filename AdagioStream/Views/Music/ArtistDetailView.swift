@@ -110,7 +110,7 @@ struct ArtistDetailView: View {
                         AlbumGridCell(album: album, api: api)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(album.title)
+                    // AlbumGridCell owns its accessibilityLabel (65x.3)
                     .accessibilityHint(
                         album.year.map { "Released \($0), navigate to tracks" }
                             ?? "Navigate to tracks"
@@ -124,9 +124,16 @@ struct ArtistDetailView: View {
 
 // MARK: - Album grid cell
 
+/// Grid cell for an album in browse/artist-detail views.
+///
+/// 65x.3: Accepts an optional `starState` to show a small starred indicator
+/// and play count beneath the album title. Both are read-only display indicators;
+/// the interactive star toggle remains in AlbumDetailView.
 struct AlbumGridCell: View {
     let album: Album
     let api: NavidromeAPI
+    /// 65x.3: When non-nil, enables the starred indicator and play-count caption.
+    var starState: NavidromeAPI.StarState? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -142,18 +149,48 @@ struct AlbumGridCell: View {
             }
             .aspectRatio(1, contentMode: .fit)
 
-            Text(album.title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.primary)
-                .lineLimit(2)
+            // Title row with optional starred indicator
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(album.title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
 
-            if let year = album.year {
-                Text(String(year))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if let state = starState, state.starred {
+                    NavidromeStarIndicator(starred: true)
+                }
+            }
+
+            // Year + optional play count
+            HStack(spacing: 4) {
+                if let year = album.year {
+                    Text(String(year))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                if let playText = navidromePlayCountText(starState?.playCount) {
+                    Text(playText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
+        // 65x.3: Accessibility: include starred/play-count in the element label
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(albumGridCellAccessibilityLabel)
+    }
+
+    private var albumGridCellAccessibilityLabel: String {
+        var parts: [String] = [album.title]
+        if let year = album.year { parts.append(String(year)) }
+        if let state = starState {
+            if state.starred { parts.append("starred") }
+            if let count = state.playCount, count > 0 {
+                parts.append("played \(count) \(count == 1 ? "time" : "times")")
+            }
+        }
+        return parts.joined(separator: ", ")
     }
 }
 

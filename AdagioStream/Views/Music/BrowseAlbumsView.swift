@@ -117,10 +117,15 @@ struct BrowseAlbumsView: View {
                     NavigationLink {
                         AlbumDetailView(viewModel: viewModel, album: album, api: api)
                     } label: {
-                        AlbumGridCell(album: album, api: api)
+                        // 65x.3: Pass star state so the cell can show starred indicator + play count.
+                        AlbumGridCell(
+                            album: album,
+                            api: api,
+                            starState: viewModel.browseAlbumStarStates[album.id]
+                        )
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(album.title)
+                    // 65x.3: accessibilityLabel is now built inside AlbumGridCell
                     .accessibilityHint(
                         album.year.map { "Released \($0), navigate to tracks" }
                             ?? "Navigate to tracks"

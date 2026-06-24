@@ -1,10 +1,22 @@
 // 65x.2 — Reusable heart/star toggle button for Navidrome music library items.
+// 65x.3 — NavidromeStarIndicator (read-only) and navidromePlayCountText helper.
 //
 // FAVORITES SEPARATION NOTE:
 // This component is for Navidrome server-side starring of music library items
 // (tracks, albums, artists). It is entirely separate from the app's radio-channel
 // favorites system (ProviderManager.favoriteOrder / toggleFavorite), which manages
 // LOCAL favorites for live-stream channels. These two domains must not be mixed.
+
+// MARK: - Play count text helper (65x.3)
+
+/// Returns a formatted play-count string for display (e.g. "▶ 42").
+/// Returns `nil` when `playCount` is nil or zero — callers should omit the label entirely.
+///
+/// Pure function — testable without any UI state. Platform-agnostic (no UIKit import).
+func navidromePlayCountText(_ playCount: Int?) -> String? {
+    guard let count = playCount, count > 0 else { return nil }
+    return "▶ \(count)"
+}
 
 #if canImport(UIKit)
 import SwiftUI
@@ -37,12 +49,42 @@ struct NavidromeStarButton: View {
     }
 }
 
+// MARK: - NavidromeStarIndicator (65x.3)
+
+/// A compact read-only heart indicator for starred items in browse row/cell contexts.
+///
+/// Unlike `NavidromeStarButton` this is non-interactive — it is a static
+/// indicator only.  Used in album grid cells, search result rows, and genre
+/// track rows where the full interactive toggle would be too prominent.
+///
+/// Only rendered when `starred == true` to avoid visual noise on unstarred items.
+struct NavidromeStarIndicator: View {
+    let starred: Bool
+
+    var body: some View {
+        if starred {
+            Image(systemName: "heart.fill")
+                .font(.caption2)
+                .foregroundStyle(Color.red.opacity(0.85))
+                .accessibilityHidden(true)   // row-level accessibilityLabel carries this info
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview("Star states") {
     HStack(spacing: 20) {
         NavidromeStarButton(starred: false, accessibilityLabel: "Star track") {}
         NavidromeStarButton(starred: true, accessibilityLabel: "Unstar track") {}
+    }
+    .padding()
+}
+
+#Preview("Star indicator") {
+    HStack(spacing: 12) {
+        NavidromeStarIndicator(starred: false)
+        NavidromeStarIndicator(starred: true)
     }
     .padding()
 }
