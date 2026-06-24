@@ -19,8 +19,14 @@ struct NowPlayingView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                // Artwork
-                if settingsViewModel.settings.artworkDisplayMode == .coverArt,
+                // Artwork — d6q.2: library tracks render from nowPlaying.artworkURL;
+                // radio keeps the existing SXM cover-art → channel-logo priority.
+                if let item = audioPlayer.nowPlaying, !item.isLiveStream,
+                   let artworkURL = item.artworkURL {
+                    RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
+                        .shadow(radius: 10)
+                        .id(item.displayTitle)
+                } else if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                    let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
                     RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
                         .shadow(radius: 10)
@@ -33,46 +39,60 @@ struct NowPlayingView: View {
                     channelPlaceholder
                 }
 
-                // Channel / track info
+                // Track / channel info
                 VStack(spacing: 8) {
-                    Text(audioPlayer.currentChannel?.name ?? "Not Playing")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .multilineTextAlignment(.center)
-
-                    if let track = sxmService.currentTrack {
-                        Text(track.title)
-                            .font(.headline)
+                    // d6q.2: library mode — show track title as primary, subtitle as secondary.
+                    if let item = audioPlayer.nowPlaying, !item.isLiveStream {
+                        Text(item.displayTitle)
+                            .font(.title2)
+                            .fontWeight(.bold)
                             .multilineTextAlignment(.center)
-                        Text(track.artistDisplay)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else if let game = currentGame {
-                        Text(game.nowPlayingTitle)
-                            .font(.headline)
-                            .multilineTextAlignment(.center)
-                        Text(game.nowPlayingSubtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    } else if let streamTitle = audioPlayer.streamTitle {
-                        Text(streamTitle)
-                            .font(.headline)
-                            .multilineTextAlignment(.center)
-                        if let streamArtist = audioPlayer.streamArtist {
-                            Text(streamArtist)
+                        if let subtitle = item.displaySubtitle {
+                            Text(subtitle)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        Text(audioPlayer.currentChannel?.group ?? "")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        // Radio mode — unchanged behaviour.
+                        Text(audioPlayer.currentChannel?.name ?? "Not Playing")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .multilineTextAlignment(.center)
 
-                        if let epg = currentEPG {
-                            Text(epg.title)
-                                .font(.callout)
+                        if let track = sxmService.currentTrack {
+                            Text(track.title)
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                            Text(track.artistDisplay)
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                                .padding(.top, 4)
+                        } else if let game = currentGame {
+                            Text(game.nowPlayingTitle)
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                            Text(game.nowPlayingSubtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else if let streamTitle = audioPlayer.streamTitle {
+                            Text(streamTitle)
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                            if let streamArtist = audioPlayer.streamArtist {
+                                Text(streamArtist)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text(audioPlayer.currentChannel?.group ?? "")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            if let epg = currentEPG {
+                                Text(epg.title)
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.top, 4)
+                            }
                         }
                     }
                 }
@@ -195,8 +215,24 @@ struct NowPlayingView: View {
         // calling stop()). The presenting MiniPlayerView is removed from the
         // hierarchy at the same moment, which would otherwise orphan this sheet
         // and leave the "play interface" up on the phone (bd tpu).
+        // d6q.2: for library tracks, currentChannel is intentionally nil, so
+        // the original "dismiss on channel=nil" logic would fire incorrectly.
+        // Instead observe isActiveSession via isPlaying+isBuffering: after stop()
+        // both are false AND nowPlayingActive becomes false.
         .onChange(of: audioPlayer.currentChannel?.id) { _, newID in
-            if newID == nil { dismiss() }
+            // Radio: dismiss when channel clears (stop() or CarPlay disconnect).
+            if newID == nil && !audioPlayer.isPlaying && !audioPlayer.isBuffering {
+                dismiss()
+            }
+        }
+        .onChange(of: audioPlayer.isPlaying) { _, _ in
+            // Library: dismiss when stopped (isPlaying=false, isBuffering=false,
+            // and no channel or track is set).
+            if !audioPlayer.isPlaying && !audioPlayer.isBuffering
+                && audioPlayer.currentChannel == nil
+                && audioPlayer.nowPlaying == nil {
+                dismiss()
+            }
         }
     }
 

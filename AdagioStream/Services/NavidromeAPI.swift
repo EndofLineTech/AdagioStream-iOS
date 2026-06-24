@@ -263,6 +263,42 @@ public struct NavidromeAPI {
         return payload.genres.genre
     }
 
+    // MARK: - Media streaming URLs (d6q.2)
+
+    /// Builds a `stream.view` URL for the given track ID.
+    ///
+    /// The URL embeds Subsonic token auth (u/t/s/c/v/f) so it can be
+    /// handed directly to VLC without any additional headers.
+    ///
+    /// - Parameters:
+    ///   - trackID: The Subsonic/Navidrome track identifier.
+    ///   - maxBitRate: Optional maximum bitrate in kbps.  Pass `nil` to let
+    ///     the server stream the original file without transcoding.
+    ///   - format: Optional target audio format (e.g. `"mp3"`, `"opus"`).
+    ///     Pass `nil` to use the server's default (usually original format).
+    /// - Returns: A fully-formed URL ready to feed to VLC, or `nil` if the
+    ///   host URL is malformed.
+    public func streamURL(trackID: String, maxBitRate: Int? = nil, format: String? = nil) -> URL? {
+        var params: [String: String] = ["id": trackID]
+        if let maxBitRate { params["maxBitRate"] = String(maxBitRate) }
+        if let format { params["format"] = format }
+        return buildURL(endpoint: "stream", params: params)
+    }
+
+    /// Builds a `getCoverArt.view` URL for the given cover-art ID.
+    ///
+    /// - Parameters:
+    ///   - id: The Subsonic cover-art identifier (from `Track.coverArt` or
+    ///     `Album.coverArt`).
+    ///   - size: Optional square pixel size for the thumbnail.  Pass `nil`
+    ///     to request the full-size image.
+    /// - Returns: A fully-formed URL, or `nil` if the host URL is malformed.
+    public func coverArtURL(id: String, size: Int? = nil) -> URL? {
+        var params: [String: String] = ["id": id]
+        if let size { params["size"] = String(size) }
+        return buildURL(endpoint: "getCoverArt", params: params)
+    }
+
     /// Fetches songs by genre from `getSongsByGenre.view`.
     ///
     /// - Parameters:

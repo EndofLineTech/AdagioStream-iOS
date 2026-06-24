@@ -140,6 +140,70 @@ final class PlaybackSourceTests: XCTestCase {
         XCTAssertEqual(source.currentItem.displayTitle, "First")
     }
 
+    // MARK: - Track NowPlayingItem rendering (d6q.2)
+
+    /// Track.displayTitle is the track title — the primary field shown in mini-player / now-playing.
+    func testTrackDisplayTitleIsTitle() {
+        let trk = makeTrack(title: "Everything in Its Right Place")
+        XCTAssertEqual(trk.displayTitle, "Everything in Its Right Place")
+    }
+
+    /// Track.displaySubtitle carries artistId as a stand-in until d6q.3 threads the artist name.
+    func testTrackDisplaySubtitleIsArtistIdWhenPresent() {
+        let trk = makeTrack(artistId: "ar-radiohead")
+        XCTAssertEqual(trk.displaySubtitle, "ar-radiohead")
+    }
+
+    /// Track without an artistId produces nil subtitle (no empty string shown in UI).
+    func testTrackDisplaySubtitleNilForEmptyArtistId() {
+        let trk = Track(
+            id: "t-empty",
+            albumId: "al-1",
+            artistId: "",
+            title: "Untitled",
+            updatedAt: 0
+        )
+        XCTAssertNil(trk.displaySubtitle)
+    }
+
+    /// Track.artworkURL is nil on the model itself; the play-path resolves the URL
+    /// and sets it via MPNowPlayingInfoCenter rather than storing it on the Track.
+    func testTrackArtworkURLIsNilOnModel() {
+        let trk = makeTrack()
+        XCTAssertNil(trk.artworkURL,
+            "artworkURL is resolved at play-time via NavidromeAPI.coverArtURL; nil on the model is expected")
+    }
+
+    /// Track is never a live stream — required so the mini-player skips the LIVE indicator.
+    func testTrackIsNotLiveStreamForMiniPlayerRouting() {
+        let trk = makeTrack()
+        XCTAssertFalse(trk.isLiveStream)
+    }
+
+    /// PlaybackSource.library with a single-track queue carries the right item.
+    func testLibrarySingleTrackQueueCurrentItem() {
+        let trk = makeTrack(id: "t-solo", title: "Karma Police")
+        let source = PlaybackSource.library(queue: [trk], index: 0)
+        XCTAssertEqual(source.currentItem.displayTitle, "Karma Police")
+        XCTAssertFalse(source.currentItem.isLiveStream)
+    }
+
+    /// Confirm naviarome streamURL helper builds the expected path and id param —
+    /// a lightweight integration check that doesn't require a live server.
+    func testNavidromeAPIStreamURLBuildPath() {
+        let api = NavidromeAPI(
+            host: URL(string: "https://navidrome.test")!,
+            username: "u",
+            password: "p"
+        )
+        let url = api.streamURL(trackID: "t-1")
+        XCTAssertNotNil(url)
+        XCTAssertEqual(url?.path, "/rest/stream.view")
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let idVal = items.first(where: { $0.name == "id" })?.value
+        XCTAssertEqual(idVal, "t-1")
+    }
+
     // MARK: - AudioPlayerService seam: playbackSource mirrors currentChannel
 
     @MainActor

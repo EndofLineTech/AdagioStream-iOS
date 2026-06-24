@@ -63,6 +63,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var isInBackground = false
     private var currentArtwork: MPMediaItemArtwork?
     private var sxmArtwork: MPMediaItemArtwork?
+    /// The track being played in `.library` mode; nil when in radio mode.
+    private var currentTrack: Track?
+    /// Artwork loaded for the currently-playing track (cover art from Navidrome).
+    private var currentTrackArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
     private var interruptedChannel: Channel?
     private var isActiveSession = false
@@ -844,6 +848,223 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
 
+    // MARK: - Track playback (d6q.2)
+
+    /// Plays a single on-demand track from the Navidrome library.
+    ///
+    /// Sets `playbackSource = .library(queue: [track], index: 0)` and feeds
+    /// the Subsonic `stream.view` URL into VLC.  `currentChannel` is set to
+    /// `nil` because a track is not a radio channel — the mini-player and
+    /// now-playing views render from `nowPlaying` (the `NowPlayingItem`
+    /// protocol) for the library case.
+    ///
+    /// Radio playback is unaffected: `play(channel:)` remains the sole entry
+    /// point for live streams.
+    ///
+    /// - Parameters:
+    ///   - track: The `Track` to play.
+    ///   - api: A configured `NavidromeAPI` instance used to build the
+    ///     authenticated `stream.view` URL and the cover-art URL.
+    public func play(track: Track, via api: NavidromeAPI) {
+        guard let streamURL = api.streamURL(trackID: track.id) else {
+            log.log("play(track:) — stream URL construction failed for trackID=\(track.id)", category: .player)
+            self.error = "Could not build stream URL for this track."
+            return
+        }
+
+        log.log("play(track:) trackID=\(track.id) title=\"\(track.title)\" url=\(streamURL.redactedForLog)", category: .player)
+
+        // Cancel any pending radio work.
+        deferredReconnectWorkItem?.cancel()
+        deferredReconnectWorkItem = nil
+        pendingPlayWorkItem?.cancel()
+        pendingPlayWorkItem = nil
+        streamProbeTask?.cancel()
+        streamProbeTask = nil
+        probeStartTime = nil
+        interruptedChannel = nil
+        isRidingOutInterruption = false
+        interruptionFallbackWorkItem?.cancel()
+        interruptionFallbackWorkItem = nil
+        if let oldURL = currentBufferFileURL {
+            timeShiftBuffer.deleteBufferFile(at: oldURL)
+            currentBufferFileURL = nil
+        }
+        isPlayingBufferedFile = false
+        bufferedChannel = nil
+        interruptionTime = nil
+        bufferPlaybackStartedAt = nil
+        timeShiftBuffer.cancelAndCleanup()
+        lastLoggedVLCState = nil
+        stateTimer?.invalidate()
+        endBufferingBackgroundTask()
+
+        // Stop the old player if one is running.
+        let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
+        if hadActiveMedia {
+            timed("play(track:): mediaPlayer.stop()") { mediaPlayer.stop() }
+            timed("play(track:): mediaPlayer.media=nil") { mediaPlayer.media = nil }
+            VLCAudioCallbackBridge.flushBuffer()
+            lastTeardownTime = Date()
+        }
+
+        assertSessionOwnership(context: "play(track:)")
+
+        // Transition state: track mode sets currentChannel to nil.
+        currentChannel = nil
+        currentTrack = track
+        currentTrackArtwork = nil
+        playbackSource = .library(queue: [track], index: 0)
+
+        isActiveSession = false
+        isBuffering = true
+        isPlaying = false
+        error = nil
+        streamBitrateKbps = 0
+        statusText = ""
+        streamTitle = nil
+        streamArtist = nil
+        vlcZeroByteRetryCount = 0
+        channelChangeRetryCount = 0
+        isReducedBufferRetry = false
+        accumulatedListeningTime = 0
+
+        listeningStartDate = Date()
+        updateNowPlayingInfoForTrack()
+        // Note: sxmService is radio-specific; not notified for library tracks.
+
+        // Fetch cover art asynchronously; update now-playing when it arrives.
+        if let coverArtID = track.coverArt, let artURL = api.coverArtURL(id: coverArtID, size: 300) {
+            fetchTrackArtwork(url: artURL, trackID: track.id)
+        }
+
+        startTrackStream(url: streamURL)
+    }
+
+    /// Low-level VLC bootstrap for on-demand track URLs.
+    ///
+    /// Deliberately separate from `startStream(for:channel:)` because the radio
+    /// path has live-stream-specific concerns that don't apply to on-demand
+    /// tracks: `--http-reconnect`, `scheduleDeferredReconnect`, the interruption
+    /// fallback safety-net, and the zero-byte probe-and-retry loop.  Mixing those
+    /// concerns into a shared primitive creates risk without benefit for a finite
+    /// on-demand stream.
+    ///
+    /// The shared elements (`retirePlayer`, amem bridge, session ownership) are
+    /// preserved exactly.  Radio behaviour is provably unchanged — this method is
+    /// never called from any radio code path.
+    private func startTrackStream(url: URL) {
+        streamStartTime = Date()
+        wasAwaitingInitialBuffer = false
+        hasReceivedData = false
+        lastDataFlowTime = nil
+        lastActiveDecodedAudio = 0
+        lastLoggedLostAudioBuffers = 0
+        lastLoggedDiscontinuity = 0
+
+        let cacheMs = Int(bufferDuration * 1000)
+        log.log("startTrackStream: network-caching=\(cacheMs)ms url=\(url.redactedForLog)", category: .player)
+        retirePlayer(options: [
+            "--network-caching=\(cacheMs)",
+        ])
+
+        let media = VLCMedia(url: url)
+        media.addOptions(["http-user-agent": "AdagioStream/1.0"])
+        media.delegate = self
+        mediaPlayer.media = media
+        mediaPlayer.audio?.volume = 100
+
+        AudioOutput.shared.start()
+        VLCAudioCallbackBridge.resetRenderCounters()
+
+        let preAttachPlay = VLCAudioCallbackBridge.playCallbackCount
+        let attached = VLCAudioCallbackBridge.attachAudioCallbacks(
+            to: mediaPlayer,
+            sampleRate: AudioOutput.sampleRate,
+            channels: AudioOutput.channelCount
+        )
+        log.log("amem bridge (track): attached=\(attached), priorPlayCount=\(preAttachPlay)", category: .audioSession)
+
+        mediaPlayer.play()
+        isActiveSession = true
+        log.log("startTrackStream started: playerState=\(vlcStateName(mediaPlayer.state)), willPlay=\(mediaPlayer.willPlay)", category: .player)
+
+        currentPollInterval = fastPollInterval
+        stateTimer = Timer.scheduledTimer(withTimeInterval: fastPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.syncState()
+            }
+        }
+    }
+
+    private func fetchTrackArtwork(url: URL, trackID: String) {
+        Task {
+            guard let image = await ImageCacheService.shared.ephemeralImage(for: url) else { return }
+            guard self.currentTrack?.id == trackID else { return }
+            self.currentTrackArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.updateNowPlayingInfoForTrack()
+        }
+    }
+
+    /// Updates `MPNowPlayingInfoCenter` for a track playing in `.library` mode.
+    ///
+    /// Called from `play(track:via:)` and the async artwork fetch.  The radio
+    /// path continues to call `updateNowPlayingInfo()` unchanged.
+    private func updateNowPlayingInfoForTrack() {
+        guard let track = currentTrack else { return }
+
+        let title = track.title
+        // Phase 1: Track has artistId but no denormalised name string.
+        // displaySubtitle returns artistId when non-empty, nil otherwise.
+        // d6q.3 (album detail view) can thread the artist name through
+        // by passing a richer context object.
+        let artist = track.displaySubtitle ?? ""
+        let artwork = currentTrackArtwork
+        let isLive = false
+        let rate: Double = (isPlaying || isBuffering) ? 1.0 : 0.0
+        let state: MPNowPlayingPlaybackState = (isPlaying || isBuffering) ? .playing : .paused
+
+        let changed = title != lastNowPlayingTitle
+            || artist != lastNowPlayingArtist
+            || isLive != lastNowPlayingIsLive
+            || rate != lastNowPlayingRate
+            || state != lastNowPlayingState
+            || artwork !== lastNowPlayingArtwork
+        guard changed else { return }
+
+        lastNowPlayingTitle = title
+        lastNowPlayingArtist = artist
+        lastNowPlayingIsLive = isLive
+        lastNowPlayingRate = rate
+        lastNowPlayingState = state
+        lastNowPlayingArtwork = artwork
+
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: title,
+            MPMediaItemPropertyArtist: artist,
+            MPNowPlayingInfoPropertyIsLiveStream: false,
+            MPNowPlayingInfoPropertyPlaybackRate: rate,
+        ]
+        if let duration = track.duration {
+            info[MPMediaItemPropertyPlaybackDuration] = NSNumber(value: duration)
+        }
+        if let artwork {
+            info[MPMediaItemPropertyArtwork] = artwork
+        }
+
+        let center = MPNowPlayingInfoCenter.default()
+        center.nowPlayingInfo = info
+        center.playbackState = state
+
+        let stateName: String
+        switch state {
+        case .playing: stateName = "playing"
+        case .paused:  stateName = "paused"
+        default:       stateName = "other"
+        }
+        log.log("NowPlaying (track): title=\"\(title)\", artist=\"\(artist)\", isLive=false, state=\(stateName)", category: .player)
+    }
+
     /// Deactivate→reactivate the session so iOS formally hands audio focus
     /// to Adagio.  A bare setActive(true) is a no-op when the session is
     /// already active, which leaves remote-command registration with
@@ -1447,6 +1668,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         timed("stop(): mediaPlayer.media=nil") { mediaPlayer.media = nil }
         lastPlayedChannel = currentChannel
         currentChannel = nil
+        currentTrack = nil                 // d6q.2: clear track state on stop
+        currentTrackArtwork = nil
         playbackSource = nil               // d6q.7: mirror into PlaybackSource seam
         isPlaying = false
         isBuffering = false
@@ -1862,7 +2085,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
 
         updateStreamStats()
-        updateNowPlayingInfo()
+        // Dispatch to the correct now-playing updater based on playback mode.
+        if currentTrack != nil {
+            updateNowPlayingInfoForTrack()
+        } else {
+            updateNowPlayingInfo()
+        }
 
         // Adaptive timer: background → very slow, stable play → slow, transitions → fast
         if isInBackground {

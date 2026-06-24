@@ -13,19 +13,25 @@ struct MiniPlayerView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Channel logo + info — tapping opens full player
+            // Item artwork + info — tapping opens full player
             Button {
                 showNowPlaying = true
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
-                        if settingsViewModel.settings.artworkDisplayMode == .coverArt,
+                        // d6q.2: for library tracks, render artwork from nowPlaying.artworkURL
+                        // (populated by the track's cover-art fetch in play(track:via:)).
+                        // For radio, keep existing SXM cover-art → channel logo priority.
+                        if let item = audioPlayer.nowPlaying, !item.isLiveStream,
+                           let artworkURL = item.artworkURL {
+                            RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
+                        } else if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                            let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
                             RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
                         } else if let logoURL = audioPlayer.currentChannel?.logoURL {
                             RetryableAsyncImage(url: logoURL, width: logoSize, height: logoSize, cornerRadius: logoRadius)
                         } else {
-                            Image(systemName: "radio")
+                            Image(systemName: audioPlayer.nowPlaying?.isLiveStream == false ? "music.note" : "radio")
                                 .frame(width: logoSize, height: logoSize)
                                 .foregroundStyle(.secondary)
                         }
@@ -40,11 +46,21 @@ struct MiniPlayerView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(audioPlayer.currentChannel?.name ?? "")
+                        // d6q.2: use nowPlaying.displayTitle for both radio and library.
+                        Text(audioPlayer.nowPlaying?.displayTitle ?? "")
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        if let track = sxmService.currentTrack {
+                        // Library track: show subtitle (artistId until d6q.3 threads name).
+                        if let item = audioPlayer.nowPlaying, !item.isLiveStream {
+                            if let subtitle = item.displaySubtitle {
+                                Text(subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        } else if let track = sxmService.currentTrack {
+                            // Radio: SXM now-playing metadata (unchanged)
                             Text("\(track.artistDisplay) — \(track.title)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

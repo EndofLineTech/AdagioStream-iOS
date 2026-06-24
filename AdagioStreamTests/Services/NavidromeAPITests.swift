@@ -601,6 +601,107 @@ final class NavidromeAPITests: XCTestCase {
         XCTAssertLessThanOrEqual(updatedAt, after,   "updatedAt must be <= time after call")
     }
 
+    // MARK: - streamURL (d6q.2)
+
+    func testStreamURLBuildsCorrectPath() {
+        let url = api.streamURL(trackID: "trk-99")
+        XCTAssertNotNil(url, "streamURL must return a non-nil URL")
+        XCTAssertEqual(url?.path, "/rest/stream.view")
+    }
+
+    func testStreamURLContainsTrackID() {
+        let url = api.streamURL(trackID: "trk-abc")
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let idParam = items.first(where: { $0.name == "id" })?.value
+        XCTAssertEqual(idParam, "trk-abc")
+    }
+
+    func testStreamURLContainsAllAuthQueryParams() {
+        let url = api.streamURL(trackID: "trk-1")
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"), "token must be present")
+        XCTAssertNotNil(q("s"), "salt must be present")
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    func testStreamURLIncludesMaxBitRateWhenProvided() {
+        let url = api.streamURL(trackID: "trk-1", maxBitRate: 320)
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let maxBR = items.first(where: { $0.name == "maxBitRate" })?.value
+        XCTAssertEqual(maxBR, "320")
+    }
+
+    func testStreamURLOmitsMaxBitRateWhenNil() {
+        let url = api.streamURL(trackID: "trk-1", maxBitRate: nil)
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let maxBR = items.first(where: { $0.name == "maxBitRate" })?.value
+        XCTAssertNil(maxBR, "maxBitRate must be absent when not specified")
+    }
+
+    func testStreamURLIncludesFormatWhenProvided() {
+        let url = api.streamURL(trackID: "trk-1", format: "mp3")
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let fmt = items.first(where: { $0.name == "format" })?.value
+        XCTAssertEqual(fmt, "mp3")
+    }
+
+    func testStreamURLOmitsFormatWhenNil() {
+        let url = api.streamURL(trackID: "trk-1", format: nil)
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let fmt = items.first(where: { $0.name == "format" })?.value
+        XCTAssertNil(fmt, "format must be absent when not specified")
+    }
+
+    func testStreamURLHostIsPreserved() {
+        let url = api.streamURL(trackID: "trk-1")
+        XCTAssertEqual(url?.host, "navidrome.example.com")
+    }
+
+    // MARK: - coverArtURL (d6q.2)
+
+    func testCoverArtURLBuildsCorrectPath() {
+        let url = api.coverArtURL(id: "art-42")
+        XCTAssertNotNil(url, "coverArtURL must return a non-nil URL")
+        XCTAssertEqual(url?.path, "/rest/getCoverArt.view")
+    }
+
+    func testCoverArtURLContainsCoverArtID() {
+        let url = api.coverArtURL(id: "art-42")
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let idParam = items.first(where: { $0.name == "id" })?.value
+        XCTAssertEqual(idParam, "art-42")
+    }
+
+    func testCoverArtURLContainsAuthParams() {
+        let url = api.coverArtURL(id: "art-1")
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+        XCTAssertNotNil(q("s"))
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+    }
+
+    func testCoverArtURLIncludesSizeWhenProvided() {
+        let url = api.coverArtURL(id: "art-1", size: 300)
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let size = items.first(where: { $0.name == "size" })?.value
+        XCTAssertEqual(size, "300")
+    }
+
+    func testCoverArtURLOmitsSizeWhenNil() {
+        let url = api.coverArtURL(id: "art-1", size: nil)
+        let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
+        let size = items.first(where: { $0.name == "size" })?.value
+        XCTAssertNil(size, "size must be absent when not specified")
+    }
+
     // MARK: - invalidURL guard
 
     func testFetchWithEmptyEndpointStillBuildsValidURL() async throws {
