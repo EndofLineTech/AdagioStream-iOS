@@ -20,6 +20,9 @@ class CarPlayTemplateManager {
     private var feedTracksCancellable: AnyCancellable?
     private var espnCancellable: AnyCancellable?
     private var epgCancellable: AnyCancellable?
+    private var shuffleCancellable: AnyCancellable?
+    private var repeatCancellable: AnyCancellable?
+    private var playbackSourceCancellable: AnyCancellable?
     private var groupSortCancellables = Set<AnyCancellable>()
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
@@ -97,6 +100,30 @@ class CarPlayTemplateManager {
             }
 
         trackCancellable = SXMMetadataService.shared.$currentTrack
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
+
+        // 8rg.2: observe playbackSource so the button set switches between
+        // library (shuffle/repeat) and radio (favorite/heart/live) when the
+        // source type changes.  currentChannel fires for radio→nil transitions
+        // but not for nil→library; this covers that gap.
+        playbackSourceCancellable = audioPlayer.$playbackSource
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
+
+        // 8rg.2: observe shuffle + repeat so the CarPlay now-playing buttons
+        // stay in sync with the player state for library playback.
+        shuffleCancellable = audioPlayer.$shuffleEnabled
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
+
+        repeatCancellable = audioPlayer.$repeatMode
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
@@ -221,6 +248,66 @@ class CarPlayTemplateManager {
 
     private func updateNowPlayingButtons() {
         let nowPlaying = CPNowPlayingTemplate.shared
+
+        // 8rg.2: branch on playback source so music vs radio each get the
+        // right now-playing buttons.  The CPNowPlayingTemplate singleton is
+        // shared; we reconfigure it every time the source or relevant state
+        // changes (shuffle, repeat, favorite, heart, time-shift).
+        switch audioPlayer.playbackSource {
+        case .library:
+            updateNowPlayingButtonsForLibrary(nowPlaying)
+        case .radio, .none:
+            updateNowPlayingButtonsForRadio(nowPlaying)
+        }
+    }
+
+    /// Configures the CPNowPlayingTemplate buttons for library (music) playback.
+    ///
+    /// Buttons (in order):
+    ///   1. `CPNowPlayingShuffleButton` — wired to `toggleShuffle()`.
+    ///      `isSelected = shuffleEnabled` so CarPlay renders the highlighted state
+    ///      when shuffle is active.
+    ///   2. `CPNowPlayingRepeatButton`  — wired to `cycleRepeatMode()`.
+    ///      `isSelected = repeatMode != .off` so the button appears highlighted
+    ///      whenever any repeat mode is active.  The cycle order is
+    ///      `.off → .all → .one → .off`; CarPlay does not distinguish `.all`
+    ///      from `.one` visually (it just shows a highlighted repeat icon), which
+    ///      matches the single-button paradigm.
+    ///
+    /// Up Next: `isUpNextButtonEnabled` is left `false` (default).  The
+    /// `CPNowPlayingTemplateObserver` protocol would be required to handle the
+    /// button tap and push a queue list template; that observer wiring is deferred
+    /// until a dedicated queue-browsing bead.
+    private func updateNowPlayingButtonsForLibrary(_ nowPlaying: CPNowPlayingTemplate) {
+        let shuffleButton = CPNowPlayingShuffleButton { [weak self] _ in
+            Task { @MainActor in
+                self?.audioPlayer.toggleShuffle()
+                // updateNowPlayingButtons is driven by the $shuffleEnabled
+                // publisher so no explicit call is needed here.
+            }
+        }
+        shuffleButton.isSelected = audioPlayer.shuffleEnabled
+
+        let repeatButton = CPNowPlayingRepeatButton { [weak self] _ in
+            Task { @MainActor in
+                self?.audioPlayer.cycleRepeatMode()
+                // updateNowPlayingButtons is driven by the $repeatMode
+                // publisher so no explicit call is needed here.
+            }
+        }
+        // Highlight whenever any repeat mode is active (.all or .one).
+        repeatButton.isSelected = audioPlayer.repeatMode != .off
+
+        nowPlaying.updateNowPlayingButtons([shuffleButton, repeatButton])
+
+        log.log("CarPlay NowPlaying (library): shuffle=\(audioPlayer.shuffleEnabled), repeat=\(audioPlayer.repeatMode)", category: .carplay)
+    }
+
+    /// Configures the CPNowPlayingTemplate buttons for radio playback.
+    ///
+    /// This is the existing behavior, extracted verbatim so radio now-playing
+    /// is never regressed by the library branch above.
+    private func updateNowPlayingButtonsForRadio(_ nowPlaying: CPNowPlayingTemplate) {
         let buttonSize = CGSize(width: 44, height: 44)
 
         let isFavorite = providerManager.channels
@@ -905,5 +992,28 @@ class CarPlayTemplateManager {
         } else {
             return String(format: "%d:%02d", m, s)
         }
+    }
+
+    // MARK: - Now Playing Button State Helpers (8rg.2)
+
+    /// Returns whether the CarPlay shuffle button should appear selected (highlighted).
+    ///
+    /// `true` when shuffle is enabled; `false` otherwise.
+    /// Extracted as a static helper so unit tests can verify the mapping
+    /// without instantiating a live `CarPlayTemplateManager`.
+    nonisolated static func shuffleButtonSelected(shuffleEnabled: Bool) -> Bool {
+        shuffleEnabled
+    }
+
+    /// Returns whether the CarPlay repeat button should appear selected (highlighted).
+    ///
+    /// `true` when any repeat mode is active (`.all` or `.one`); `false` when `.off`.
+    /// CarPlay's `CPNowPlayingRepeatButton` is a single-tap cycle button — it
+    /// does not visually distinguish `.all` from `.one`.  The selection state
+    /// simply reflects "something is repeating" vs "nothing is repeating".
+    ///
+    /// The full cycle driven by `cycleRepeatMode()` is: `.off → .all → .one → .off`.
+    nonisolated static func repeatButtonSelected(repeatMode: RepeatMode) -> Bool {
+        repeatMode != .off
     }
 }

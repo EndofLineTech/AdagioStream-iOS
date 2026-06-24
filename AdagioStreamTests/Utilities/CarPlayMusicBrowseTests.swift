@@ -1,8 +1,11 @@
 // CarPlayMusicBrowseTests.swift
 //
-// Unit tests for the pure-logic helpers added to CarPlayTemplateManager in 8rg.1.
+// Unit tests for the pure-logic helpers added to CarPlayTemplateManager.
+//   8rg.1: formatDuration
+//   8rg.2: shuffleButtonSelected / repeatButtonSelected button-state mapping
+//
 // CarPlay UI itself can't be exercised in the simulator (no CPInterfaceController
-// without a real CarPlay connection), but the static formatting helper is
+// without a real CarPlay connection), but these static helpers are
 // framework-free and fully testable here.
 //
 // Gated #if os(iOS) because CarPlay is iOS-only.
@@ -13,7 +16,7 @@ import XCTest
 
 final class CarPlayMusicBrowseTests: XCTestCase {
 
-    // MARK: - formatDuration
+    // MARK: - formatDuration (8rg.1)
 
     func testFormatDurationSeconds() {
         // Under a minute: no leading hour field
@@ -40,6 +43,58 @@ final class CarPlayMusicBrowseTests: XCTestCase {
         XCTAssertEqual(CarPlayTemplateManager.formatDuration(225), "3:45")
         // 4 min 02 sec = 242 seconds
         XCTAssertEqual(CarPlayTemplateManager.formatDuration(242), "4:02")
+    }
+
+    // MARK: - shuffleButtonSelected (8rg.2)
+
+    func testShuffleButtonSelectedWhenEnabled() {
+        // The CarPlay shuffle button should appear highlighted when shuffle is on.
+        XCTAssertTrue(
+            CarPlayTemplateManager.shuffleButtonSelected(shuffleEnabled: true),
+            "Shuffle button should be selected when shuffle is enabled"
+        )
+    }
+
+    func testShuffleButtonNotSelectedWhenDisabled() {
+        // The CarPlay shuffle button should NOT appear highlighted when shuffle is off.
+        XCTAssertFalse(
+            CarPlayTemplateManager.shuffleButtonSelected(shuffleEnabled: false),
+            "Shuffle button should not be selected when shuffle is disabled"
+        )
+    }
+
+    // MARK: - repeatButtonSelected (8rg.2)
+
+    func testRepeatButtonNotSelectedWhenOff() {
+        // .off → no repeat active → button not highlighted.
+        XCTAssertFalse(
+            CarPlayTemplateManager.repeatButtonSelected(repeatMode: .off),
+            "Repeat button should not be selected when repeatMode is .off"
+        )
+    }
+
+    func testRepeatButtonSelectedWhenAll() {
+        // .all → repeat active → button highlighted.
+        XCTAssertTrue(
+            CarPlayTemplateManager.repeatButtonSelected(repeatMode: .all),
+            "Repeat button should be selected when repeatMode is .all"
+        )
+    }
+
+    func testRepeatButtonSelectedWhenOne() {
+        // .one → repeat active → button highlighted.
+        XCTAssertTrue(
+            CarPlayTemplateManager.repeatButtonSelected(repeatMode: .one),
+            "Repeat button should be selected when repeatMode is .one"
+        )
+    }
+
+    func testRepeatButtonCycleOrder() {
+        // Verify the full cycle: .off → .all → .one → .off
+        // (the mapping used by cycleRepeatMode()).
+        XCTAssertEqual(RepeatMode.off.next, .all)
+        XCTAssertEqual(RepeatMode.all.next, .one)
+        XCTAssertEqual(RepeatMode.one.next, .off)
     }
 }
 #endif
