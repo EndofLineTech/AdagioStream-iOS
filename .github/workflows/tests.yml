@@ -1,0 +1,42 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  unit-tests:
+    name: XCTest Suite
+    runs-on: macos-26
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.5.app
+          xcodebuild -version
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run unit tests
+        run: |
+          # Destination: iPhone 16 Pro is chosen over iPhone 17 Pro because named
+          # simulator runtimes for the current-gen device (17) may require an
+          # additional download on fresh runner images, whereas iPhone 16 Pro ships
+          # bundled with Xcode 26 by default. If GitHub updates the macos-26 image
+          # to include iPhone 17 Pro out of the box, switch to that name.
+          xcodebuild test \
+            -scheme AdagioStream \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -only-testing:AdagioStreamTests \
+            CODE_SIGNING_ALLOWED=NO
