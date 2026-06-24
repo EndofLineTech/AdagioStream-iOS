@@ -205,11 +205,18 @@ public struct SubsonicArtistDTO: Decodable {
 ///   • `getAlbum` detail: uses `"title"` for the album title
 /// Both are decoded; `title` wins when present; `name` is the fallback.
 ///
-/// `songCount` → `trackCount`, `artist` (name string) is discarded in favour
-/// of `artistId`.
+/// `songCount` → `trackCount`.
+/// `artist` (display name string) is captured in `artistName` for UI display
+/// (e.g. album-detail header and now-playing subtitle); `artistId` is the
+/// foreign key used for DB relations.
 public struct SubsonicAlbumDTO: Decodable {
     public let id: String
     public let artistId: String
+    /// Human-readable artist display name from the `"artist"` Subsonic field.
+    /// Present in both `getArtist`/`getAlbumList2` and `getAlbum` responses.
+    /// Used to show the real artist name in the browse UI and now-playing
+    /// subtitle instead of the raw `artistId` foreign key.
+    public let artistName: String?
     /// Album title. In `getArtist`/`getAlbumList2` responses this arrives as
     /// `"name"`. In `getAlbum` detail it arrives as `"title"`. Both are decoded
     /// and `resolvedTitle` picks the right one.
@@ -223,6 +230,7 @@ public struct SubsonicAlbumDTO: Decodable {
     enum CodingKeys: String, CodingKey {
         case id
         case artistId
+        case artistName = "artist"
         case nameField  = "name"
         case titleField = "title"
         case year

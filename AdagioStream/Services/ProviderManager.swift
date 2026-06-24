@@ -292,6 +292,21 @@ public final class ProviderManager: ObservableObject {
         providers.filter(\.isEnabled).count
     }
 
+    /// Returns a `NavidromeAPI` client for the first enabled Subsonic provider,
+    /// or `nil` when none is configured.
+    ///
+    /// Single-server product scope: when multiple Subsonic providers are
+    /// configured, the first enabled one wins.  The browse UI (`MusicLibraryView`)
+    /// reads this once on appear; the accessor is cheap (no network I/O).
+    public var subsonicAPI: NavidromeAPI? {
+        for provider in providers where provider.isEnabled {
+            if case .subsonic(let host, let username, let password) = provider.type {
+                return NavidromeAPI(host: host, username: username, password: password)
+            }
+        }
+        return nil
+    }
+
     private func saveProviders() async {
         do {
             let data = try JSONEncoder().encode(providers)

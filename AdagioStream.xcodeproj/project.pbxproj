@@ -77,6 +77,7 @@
 		64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D292EB2856F819A576B56777 /* NavidromeModels.swift */; };
 		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
 		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
+		685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */; };
 		698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */; };
 		6AEDCD88BA06E999C0BC2D30 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */; };
 		6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B258B0EF620197CC9833E0 /* ChannelListView.swift */; };
@@ -85,6 +86,7 @@
 		6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */; };
 		6E1002B73E53AD77F5B7ED25 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
 		701227A8D261E3BFC31A11B0 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
+		71D92FF85C9D20E77C1EE77C /* ArtistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15661B141F08A5A168EF3E96 /* ArtistDetailView.swift */; };
 		73708E2321CC7E5207592574 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C7642DA09DCBAEB0F4EC649 /* Assets.xcassets */; };
 		7413AC5A1A2839861CBADFF5 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E220456DACC5137EA0F00B /* Constants.swift */; };
 		743B9ECFB3057C393642ADE5 /* ProviderManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49B5499FEB06793F277174C /* ProviderManagementView.swift */; };
@@ -111,6 +113,7 @@
 		9623E67CA7985B8FA11275FB /* VLCAudioCallbackBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */; };
 		987AA9ADB45C60F54C55F54E /* SavedSongsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93C4E8E849B51924BF7E05CE /* SavedSongsView.swift */; };
 		9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3FA365F7131A727DB1A7C79 /* AirPlayRoutePickerView.swift */; };
+		9B516B6C354B57C1745F9813 /* AlbumDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AD4954BCD2BA044B4EB3738 /* AlbumDetailView.swift */; };
 		9B9B71470CE809C09FAC29BF /* NavidromeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FB864F08076A1C5C5CFA8F5 /* NavidromeStore.swift */; };
 		9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */; };
 		9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */; };
@@ -122,6 +125,7 @@
 		A5D385A628F031AB2AD4E4C8 /* CustomPlaylistEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */; };
 		A5DA64A05B826E47DD4AF4E3 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
 		A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79745B7578E3CC2CF2AF0D37 /* ProviderManager.swift */; };
+		AB8C32FBC756EC0A6D9E594E /* NavidromeLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */; };
 		ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */; };
 		AC45A485F3635077A4F77F16 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */; };
 		ACD0D3D11F441CE56CC8982A /* SubsonicAuthTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74CB1E2C668FF92DFBBB68B /* SubsonicAuthTests.swift */; };
@@ -146,6 +150,7 @@
 		C3B00CA635577BDD69A6001B /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CCAE274A593BD7364C5F6FD /* Channel.swift */; };
 		C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */; };
 		C733EDA151EC0DF936A3D4E9 /* PlaybackSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE137FF651110189C708941D /* PlaybackSettingsView.swift */; };
+		C85820E109EA2CBDBE1BEE4F /* MusicLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAEEB586D30C3867A74F7B11 /* MusicLibraryView.swift */; };
 		C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */; };
 		CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */; };
 		CB5A676A08CF467E5A9F5776 /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
@@ -220,10 +225,12 @@
 		0F67E823749582BB0256C664 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		10E220456DACC5137EA0F00B /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		128F1C09A21166CCFBD59403 /* ESPNScoreService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNScoreService.swift; sourceTree = "<group>"; };
+		15661B141F08A5A168EF3E96 /* ArtistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistDetailView.swift; sourceTree = "<group>"; };
 		15E857A8239DB4ADDC5AA458 /* PersistenceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceServiceTests.swift; sourceTree = "<group>"; };
 		177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistGroup.swift; sourceTree = "<group>"; };
 		19271F91713741C80AB630E7 /* KeychainSyncMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainSyncMigrator.swift; sourceTree = "<group>"; };
 		1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowView.swift; sourceTree = "<group>"; };
+		1AD4954BCD2BA044B4EB3738 /* AlbumDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumDetailView.swift; sourceTree = "<group>"; };
 		1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		1CB6CC077DE7865648EC949C /* ESPNModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNModels.swift; sourceTree = "<group>"; };
 		1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserTests.swift; sourceTree = "<group>"; };
@@ -305,7 +312,9 @@
 		B785664AF5E9481E580421E3 /* SettingsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModel.swift; sourceTree = "<group>"; };
 		B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		B9FCFDD12A0ED12C750422CB /* GlassEffect+Helpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GlassEffect+Helpers.swift"; sourceTree = "<group>"; };
+		BAEEB586D30C3867A74F7B11 /* MusicLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicLibraryView.swift; sourceTree = "<group>"; };
 		BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntry.swift; sourceTree = "<group>"; };
+		BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeLibraryViewModel.swift; sourceTree = "<group>"; };
 		BCAC8C26132C648A120C1ED4 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		C7713A3C47F3B23E57849347 /* SavedSong.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSong.swift; sourceTree = "<group>"; };
 		C81245276C98A5709B721113 /* PlaybackSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSource.swift; sourceTree = "<group>"; };
@@ -423,6 +432,7 @@
 			children = (
 				48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */,
 				9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */,
+				BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */,
 				9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */,
 				E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */,
 				B785664AF5E9481E580421E3 /* SettingsViewModel.swift */,
@@ -468,6 +478,16 @@
 				E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		3934901030B551CF06A6A537 /* Music */ = {
+			isa = PBXGroup;
+			children = (
+				1AD4954BCD2BA044B4EB3738 /* AlbumDetailView.swift */,
+				15661B141F08A5A168EF3E96 /* ArtistDetailView.swift */,
+				BAEEB586D30C3867A74F7B11 /* MusicLibraryView.swift */,
+			);
+			path = Music;
 			sourceTree = "<group>";
 		};
 		3B92C5C143BE91606CF31288 /* Components */ = {
@@ -605,6 +625,7 @@
 				A97EE5CFDF1DFF2BB9D2E698 /* CustomPlaylists */,
 				A2A244448F29868096069FC2 /* EPG */,
 				6FBC5F09C97033D356ED66F5 /* Favorites */,
+				3934901030B551CF06A6A537 /* Music */,
 				2A145E596DEF592D695C7EDE /* Player */,
 				D59910D0C5EDB56EBE3B834E /* Provider */,
 				DF112033F928B3EF0BE69D94 /* SavedSongs */,
@@ -952,8 +973,10 @@
 				5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */,
 				AC45A485F3635077A4F77F16 /* AdvancedSettingsView.swift in Sources */,
 				9937DB1DC3D0E8872DEECA26 /* AirPlayRoutePickerView.swift in Sources */,
+				9B516B6C354B57C1745F9813 /* AlbumDetailView.swift in Sources */,
 				107DD6531B40A8CA4B94A7B9 /* AppSettings.swift in Sources */,
 				40DCCC69DD226BEBBEBADDFE /* AppearanceSettingsView.swift in Sources */,
+				71D92FF85C9D20E77C1EE77C /* ArtistDetailView.swift in Sources */,
 				E0581AB56C0A01DA4AA36FE5 /* AudioOutput.swift in Sources */,
 				E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */,
 				9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */,
@@ -998,7 +1021,9 @@
 				47911B7F0C6396628A25C035 /* MaskedTextField.swift in Sources */,
 				4EA878465057E1C26D33A0E8 /* MigrationDiagnostics.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
+				C85820E109EA2CBDBE1BEE4F /* MusicLibraryView.swift in Sources */,
 				498ACC4F91C0773EF45C183A /* NavidromeAPI.swift in Sources */,
+				685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */,
 				4193BA80B429CAB452283E97 /* NavidromeModels.swift in Sources */,
 				9B9B71470CE809C09FAC29BF /* NavidromeStore.swift in Sources */,
 				23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */,
@@ -1069,6 +1094,7 @@
 				B4E5DE3101F142674E43546F /* M3UParser.swift in Sources */,
 				0A2389BA8F472425FD0C9015 /* MigrationDiagnostics.swift in Sources */,
 				698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */,
+				AB8C32FBC756EC0A6D9E594E /* NavidromeLibraryViewModel.swift in Sources */,
 				64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */,
 				F0B15617AD537B8D9973782A /* NavidromeStore.swift in Sources */,
 				7917CA44193478337496D3F8 /* NoProvidersView.swift in Sources */,

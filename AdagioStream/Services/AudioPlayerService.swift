@@ -65,6 +65,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var sxmArtwork: MPMediaItemArtwork?
     /// The track being played in `.library` mode; nil when in radio mode.
     private var currentTrack: Track?
+    /// Human-readable artist display name threaded in from the album context
+    /// by `play(track:displayArtistName:via:)`.  Overrides `Track.displaySubtitle`
+    /// (which falls back to `artistId`) in `updateNowPlayingInfoForTrack`.
+    /// Cleared each time a new track starts so stale names never bleed through.
+    private var currentTrackArtistName: String?
     /// Artwork loaded for the currently-playing track (cover art from Navidrome).
     private var currentTrackArtwork: MPMediaItemArtwork?
     private var lastPlayedChannel: Channel?
@@ -863,9 +868,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     ///
     /// - Parameters:
     ///   - track: The `Track` to play.
+    ///   - displayArtistName: Human-readable artist name from the album context
+    ///     (e.g. `SubsonicAlbumDTO.artistName`).  When provided, this is shown
+    ///     in the now-playing / mini-player subtitle instead of the raw
+    ///     `artistId` foreign key.  Pass `nil` to fall back to the existing
+    ///     `Track.displaySubtitle` behaviour.
     ///   - api: A configured `NavidromeAPI` instance used to build the
     ///     authenticated `stream.view` URL and the cover-art URL.
-    public func play(track: Track, via api: NavidromeAPI) {
+    public func play(track: Track, displayArtistName: String? = nil, via api: NavidromeAPI) {
         guard let streamURL = api.streamURL(trackID: track.id) else {
             log.log("play(track:) — stream URL construction failed for trackID=\(track.id)", category: .player)
             self.error = "Could not build stream URL for this track."
@@ -913,6 +923,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Transition state: track mode sets currentChannel to nil.
         currentChannel = nil
         currentTrack = track
+        currentTrackArtistName = displayArtistName
         currentTrackArtwork = nil
         playbackSource = .library(queue: [track], index: 0)
 
@@ -1021,11 +1032,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         guard let track = currentTrack else { return }
 
         let title = track.title
-        // Phase 1: Track has artistId but no denormalised name string.
-        // displaySubtitle returns artistId when non-empty, nil otherwise.
-        // d6q.3 (album detail view) can thread the artist name through
-        // by passing a richer context object.
-        let artist = track.displaySubtitle ?? ""
+        // Prefer the artist display name threaded in from the album context
+        // (via play(track:displayArtistName:via:)).  Fall back to
+        // track.displaySubtitle — which returns artistId — when no name was
+        // supplied (e.g. direct calls without album context).
+        let artist = currentTrackArtistName ?? track.displaySubtitle ?? ""
         let artwork = currentTrackArtwork
         let isLive = false
         let rate: Double = (isPlaying || isBuffering) ? 1.0 : 0.0
