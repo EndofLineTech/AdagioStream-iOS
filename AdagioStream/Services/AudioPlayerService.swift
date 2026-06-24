@@ -72,6 +72,33 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var currentTrackArtistName: String?
     /// Artwork loaded for the currently-playing track (cover art from Navidrome).
     private var currentTrackArtwork: MPMediaItemArtwork?
+
+    // MARK: - Queue state (d6q.1)
+
+    /// The index of the currently-playing track within the `.library` queue.
+    /// Nil when in radio mode or when nothing is playing.
+    @Published public private(set) var currentQueueIndex: Int?
+
+    /// The display artist name that applies to every track in the current
+    /// library queue (e.g. the album artist).  Stored alongside the queue so
+    /// it carries forward as next/previous advance the index.
+    /// Per-track artist is preferred if the track itself exposes one; this
+    /// value is the queue-level fallback when the track's own subtitle is
+    /// just an `artistId`.
+    private var queueDisplayArtistName: String?
+
+    /// The NavidromeAPI instance in use for the current library queue.
+    /// Retained so `playNextInQueue()` and `playPreviousInQueue()` can build
+    /// stream URLs without the UI having to re-supply `api` on every call.
+    private var queueAPI: NavidromeAPI?
+
+    /// The ordered list of `Track` objects in the current library queue.
+    /// Derived from `playbackSource` so it is always in sync with the
+    /// authoritative state.  Returns `[]` when in radio mode.
+    public var currentLibraryQueue: [Track] {
+        guard case .library(let queue, _) = playbackSource else { return [] }
+        return queue
+    }
     private var lastPlayedChannel: Channel?
     private var interruptedChannel: Channel?
     private var isActiveSession = false
@@ -853,36 +880,152 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
 
-    // MARK: - Track playback (d6q.2)
+    // MARK: - Track playback (d6q.2) + Queue API (d6q.1)
 
     /// Plays a single on-demand track from the Navidrome library.
     ///
-    /// Sets `playbackSource = .library(queue: [track], index: 0)` and feeds
-    /// the Subsonic `stream.view` URL into VLC.  `currentChannel` is set to
-    /// `nil` because a track is not a radio channel — the mini-player and
-    /// now-playing views render from `nowPlaying` (the `NowPlayingItem`
-    /// protocol) for the library case.
+    /// Thin wrapper over `setQueue(_:startIndex:displayArtistName:via:)` that
+    /// creates a one-track queue.  Kept as a convenience entry-point so all
+    /// existing call sites continue to compile unchanged.
     ///
     /// Radio playback is unaffected: `play(channel:)` remains the sole entry
     /// point for live streams.
     ///
     /// - Parameters:
     ///   - track: The `Track` to play.
-    ///   - displayArtistName: Human-readable artist name from the album context
-    ///     (e.g. `SubsonicAlbumDTO.artistName`).  When provided, this is shown
-    ///     in the now-playing / mini-player subtitle instead of the raw
-    ///     `artistId` foreign key.  Pass `nil` to fall back to the existing
-    ///     `Track.displaySubtitle` behaviour.
-    ///   - api: A configured `NavidromeAPI` instance used to build the
-    ///     authenticated `stream.view` URL and the cover-art URL.
+    ///   - displayArtistName: Human-readable artist name from the album context.
+    ///     When provided, shown as the now-playing / mini-player subtitle.
+    ///     Pass `nil` to fall back to `Track.displaySubtitle` (which returns `artistId`).
+    ///   - api: A configured `NavidromeAPI` instance for URL building.
     public func play(track: Track, displayArtistName: String? = nil, via api: NavidromeAPI) {
+        setQueue([track], startIndex: 0, displayArtistName: displayArtistName, via: api)
+    }
+
+    // MARK: Queue API (d6q.1)
+
+    /// Sets the playback queue and starts playing at the given index.
+    ///
+    /// This is the single authoritative entry-point for library playback.
+    /// Both `play(track:)` and the browse-UI enqueue calls route through here.
+    ///
+    /// **Edge rules (documented):**
+    /// - Out-of-bounds `startIndex` is clamped to `0..<tracks.count`; if
+    ///   `tracks` is empty the call is a no-op (logs and returns).
+    /// - `playNextInQueue()` at the last index (no repeat mode): stops playback.
+    /// - `playPreviousInQueue()` at index 0: restarts the current track.
+    ///
+    /// **displayArtistName threading:**
+    /// The supplied `displayArtistName` is stored as `queueDisplayArtistName`
+    /// and applies to every track in the queue (e.g. the album artist for an
+    /// album queue).  `updateNowPlayingInfoForTrack()` uses this value as the
+    /// subtitle for each track unless the track itself later exposes its own
+    /// artist name.
+    ///
+    /// - Parameters:
+    ///   - tracks: The ordered list of tracks that constitute the queue.
+    ///   - startIndex: The index of the track to begin playing.  Clamped to
+    ///     valid bounds if out of range.
+    ///   - displayArtistName: Queue-level display artist (e.g. album artist).
+    ///     Carried forward on every next/previous advance within this queue.
+    ///   - api: `NavidromeAPI` retained for URL building during queue navigation.
+    public func setQueue(
+        _ tracks: [Track],
+        startIndex: Int,
+        displayArtistName: String? = nil,
+        via api: NavidromeAPI
+    ) {
+        guard !tracks.isEmpty else {
+            log.log("setQueue: called with empty track list — no-op", category: .player)
+            return
+        }
+
+        let clampedIndex = max(0, min(startIndex, tracks.count - 1))
+        if clampedIndex != startIndex {
+            log.log("setQueue: startIndex=\(startIndex) out of bounds for \(tracks.count) tracks — clamped to \(clampedIndex)", category: .player)
+        }
+
+        log.log("setQueue: \(tracks.count) tracks, startIndex=\(clampedIndex), artist=\"\(displayArtistName ?? "nil")\"", category: .player)
+
+        // Store queue-level state before calling the internal player setup.
+        queueDisplayArtistName = displayArtistName
+        queueAPI = api
+        currentQueueIndex = clampedIndex
+
+        let track = tracks[clampedIndex]
+        startLibraryTrack(track, inQueue: tracks, at: clampedIndex, via: api)
+    }
+
+    /// Advances to the next track in the library queue.
+    ///
+    /// No-op when not in `.library` mode.
+    ///
+    /// **Edge rule:** at the last index with no repeat mode, playback stops.
+    /// (Repeat/shuffle are d6q.4 — not built here.)
+    public func playNextInQueue() {
+        guard case .library(let queue, let index) = playbackSource,
+              let api = queueAPI else {
+            log.log("playNextInQueue: not in library mode — no-op", category: .player)
+            return
+        }
+
+        let nextIndex = index + 1
+        if nextIndex >= queue.count {
+            // End of queue with no repeat: stop playback.
+            log.log("playNextInQueue: reached end of queue (\(index + 1)/\(queue.count)) — stopping", category: .player)
+            stop()
+            // Preserve the queue in playbackSource as nil (stop() clears it)
+            // so the browse UI can detect "queue ended".  This is intentional:
+            // d6q.4 (repeat) will intercept here before calling stop().
+            return
+        }
+
+        log.log("playNextInQueue: \(index) → \(nextIndex) of \(queue.count)", category: .player)
+        currentQueueIndex = nextIndex
+        startLibraryTrack(queue[nextIndex], inQueue: queue, at: nextIndex, via: api)
+    }
+
+    /// Moves to the previous track in the library queue.
+    ///
+    /// No-op when not in `.library` mode.
+    ///
+    /// **Edge rule:** at index 0 (first track), restarts the current track
+    /// rather than wrapping or stopping — matching standard iOS Music behavior.
+    public func playPreviousInQueue() {
+        guard case .library(let queue, let index) = playbackSource,
+              let api = queueAPI else {
+            log.log("playPreviousInQueue: not in library mode — no-op", category: .player)
+            return
+        }
+
+        let prevIndex = max(0, index - 1)
+        // At index 0, prevIndex == index: this restarts the current track.
+        log.log("playPreviousInQueue: \(index) → \(prevIndex) of \(queue.count)", category: .player)
+        currentQueueIndex = prevIndex
+        startLibraryTrack(queue[prevIndex], inQueue: queue, at: prevIndex, via: api)
+    }
+
+    /// Internal worker: tears down any active stream and starts playing a
+    /// specific track within the supplied queue snapshot.
+    ///
+    /// All queue navigation (setQueue / playNextInQueue / playPreviousInQueue)
+    /// funnels through here so there is exactly one code path that touches VLC
+    /// for library playback.  The queue snapshot is the authoritative source
+    /// for `playbackSource` — it is snapshotted here, not read back from the
+    /// published property, so in-flight navigation can't race against a
+    /// concurrent UI update.
+    private func startLibraryTrack(
+        _ track: Track,
+        inQueue queue: [Track],
+        at index: Int,
+        via api: NavidromeAPI
+    ) {
         guard let streamURL = api.streamURL(trackID: track.id) else {
-            log.log("play(track:) — stream URL construction failed for trackID=\(track.id)", category: .player)
+            log.log("startLibraryTrack: stream URL construction failed for trackID=\(track.id)", category: .player)
             self.error = "Could not build stream URL for this track."
             return
         }
 
-        log.log("play(track:) trackID=\(track.id) title=\"\(track.title)\" url=\(streamURL.redactedForLog)", category: .player)
+        log.log("startLibraryTrack: index=\(index)/\(queue.count) trackID=\(track.id) title=\"\(track.title)\" url=\(streamURL.redactedForLog)", category: .player)
 
         // Cancel any pending radio work.
         deferredReconnectWorkItem?.cancel()
@@ -912,20 +1055,22 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Stop the old player if one is running.
         let hadActiveMedia = mediaPlayer.media != nil || isActiveSession
         if hadActiveMedia {
-            timed("play(track:): mediaPlayer.stop()") { mediaPlayer.stop() }
-            timed("play(track:): mediaPlayer.media=nil") { mediaPlayer.media = nil }
+            timed("startLibraryTrack: mediaPlayer.stop()") { mediaPlayer.stop() }
+            timed("startLibraryTrack: mediaPlayer.media=nil") { mediaPlayer.media = nil }
             VLCAudioCallbackBridge.flushBuffer()
             lastTeardownTime = Date()
         }
 
-        assertSessionOwnership(context: "play(track:)")
+        assertSessionOwnership(context: "startLibraryTrack")
 
         // Transition state: track mode sets currentChannel to nil.
         currentChannel = nil
         currentTrack = track
-        currentTrackArtistName = displayArtistName
+        // Artist for now-playing: prefer per-track value once tracks carry their
+        // own denormalised name; fall back to the queue-level display artist.
+        currentTrackArtistName = queueDisplayArtistName
         currentTrackArtwork = nil
-        playbackSource = .library(queue: [track], index: 0)
+        playbackSource = .library(queue: queue, index: index)
 
         isActiveSession = false
         isBuffering = true
@@ -945,10 +1090,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Note: sxmService is radio-specific; not notified for library tracks.
 
         // Fetch cover art asynchronously; update now-playing when it arrives.
-        // 0xy.2: use stable-key cache path so per-request auth salts don't bust
-        // the cache. fetchTrackArtwork was previously keyed by the authed URL
-        // (which changes every call); now converged onto ImageCacheService's
-        // coverArtImage(stableKey:fetchURL:) via NavidromeAPI.fetchCoverArtImage.
         if let coverArtID = track.coverArt {
             fetchTrackArtwork(coverArtID: coverArtID, size: 300, via: api, trackID: track.id)
         }
@@ -1688,6 +1829,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentChannel = nil
         currentTrack = nil                 // d6q.2: clear track state on stop
         currentTrackArtwork = nil
+        currentTrackArtistName = nil
+        currentQueueIndex = nil            // d6q.1: clear queue index on stop
+        queueAPI = nil
+        queueDisplayArtistName = nil
         playbackSource = nil               // d6q.7: mirror into PlaybackSource seam
         isPlaying = false
         isBuffering = false
@@ -2343,14 +2488,32 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             DebugLogger.shared.log("Remote command: NEXT_TRACK", category: .remoteCommand)
-            Task { @MainActor in self?.playNext() }
+            Task { @MainActor in
+                guard let self else { return }
+                // d6q.1: route to queue navigation in library mode;
+                // retain existing radio channel-cycling otherwise.
+                if case .library = self.playbackSource {
+                    self.playNextInQueue()
+                } else {
+                    self.playNext()
+                }
+            }
             return .success
         }
 
         commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             DebugLogger.shared.log("Remote command: PREVIOUS_TRACK", category: .remoteCommand)
-            Task { @MainActor in self?.playPrevious() }
+            Task { @MainActor in
+                guard let self else { return }
+                // d6q.1: route to queue navigation in library mode;
+                // retain existing radio channel-cycling otherwise.
+                if case .library = self.playbackSource {
+                    self.playPreviousInQueue()
+                } else {
+                    self.playPrevious()
+                }
+            }
             return .success
         }
 

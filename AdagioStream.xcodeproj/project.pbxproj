@@ -75,6 +75,7 @@
 		5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64EF86369F656FD2C55498D1 /* ProviderListView.swift */; };
 		5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */; };
 		5D04CF82D46CED101C42C799 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
+		5DA4B6779C4DF27B8CD84D27 /* PlaybackQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826EE35C4ACE4B68BFA5B0FC /* PlaybackQueueTests.swift */; };
 		5FE9B30F9278ECEC73760044 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4A8EA6B740258F38380CBFB8 /* GRDB */; };
 		64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D292EB2856F819A576B56777 /* NavidromeModels.swift */; };
 		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
@@ -287,6 +288,7 @@
 		7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeAPI.swift; sourceTree = "<group>"; };
 		818AD62AEACB5B0004AA12FB /* SavedSongsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongsManager.swift; sourceTree = "<group>"; };
 		820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistManager.swift; sourceTree = "<group>"; };
+		826EE35C4ACE4B68BFA5B0FC /* PlaybackQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackQueueTests.swift; sourceTree = "<group>"; };
 		8C93442E1C179CA8C65AE6D8 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
 		8FB864F08076A1C5C5CFA8F5 /* NavidromeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeStore.swift; sourceTree = "<group>"; };
 		90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSourceTests.swift; sourceTree = "<group>"; };
@@ -693,6 +695,7 @@
 			children = (
 				99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */,
 				48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */,
+				826EE35C4ACE4B68BFA5B0FC /* PlaybackQueueTests.swift */,
 				90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */,
 			);
 			path = Models;
@@ -982,6 +985,7 @@
 				8A6DE48A3E9BDB70FFD4F13A /* NavidromeModelsTests.swift in Sources */,
 				42FAA3DE827586853F4FFE08 /* NavidromeStoreTests.swift in Sources */,
 				4C9527682263E4F04129BF19 /* PersistenceServiceTests.swift in Sources */,
+				5DA4B6779C4DF27B8CD84D27 /* PlaybackQueueTests.swift in Sources */,
 				082C24BA4D5890A3DEE3ED77 /* PlaybackSourceTests.swift in Sources */,
 				D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */,
 				ACD0D3D11F441CE56CC8982A /* SubsonicAuthTests.swift in Sources */,

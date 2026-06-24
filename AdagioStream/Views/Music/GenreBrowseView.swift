@@ -4,11 +4,11 @@
 //   GenreListView  (fetches getGenres, shows name + song/album counts)
 //     └── GenreDetailView  (fetches getSongsByGenre, shows track list)
 //
-// Track playback uses AudioPlayerService.shared.play(track:displayArtistName:via:).
-// Artist name for now-playing is sourced from the Track's genre context; Track
-// does not carry an artist display name directly (only artistId), so the
+// Track playback uses AudioPlayerService.setQueue(_:startIndex:displayArtistName:via:)
+// (d6q.1) so tapping a song enqueues the full genre song list starting at that
+// song — next/previous then steps through the genre list.
+// Artist name for now-playing: Track only carries artistId in v1 schema;
 // displayArtistName is passed as nil — the player falls back to artistId.
-// This matches the graceful fallback documented in the bead spec.
 //
 // Pagination: a single page of NavidromeLibraryViewModel.genreSongsPageSize
 // (50) is fetched.  No load-more is implemented in 0xy.4.
@@ -196,12 +196,18 @@ struct GenreDetailView: View {
     }
 
     private var trackList: some View {
-        List {
-            ForEach(viewModel.genreTracks, id: \.id) { track in
+        // Capture genre tracks once per render so the index lookup is stable
+        // when the closure fires.
+        let tracks = viewModel.genreTracks
+        return List {
+            ForEach(tracks, id: \.id) { track in
                 GenreTrackRowView(track: track, api: api) {
-                    // Artist display name: Track only carries artistId in v1 schema;
-                    // pass nil so AudioPlayerService falls back to artistId gracefully.
-                    audioPlayer.play(track: track, displayArtistName: nil, via: api)
+                    // d6q.1: enqueue the full genre song list starting at the
+                    // tapped track so next/previous steps through the genre.
+                    // Artist display name: Track only carries artistId in v1
+                    // schema; pass nil so the player falls back gracefully.
+                    let startIndex = tracks.firstIndex(where: { $0.id == track.id }) ?? 0
+                    audioPlayer.setQueue(tracks, startIndex: startIndex, displayArtistName: nil, via: api)
                 }
                 .accessibilityLabel(genreTrackAccessibilityLabel(track))
                 .accessibilityHint("Tap to play")

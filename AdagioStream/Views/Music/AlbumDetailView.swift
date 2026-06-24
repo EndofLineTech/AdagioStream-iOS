@@ -1,8 +1,11 @@
 // 0xy.3 — Navidrome browse UI: album → tracks + tap-to-play
 //
 // Shows tracks for a single album with a header (cover art + title + artist).
-// Tapping a track row OR the play button calls
-// AudioPlayerService.shared.play(track:displayArtistName:via:) directly.
+// Tapping a track row OR the play button enqueues the WHOLE ALBUM as a queue
+// starting at the tapped track (d6q.1).  Calls
+// AudioPlayerService.setQueue(_:startIndex:displayArtistName:via:) so the
+// entire album is loaded into the queue and next/previous navigation works
+// across tracks without returning to this view.
 // The selectedAlbumArtistName from the view model is threaded through so the
 // now-playing / mini-player subtitle shows the human artist name, not artistId.
 
@@ -136,8 +139,13 @@ struct AlbumDetailView: View {
     }
 
     private func play(track: Track) {
-        audioPlayer.play(
-            track: track,
+        // d6q.1: enqueue the whole album starting at the tapped track so
+        // next/previous navigate through all tracks in track-number order.
+        let tracks = viewModel.albumTracks
+        let startIndex = tracks.firstIndex(where: { $0.id == track.id }) ?? 0
+        audioPlayer.setQueue(
+            tracks,
+            startIndex: startIndex,
             displayArtistName: viewModel.selectedAlbumArtistName,
             via: api
         )
