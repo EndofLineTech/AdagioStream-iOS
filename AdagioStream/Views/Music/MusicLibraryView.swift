@@ -1,5 +1,6 @@
 // 0xy.3 — Navidrome browse UI: root artists list
 // 0xy.4 — Extended with album-browse and genre-browse modes via a segmented Picker.
+// l31.3 — Offline mode: when offlineMode is on, restrict to downloaded tracks only.
 //
 // MusicLibraryView is the NavigationStack root for the "Music" tab (mounted by
 // 0xy.5).  It resolves the NavidromeAPI from ProviderManager.shared.subsonicAPI
@@ -11,6 +12,11 @@
 //   • Artists  — artist list → ArtistDetailView → AlbumDetailView (0xy.3)
 //   • Albums   — BrowseAlbumsView with a type picker (newest/recent/frequent/random/A–Z)
 //   • Genres   — GenreListView → GenreDetailView (0xy.4)
+//
+// Offline mode (l31.3):
+//   When AppSettings.offlineMode is true, the normal browse modes are replaced
+//   by a downloaded-tracks list.  No network browse/search calls are made.
+//   A banner at the top explains the restriction.
 
 #if canImport(UIKit)
 import SwiftUI
@@ -30,6 +36,9 @@ enum MusicBrowseMode: String, CaseIterable {
 public struct MusicLibraryView: View {
 
     @EnvironmentObject private var providerManager: ProviderManager
+    @EnvironmentObject private var downloadManager: DownloadManager
+    @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var settingsViewModel: SettingsViewModel
 
     // State for the resolved API.  Resolved once in .task so that the entire
     // NavigationStack shares a single API instance (and therefore a single cache
@@ -46,12 +55,18 @@ public struct MusicLibraryView: View {
     // Non-empty → show SearchResultsView; empty → show normal browse.
     @State private var searchText: String = ""
 
+    // Track titles for the offline downloaded list (l31.3).
+    @State private var offlineTrackTitles: [String: String] = [:]
+
     public init() {}
 
     public var body: some View {
         NavigationStack {
             Group {
-                if let vm = viewModel, let resolvedAPI = api {
+                if settingsViewModel.settings.offlineMode {
+                    // Offline mode: show downloaded tracks only, suppress network calls.
+                    offlineBrowser
+                } else if let vm = viewModel, let resolvedAPI = api {
                     // Show search results when there is a non-empty query;
                     // otherwise show the normal browse UI unchanged.
                     if isSearchActive {
@@ -76,9 +91,8 @@ public struct MusicLibraryView: View {
             .navigationTitle("Music")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                // Hide the browse-mode selector while searching so the toolbar
-                // isn't crowded with both the search bar and the picker.
-                if !isSearchActive {
+                // Hide the browse-mode selector in offline mode and while searching.
+                if !settingsViewModel.settings.offlineMode && !isSearchActive {
                     ToolbarItem(placement: .principal) {
                         browseModeSelector
                     }
@@ -91,6 +105,8 @@ public struct MusicLibraryView: View {
             )
             .accessibilityLabel("Search music library")
             .onChange(of: searchText) { _, newValue in
+                // Don't fire network search while in offline mode.
+                guard !settingsViewModel.settings.offlineMode else { return }
                 viewModel?.updateSearch(query: newValue)
             }
             .task {
@@ -99,7 +115,10 @@ public struct MusicLibraryView: View {
                     api = resolved
                     let vm = NavidromeLibraryViewModel(api: resolved)
                     viewModel = vm
-                    await vm.loadArtists()
+                    // Skip network load when offline mode is on at startup.
+                    if !settingsViewModel.settings.offlineMode {
+                        await vm.loadArtists()
+                    }
                 }
             }
         }
@@ -122,6 +141,89 @@ public struct MusicLibraryView: View {
         .frame(maxWidth: 360)
         .accessibilityLabel("Browse mode")
         .accessibilityHint("Switch between Artists, Albums, Genres, and Playlists")
+    }
+
+    // MARK: - Offline browser (l31.3)
+
+    /// Shown when offline mode is on.  Lists only downloaded tracks; no network calls made.
+    @ViewBuilder
+    private var offlineBrowser: some View {
+        let downloads = downloadManager.downloads.filter { $0.status == .completed }
+
+        VStack(spacing: 0) {
+            // Offline mode banner
+            HStack(spacing: 8) {
+                Image(systemName: "wifi.slash")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text("Offline mode — showing downloaded music")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color(.secondarySystemBackground))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Offline mode — showing downloaded music only")
+
+            if downloads.isEmpty {
+                ScrollView {
+                    EmptyStateView(
+                        title: "No Downloads",
+                        systemImage: "arrow.down.circle",
+                        description: "No downloaded tracks available. Turn off offline mode or download tracks first."
+                    )
+                    .containerRelativeFrame([.horizontal, .vertical])
+                }
+            } else {
+                List(downloads, id: \.id) { record in
+                    OfflineTrackRow(
+                        record: record,
+                        title: offlineTrackTitles[record.id],
+                        onPlay: {
+                            playOfflineDownloads(startingAt: record.id, downloads: downloads)
+                        }
+                    )
+                }
+                .listStyle(.plain)
+            }
+        }
+        .task {
+            resolveOfflineTrackTitles(downloads: downloads)
+        }
+        .onChange(of: downloadManager.downloads) { _, newDownloads in
+            let completed = newDownloads.filter { $0.status == .completed }
+            resolveOfflineTrackTitles(downloads: completed)
+        }
+    }
+
+    /// Resolves track titles for the offline list from the library cache.
+    private func resolveOfflineTrackTitles(downloads: [DownloadRecord]) {
+        let store = NavidromeStore.shared
+        var titles: [String: String] = [:]
+        for record in downloads {
+            if let track = try? store.writer.read({ db in
+                try Track.fetchOne(db, key: record.id)
+            }) {
+                titles[record.id] = track.title
+            }
+        }
+        offlineTrackTitles = titles
+    }
+
+    /// Plays downloaded tracks starting at the tapped track.
+    private func playOfflineDownloads(startingAt trackID: String, downloads: [DownloadRecord]) {
+        guard let api = api ?? providerManager.subsonicAPI else { return }
+        guard !downloads.isEmpty else { return }
+
+        let store = NavidromeStore.shared
+        let queue: [Track] = downloads.map { record in
+            (try? store.writer.read { db in try Track.fetchOne(db, key: record.id) })
+                ?? minimalTrack(from: record)
+        }
+        let startIndex = downloads.firstIndex(where: { $0.id == trackID }) ?? 0
+        audioPlayer.setQueue(queue, startIndex: startIndex, via: api)
     }
 
     // MARK: - Library browser (dispatches to mode-specific view)
@@ -201,6 +303,45 @@ public struct MusicLibraryView: View {
     }
 }
 
+// MARK: - Offline track row (l31.3)
+
+/// A simple row used in the offline-mode downloaded-tracks list.
+private struct OfflineTrackRow: View {
+    let record: DownloadRecord
+    let title: String?
+    let onPlay: () -> Void
+
+    private var displayTitle: String {
+        title ?? record.id
+    }
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
+
+                Text(displayTitle)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Spacer()
+
+                Image(systemName: "play.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(displayTitle)
+        .accessibilityHint("Play downloaded track")
+    }
+}
+
 // MARK: - Artist row
 
 struct ArtistRowView: View {
@@ -239,5 +380,8 @@ struct ArtistRowView: View {
 #Preview {
     MusicLibraryView()
         .environmentObject(ProviderManager())
+        .environmentObject(DownloadManager.shared)
+        .environmentObject(AudioPlayerService.shared)
+        .environmentObject(SettingsViewModel(audioPlayer: AudioPlayerService.shared))
 }
 #endif // canImport(UIKit)

@@ -198,4 +198,11 @@ public final class SettingsViewModel: ObservableObject {
             DebugLogger.shared.log("Debug logging ENABLED by user — v\(version) build \(build)", category: .general)
         }
     }
+
+    /// Toggles offline mode (l31.3).  When on, the Music tab restricts to
+    /// downloaded tracks only and suppresses network browse/search calls.
+    public func updateOfflineMode(_ enabled: Bool) async {
+        settings.offlineMode = enabled
+        await saveSettings()
+    }
 }

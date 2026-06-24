@@ -1829,19 +1829,50 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// for `playbackSource` — it is snapshotted here, not read back from the
     /// published property, so in-flight navigation can't race against a
     /// concurrent UI update.
+    // MARK: - Local-first URL resolution (l31.3)
+
+    /// Resolves the playback URL for a library track.
+    ///
+    /// **Local-first policy:** if `DownloadManager` reports a completed,
+    /// on-disk file for this track, the local `file://` URL is returned so
+    /// the track plays from disk with no network required.  Otherwise the
+    /// Navidrome stream URL is used as the fallback.
+    ///
+    /// Radio is unaffected — this helper is only called from `startLibraryTrack`.
+    ///
+    /// - Parameters:
+    ///   - trackID: The Navidrome track identifier.
+    ///   - api: The `NavidromeAPI` instance used to build the fallback stream URL.
+    /// - Returns: A `file://` URL when a completed download exists, or the
+    ///   remote stream URL, or `nil` when neither can be constructed.
+    func resolvePlaybackURL(trackID: String, api: NavidromeAPI) -> URL? {
+        // Check local file first.
+        if let localURL = DownloadManager.shared.localFileURL(forTrackID: trackID) {
+            log.log("resolvePlaybackURL: local file found for trackID=\(trackID) — playing from disk", category: .player)
+            return localURL
+        }
+        // Fall back to stream URL.
+        guard let streamURL = api.streamURL(trackID: trackID) else {
+            log.log("resolvePlaybackURL: stream URL construction failed for trackID=\(trackID)", category: .player)
+            return nil
+        }
+        return streamURL
+    }
+
     private func startLibraryTrack(
         _ track: Track,
         inQueue queue: [Track],
         at index: Int,
         via api: NavidromeAPI
     ) {
-        guard let streamURL = api.streamURL(trackID: track.id) else {
-            log.log("startLibraryTrack: stream URL construction failed for trackID=\(track.id)", category: .player)
+        guard let streamURL = resolvePlaybackURL(trackID: track.id, api: api) else {
+            log.log("startLibraryTrack: could not resolve playback URL for trackID=\(track.id)", category: .player)
             self.error = "Could not build stream URL for this track."
             return
         }
 
-        log.log("startLibraryTrack: index=\(index)/\(queue.count) trackID=\(track.id) title=\"\(track.title)\" url=\(streamURL.redactedForLog)", category: .player)
+        let isLocal = streamURL.isFileURL
+        log.log("startLibraryTrack: index=\(index)/\(queue.count) trackID=\(track.id) title=\"\(track.title)\" local=\(isLocal) url=\(streamURL.redactedForLog)", category: .player)
 
         // Cancel any pending radio work.
         deferredReconnectWorkItem?.cancel()

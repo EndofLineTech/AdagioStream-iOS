@@ -192,6 +192,10 @@ public struct AppSettings: Codable {
     public var repeatMode: RepeatMode
     /// Library queue shuffle enabled (d6q.4). Does not affect radio.
     public var shuffleEnabled: Bool
+    /// Offline mode (l31.3). When true, the Music tab restricts browsing to
+    /// downloaded tracks only and no network browse/search calls are made.
+    /// Default false (tolerant decodeIfPresent so old on-disk data loads safely).
+    public var offlineMode: Bool
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -208,7 +212,8 @@ public struct AppSettings: Codable {
         hasCompletedSetup: Bool = false,
         hasSeenTabReorgTip: Bool = false,
         repeatMode: RepeatMode = .off,
-        shuffleEnabled: Bool = false
+        shuffleEnabled: Bool = false,
+        offlineMode: Bool = false
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -225,6 +230,7 @@ public struct AppSettings: Codable {
         self.hasSeenTabReorgTip = hasSeenTabReorgTip
         self.repeatMode = repeatMode
         self.shuffleEnabled = shuffleEnabled
+        self.offlineMode = offlineMode
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -247,6 +253,7 @@ public struct AppSettings: Codable {
         hasSeenTabReorgTip = try container.decodeIfPresent(Bool.self, forKey: .hasSeenTabReorgTip) ?? false
         repeatMode = try container.decodeIfPresent(RepeatMode.self, forKey: .repeatMode) ?? .off
         shuffleEnabled = try container.decodeIfPresent(Bool.self, forKey: .shuffleEnabled) ?? false
+        offlineMode = try container.decodeIfPresent(Bool.self, forKey: .offlineMode) ?? false
     }
 }
 
