@@ -240,6 +240,64 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Playlist list (msl.2)
+
+    @Published public private(set) var playlists: [Playlist] = []
+    @Published public private(set) var playlistsState: LoadState = .idle
+
+    // MARK: - Playlist detail (msl.2)
+
+    @Published public private(set) var selectedPlaylist: Playlist?
+    @Published public private(set) var playlistTracks: [Track] = []
+    @Published public private(set) var playlistTracksState: LoadState = .idle
+
+    // MARK: - Load: playlists (msl.2)
+
+    /// Fetches all playlists visible to the authenticated user via getPlaylists.
+    public func loadPlaylists() async {
+        guard playlistsState != .loading else { return }
+        playlists = []
+        playlistsState = .loading
+        do {
+            let loaded = try await api.getPlaylists()
+            playlists = loaded.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            playlistsState = loaded.isEmpty ? .empty : .loaded
+        } catch let apiErr as NavidromeAPI.APIError {
+            playlistsState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            playlistsState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Load: tracks for a playlist (msl.2)
+
+    /// Fetches the track list for the given playlist via getPlaylist(id:).
+    public func loadPlaylist(id: String) async {
+        guard playlistTracksState != .loading else { return }
+        playlistTracks = []
+        playlistTracksState = .loading
+        do {
+            let (playlist, tracks) = try await api.getPlaylist(id: id)
+            selectedPlaylist = playlist
+            playlistTracks = tracks
+            playlistTracksState = tracks.isEmpty ? .empty : .loaded
+        } catch let apiErr as NavidromeAPI.APIError {
+            playlistTracksState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            playlistTracksState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Reset helpers: playlist (msl.2)
+
+    public func resetPlaylistDetail() {
+        selectedPlaylist = nil
+        playlistTracks = []
+        playlistTracksState = .idle
+    }
+
     // MARK: - Reset helpers (0xy.4 additions)
 
     public func resetBrowseAlbums() {

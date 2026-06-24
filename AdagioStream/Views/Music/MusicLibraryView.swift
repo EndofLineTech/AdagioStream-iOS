@@ -19,9 +19,10 @@ import SwiftUI
 
 /// Top-level browse mode selector for the Music tab.
 enum MusicBrowseMode: String, CaseIterable {
-    case artists = "Artists"
-    case albums  = "Albums"
-    case genres  = "Genres"
+    case artists   = "Artists"
+    case albums    = "Albums"
+    case genres    = "Genres"
+    case playlists = "Playlists"
 }
 
 // MARK: - MusicLibraryView
@@ -118,9 +119,9 @@ public struct MusicLibraryView: View {
             }
         }
         .pickerStyle(.segmented)
-        .frame(maxWidth: 280)
+        .frame(maxWidth: 360)
         .accessibilityLabel("Browse mode")
-        .accessibilityHint("Switch between Artists, Albums, and Genres")
+        .accessibilityHint("Switch between Artists, Albums, Genres, and Playlists")
     }
 
     // MARK: - Library browser (dispatches to mode-specific view)
@@ -134,6 +135,8 @@ public struct MusicLibraryView: View {
             BrowseAlbumsView(viewModel: vm, api: api)
         case .genres:
             GenreListView(viewModel: vm, api: api)
+        case .playlists:
+            PlaylistListView(viewModel: vm, api: api)
         }
     }
 
