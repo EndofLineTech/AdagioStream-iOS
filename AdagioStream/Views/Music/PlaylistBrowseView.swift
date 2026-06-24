@@ -231,6 +231,7 @@ struct PlaylistDetailView: View {
     let api: NavidromeAPI
 
     @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var downloadManager: DownloadManager
 
     @State private var isEditingTracks = false
     @State private var showRenameAlert = false
@@ -316,6 +317,15 @@ struct PlaylistDetailView: View {
                     }
                     .accessibilityLabel("Play playlist from beginning")
                 }
+            }
+        }
+
+        // l31.2: Download All in secondary actions menu
+        if case .loaded = viewModel.playlistTracksState,
+           !viewModel.playlistTracks.isEmpty,
+           !isEditingTracks {
+            ToolbarItemGroup(placement: .secondaryAction) {
+                playlistDownloadAllButton
             }
         }
 
@@ -409,6 +419,7 @@ struct PlaylistDetailView: View {
                         track: track,
                         position: index + 1,
                         onPlay: { play(track: track) },
+                        api: api,
                         starred: viewModel.playlistTrackStarStates[track.id]?.starred,
                         onToggleStar: {
                             Task { await viewModel.toggleStar(id: track.id) }
@@ -438,6 +449,7 @@ struct PlaylistDetailView: View {
                             Label("Add to Playlist…", systemImage: "music.note.list")
                         }
                         .accessibilityLabel("Add \(track.title) to a playlist")
+                        downloadContextMenuItem(for: track)
                     }
                 }
             }
@@ -476,6 +488,56 @@ struct PlaylistDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 16)
+    }
+
+    // MARK: - Download actions (l31.2)
+
+    @ViewBuilder
+    private var playlistDownloadAllButton: some View {
+        let tracks = viewModel.playlistTracks
+        let allDownloaded = !tracks.isEmpty &&
+            tracks.allSatisfy { downloadManager.isDownloaded(trackID: $0.id) }
+        if allDownloaded {
+            Label("All Downloaded", systemImage: "checkmark.circle.fill")
+                .accessibilityLabel("All tracks downloaded")
+        } else {
+            Button {
+                for track in tracks {
+                    downloadManager.download(track: track, via: api)
+                }
+            } label: {
+                Label("Download All", systemImage: "arrow.down.circle")
+            }
+            .accessibilityLabel("Download all tracks in this playlist")
+        }
+    }
+
+    @ViewBuilder
+    private func downloadContextMenuItem(for track: Track) -> some View {
+        let record = downloadManager.downloads.first { $0.id == track.id }
+        switch record?.status {
+        case .none, .failed, .paused:
+            Button {
+                downloadManager.download(track: track, via: api)
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+            }
+            .accessibilityLabel("Download \(track.title)")
+        case .queued, .downloading:
+            Button {
+                downloadManager.cancelDownload(trackID: track.id)
+            } label: {
+                Label("Cancel Download", systemImage: "xmark.circle")
+            }
+            .accessibilityLabel("Cancel download of \(track.title)")
+        case .completed:
+            Button(role: .destructive) {
+                downloadManager.deleteDownload(trackID: track.id)
+            } label: {
+                Label("Remove Download", systemImage: "trash")
+            }
+            .accessibilityLabel("Remove downloaded \(track.title)")
+        }
     }
 
     // MARK: - Playback actions
@@ -538,6 +600,8 @@ struct PlaylistTrackRowView: View {
     let track: Track
     let position: Int
     let onPlay: () -> Void
+    /// l31.2: When non-nil, a download button is shown for this track.
+    var api: NavidromeAPI? = nil
     /// 65x.2: When non-nil the row shows a heart button reflecting starred state.
     var starred: Bool? = nil
     /// 65x.2: Called when the heart button is tapped.
@@ -578,6 +642,11 @@ struct PlaylistTrackRowView: View {
                     accessibilityLabel: isStarred ? "Unstar \(track.title)" : "Star \(track.title)",
                     onToggle: toggle
                 )
+            }
+
+            // l31.2: Download button — shown when an API context is available
+            if let resolvedAPI = api {
+                TrackDownloadButton(track: track, api: resolvedAPI)
             }
 
             // Play button
@@ -624,5 +693,6 @@ extension Track: Identifiable {}
         )
     }
     .environmentObject(AudioPlayerService.shared)
+    .environmentObject(DownloadManager.shared)
 }
 #endif // canImport(UIKit)

@@ -19,6 +19,7 @@ struct AlbumDetailView: View {
     let api: NavidromeAPI
 
     @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var downloadManager: DownloadManager
 
     @State private var trackForAddToPlaylist: Track?
 
@@ -114,6 +115,7 @@ struct AlbumDetailView: View {
                         track: track,
                         artistName: viewModel.selectedAlbumArtistName,
                         onPlay: { play(track: track) },
+                        api: api,
                         starred: viewModel.albumTrackStarStates[track.id]?.starred,
                         onToggleStar: {
                             Task { await viewModel.toggleStar(id: track.id) }
@@ -128,6 +130,7 @@ struct AlbumDetailView: View {
                             Label("Add to Playlist…", systemImage: "music.note.list")
                         }
                         .accessibilityLabel("Add \(track.title) to a playlist")
+                        downloadContextMenuItem(for: track)
                     }
                 }
             }
@@ -173,6 +176,15 @@ struct AlbumDetailView: View {
                     Task { await viewModel.toggleStar(id: album.id) }
                 }
                 .padding(.top, 4)
+
+                // l31.2: Download All button
+                if !viewModel.albumTracks.isEmpty {
+                    AlbumDownloadAllButton(
+                        tracks: viewModel.albumTracks,
+                        api: api
+                    )
+                    .padding(.top, 4)
+                }
             }
         }
         .frame(maxWidth: .infinity)
@@ -192,6 +204,34 @@ struct AlbumDetailView: View {
         )
     }
 
+    @ViewBuilder
+    private func downloadContextMenuItem(for track: Track) -> some View {
+        let record = downloadManager.downloads.first { $0.id == track.id }
+        switch record?.status {
+        case .none, .failed, .paused:
+            Button {
+                downloadManager.download(track: track, via: api)
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+            }
+            .accessibilityLabel("Download \(track.title)")
+        case .queued, .downloading:
+            Button {
+                downloadManager.cancelDownload(trackID: track.id)
+            } label: {
+                Label("Cancel Download", systemImage: "xmark.circle")
+            }
+            .accessibilityLabel("Cancel download of \(track.title)")
+        case .completed:
+            Button(role: .destructive) {
+                downloadManager.deleteDownload(trackID: track.id)
+            } label: {
+                Label("Remove Download", systemImage: "trash")
+            }
+            .accessibilityLabel("Remove downloaded \(track.title)")
+        }
+    }
+
     private func trackAccessibilityLabel(_ track: Track) -> String {
         var parts: [String] = []
         if let number = track.trackNumber {
@@ -205,12 +245,80 @@ struct AlbumDetailView: View {
     }
 }
 
+// MARK: - Album download-all button (l31.2)
+
+/// Header-level "Download All" / "Downloaded" affordance for an album.
+/// Shows aggregate state across all tracks.
+struct AlbumDownloadAllButton: View {
+    let tracks: [Track]
+    let api: NavidromeAPI
+
+    @EnvironmentObject private var downloadManager: DownloadManager
+
+    private enum AggregateState {
+        case allDownloaded
+        case someDownloading
+        case none
+    }
+
+    private var aggregateState: AggregateState {
+        guard !tracks.isEmpty else { return .none }
+        let completedCount = tracks.filter { downloadManager.isDownloaded(trackID: $0.id) }.count
+        if completedCount == tracks.count { return .allDownloaded }
+        let activeCount = tracks.filter { track in
+            let status = downloadManager.downloads.first(where: { $0.id == track.id })?.status
+            return status == .queued || status == .downloading
+        }.count
+        if activeCount > 0 || completedCount > 0 { return .someDownloading }
+        return .none
+    }
+
+    var body: some View {
+        switch aggregateState {
+        case .allDownloaded:
+            Label("Downloaded", systemImage: "checkmark.circle.fill")
+                .font(.subheadline)
+                .foregroundStyle(.green)
+                .accessibilityLabel("All tracks downloaded")
+                .accessibilityValue("Downloaded")
+
+        case .someDownloading:
+            Button {
+                enqueueAll()
+            } label: {
+                Label("Download All", systemImage: "arrow.down.circle")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Download all tracks in this album")
+
+        case .none:
+            Button {
+                enqueueAll()
+            } label: {
+                Label("Download All", systemImage: "arrow.down.circle")
+                    .font(.subheadline)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("Download all tracks in this album")
+        }
+    }
+
+    private func enqueueAll() {
+        for track in tracks {
+            downloadManager.download(track: track, via: api)
+        }
+    }
+}
+
 // MARK: - Track row
 
 struct TrackRowView: View {
     let track: Track
     let artistName: String?
     let onPlay: () -> Void
+    /// l31.2: When non-nil, a download button is shown for this track.
+    var api: NavidromeAPI? = nil
     /// 65x.2: When non-nil the row shows a heart button reflecting starred state.
     var starred: Bool? = nil
     /// 65x.2: Called when the heart button is tapped.
@@ -267,6 +375,11 @@ struct TrackRowView: View {
                 )
             }
 
+            // l31.2: Download button — shown when an API context is available
+            if let resolvedAPI = api {
+                TrackDownloadButton(track: track, api: resolvedAPI)
+            }
+
             // Play button
             Button {
                 onPlay()
@@ -315,5 +428,6 @@ struct TrackRowView: View {
         )
     }
     .environmentObject(AudioPlayerService.shared)
+    .environmentObject(DownloadManager.shared)
 }
 #endif // canImport(UIKit)

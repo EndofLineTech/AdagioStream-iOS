@@ -25,6 +25,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Playback", systemImage: "play.circle")
                     }
+                    NavigationLink {
+                        DownloadsView()
+                    } label: {
+                        Label("Downloads", systemImage: "arrow.down.circle")
+                    }
                 }
 
                 Section {
