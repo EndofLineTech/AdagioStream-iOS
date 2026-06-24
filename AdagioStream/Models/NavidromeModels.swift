@@ -173,6 +173,63 @@ public struct Genre: Codable, Hashable {
     }
 }
 
+// MARK: - Playlist (live-fetched, no GRDB table in v1)
+
+/// A Subsonic/Navidrome playlist decoded from `getPlaylists` or `getPlaylist`.
+///
+/// Playlists are fetched live from the server and are not cached in the v1
+/// local database.  This struct is a plain value type — it does NOT conform to
+/// `FetchableRecord` or `PersistableRecord`.
+///
+/// Field names match the Subsonic JSON keys exactly, so no custom `CodingKeys`
+/// are required.
+public struct Playlist: Codable, Hashable {
+    /// Subsonic playlist ID.
+    public var id: String
+    /// Playlist display name.
+    public var name: String
+    /// Number of tracks in the playlist.
+    public var songCount: Int
+    /// Total duration in seconds.
+    public var duration: Int
+    /// Username of the playlist owner.
+    public var owner: String?
+    /// Whether the playlist is publicly visible.
+    public var `public`: Bool?
+    /// Optional free-text comment.
+    public var comment: String?
+    /// Cover art ID — pass to `NavidromeAPI.coverArtURL(id:)`.
+    public var coverArt: String?
+    /// ISO-8601 creation timestamp string as returned by the server.
+    public var created: String?
+    /// ISO-8601 last-modified timestamp string as returned by the server.
+    public var changed: String?
+
+    public init(
+        id: String,
+        name: String,
+        songCount: Int,
+        duration: Int,
+        owner: String? = nil,
+        public: Bool? = nil,
+        comment: String? = nil,
+        coverArt: String? = nil,
+        created: String? = nil,
+        changed: String? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.songCount = songCount
+        self.duration = duration
+        self.owner = owner
+        self.`public` = `public`
+        self.comment = comment
+        self.coverArt = coverArt
+        self.created = created
+        self.changed = changed
+    }
+}
+
 // MARK: - Subsonic DTO Layer
 
 /// Decodes a single artist entry from Subsonic `getArtists` / `getIndexes`.

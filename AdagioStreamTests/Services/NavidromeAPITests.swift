@@ -874,6 +874,185 @@ final class NavidromeAPITests: XCTestCase {
         XCTAssertLessThanOrEqual(updatedAt, after,     "updatedAt must be <= time after call")
     }
 
+    // MARK: - getPlaylists
+
+    func testGetPlaylistsDecodesListWithCorrectFields() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlists":{
+            "playlist":[
+                {"id":"pl1","name":"Chill Mix","songCount":12,"duration":3600,"owner":"alice","public":true,"coverArt":"cover-pl1"},
+                {"id":"pl2","name":"Work Focus","songCount":8,"duration":2400,"owner":"alice","public":false}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let playlists = try await api.getPlaylists()
+
+        XCTAssertEqual(playlists.count, 2)
+        XCTAssertEqual(playlists[0].id, "pl1")
+        XCTAssertEqual(playlists[0].name, "Chill Mix")
+        XCTAssertEqual(playlists[0].songCount, 12)
+        XCTAssertEqual(playlists[0].duration, 3600)
+        XCTAssertEqual(playlists[0].owner, "alice")
+        XCTAssertEqual(playlists[0].public, true)
+        XCTAssertEqual(playlists[0].coverArt, "cover-pl1")
+        XCTAssertEqual(playlists[1].id, "pl2")
+        XCTAssertEqual(playlists[1].name, "Work Focus")
+        XCTAssertEqual(playlists[1].songCount, 8)
+        XCTAssertEqual(playlists[1].duration, 2400)
+        XCTAssertEqual(playlists[1].public, false)
+    }
+
+    func testGetPlaylistsMissingPlaylistArrayDecodesToEmpty() async throws {
+        // "playlist" key absent — user has no playlists; must not throw.
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlists":{}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let playlists = try await api.getPlaylists()
+        XCTAssertTrue(playlists.isEmpty)
+    }
+
+    func testGetPlaylistsEmptyPlaylistArrayDecodesToEmpty() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlists":{"playlist":[]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let playlists = try await api.getPlaylists()
+        XCTAssertTrue(playlists.isEmpty)
+    }
+
+    func testGetPlaylistsRequestURLContainsCorrectPathAndAuth() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlists":{"playlist":[]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        _ = try await api.getPlaylists()
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/getPlaylists.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"), "token must be present")
+        XCTAssertNotNil(q("s"), "salt must be present")
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    // MARK: - getPlaylist
+
+    func testGetPlaylistReturnsPlaylistMetaAndTracks() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl1","name":"Chill Mix","songCount":2,"duration":610,
+            "owner":"alice","public":true,
+            "entry":[
+                {"id":"t1","albumId":"al1","artistId":"ar1","title":"Airbag","track":1,"duration":228},
+                {"id":"t2","albumId":"al1","artistId":"ar1","title":"Paranoid Android","track":2,"duration":382}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (playlist, tracks) = try await api.getPlaylist(id: "pl1")
+
+        XCTAssertEqual(playlist.id, "pl1")
+        XCTAssertEqual(playlist.name, "Chill Mix")
+        XCTAssertEqual(playlist.songCount, 2)
+        XCTAssertEqual(playlist.duration, 610)
+        XCTAssertEqual(playlist.owner, "alice")
+        XCTAssertEqual(playlist.public, true)
+
+        XCTAssertEqual(tracks.count, 2)
+        XCTAssertEqual(tracks[0].id, "t1")
+        XCTAssertEqual(tracks[0].title, "Airbag")
+        XCTAssertEqual(tracks[0].trackNumber, 1)
+        XCTAssertEqual(tracks[0].duration, 228)
+        XCTAssertEqual(tracks[1].id, "t2")
+        XCTAssertEqual(tracks[1].title, "Paranoid Android")
+        XCTAssertEqual(tracks[1].trackNumber, 2)
+    }
+
+    func testGetPlaylistMissingEntryArrayDecodesToEmptyTracks() async throws {
+        // Empty playlist — "entry" key absent; must not throw.
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl9","name":"Empty","songCount":0,"duration":0
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (playlist, tracks) = try await api.getPlaylist(id: "pl9")
+        XCTAssertEqual(playlist.id, "pl9")
+        XCTAssertTrue(tracks.isEmpty)
+    }
+
+    func testGetPlaylistEmptyEntryArrayDecodesToEmptyTracks() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl8","name":"Also Empty","songCount":0,"duration":0,"entry":[]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (_, tracks) = try await api.getPlaylist(id: "pl8")
+        XCTAssertTrue(tracks.isEmpty)
+    }
+
+    func testGetPlaylistRequestURLContainsIdAndAuth() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl5","name":"Test","songCount":0,"duration":0
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        _ = try await api.getPlaylist(id: "pl5")
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/getPlaylist.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"), "pl5", "id= param must match the requested playlist ID")
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"), "token must be present")
+        XCTAssertNotNil(q("s"), "salt must be present")
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    func testGetPlaylistTracksUpdatedAtIsPopulated() async throws {
+        let before = Int(Date().timeIntervalSince1970)
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl1","name":"Mix","songCount":1,"duration":228,
+            "entry":[{"id":"t1","albumId":"al1","artistId":"ar1","title":"Track One"}]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (_, tracks) = try await api.getPlaylist(id: "pl1")
+        let after = Int(Date().timeIntervalSince1970)
+
+        XCTAssertFalse(tracks.isEmpty)
+        let updatedAt = tracks[0].updatedAt
+        XCTAssertGreaterThanOrEqual(updatedAt, before, "updatedAt must be >= time before call")
+        XCTAssertLessThanOrEqual(updatedAt, after,     "updatedAt must be <= time after call")
+    }
+
     // MARK: - invalidURL guard
 
     func testFetchWithEmptyEndpointStillBuildsValidURL() async throws {
