@@ -79,6 +79,19 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// Nil when in radio mode or when nothing is playing.
     @Published public private(set) var currentQueueIndex: Int?
 
+    // MARK: - Elapsed + Duration (d6q.6)
+
+    /// Current playback position in seconds for the active library track.
+    /// 0.0 when in radio mode or when no track is playing.
+    /// Updated every timer tick (0.5–3s) from VLC; the UI seek bar reads this
+    /// and uses its own local @State while scrubbing so it doesn't fight the timer.
+    @Published public private(set) var trackElapsed: Double = 0.0
+
+    /// Duration in seconds of the active library track.
+    /// Nil when unknown (radio, or library track whose duration is not yet parsed).
+    /// Sourced first from VLC's parsed media length; falls back to `Track.duration`.
+    @Published public private(set) var trackDuration: Double? = nil
+
     // MARK: - Repeat + Shuffle (d6q.4)
 
     /// Repeat mode for the library queue (`.off` / `.all` / `.one`).
@@ -1604,6 +1617,148 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         log.log("applyQueuePreferences: repeatMode=\(repeatMode), shuffleEnabled=\(shuffleEnabled)", category: .player)
     }
 
+    // MARK: - Seek API (d6q.6)
+
+    /// Seeks to the given position in the active library track.
+    ///
+    /// Clamped to `[0, duration]`.  No-op when in radio mode (live streams
+    /// are not seekable).  After the seek, forces an immediate
+    /// `MPNowPlayingInfoCenter` update so the lock-screen / CarPlay scrubber
+    /// snaps to the new position without waiting for the next timer tick.
+    ///
+    /// Mirrors the `changePlaybackPositionCommand` remote handler so both the
+    /// in-app scrubber and the lock-screen/CarPlay scrubber use the same path.
+    public func seek(to seconds: Double) {
+        guard case .library = playbackSource else {
+            log.log("seek(to:): not in library mode — no-op", category: .player)
+            return
+        }
+        let clampedSeconds: Double
+        if let dur = trackDuration, dur > 0 {
+            clampedSeconds = max(0, min(seconds, dur))
+        } else {
+            clampedSeconds = max(0, seconds)
+        }
+        let ms = Int32(exactly: (clampedSeconds * 1000).rounded()) ?? Int32(max(0, clampedSeconds * 1000))
+        mediaPlayer.time = VLCTime(int: ms)
+        // Force immediate now-playing flush so scrubber doesn't lag.
+        lastNowPlayingElapsed = nil
+        updateNowPlayingInfoForTrack()
+        log.log("seek(to:): pos=\(String(format: "%.1f", clampedSeconds))s, vlcMs=\(ms)", category: .player)
+    }
+
+    // MARK: - Queue jump + reorder API (d6q.6)
+
+    /// Jumps directly to the track at `index` in the current library queue.
+    ///
+    /// No-op when not in `.library` mode or when `index` is out of bounds.
+    ///
+    /// **Shuffle consistency:** when shuffle is on, the shuffle cursor is moved
+    /// to the position of `index` in `shuffleOrder`.  If `index` is not in the
+    /// current shuffle order (shouldn't happen unless the queue changed mid-shuffle),
+    /// the cursor is placed at 0 and the shuffle order is rebuilt from `index`.
+    public func playQueueItem(at index: Int) {
+        guard case .library(let queue, _) = playbackSource,
+              let api = queueAPI else {
+            log.log("playQueueItem(at:): not in library mode — no-op", category: .player)
+            return
+        }
+        guard index >= 0 && index < queue.count else {
+            log.log("playQueueItem(at:): index=\(index) out of bounds for \(queue.count)-track queue — no-op", category: .player)
+            return
+        }
+
+        log.log("playQueueItem(at:): jumping to index=\(index) (\"\(queue[index].title)\")", category: .player)
+
+        currentQueueIndex = index
+
+        // Update shuffle cursor to match the new position.
+        if shuffleEnabled {
+            if let pos = shuffleOrder.firstIndex(of: index) {
+                shufflePosition = pos
+            } else {
+                // index not in current shuffle order — rebuild from this track.
+                shuffleOrder = buildShuffleOrder(queueCount: queue.count, pinning: index)
+                shufflePosition = 0
+                log.log("playQueueItem(at:): index=\(index) not in shuffle order — rebuilt order", category: .player)
+            }
+        }
+
+        startLibraryTrack(queue[index], inQueue: queue, at: index, via: api)
+    }
+
+    /// Reorders the library queue, moving the item at `sourceIndex` to
+    /// `destinationIndex` (both expressed in the canonical queue order).
+    ///
+    /// **Playing track preservation:** the currently-playing track keeps playing
+    /// and its `currentQueueIndex` is updated to reflect its new position after
+    /// the move.
+    ///
+    /// **Shuffle consistency:** if shuffle is on, `shuffleOrder` elements (which
+    /// are canonical queue indices) are remapped so the shuffle cursor still points
+    /// to the now-playing track, and the relative playback order of upcoming
+    /// shuffled tracks is preserved.
+    ///
+    /// No-op when not in `.library` mode or when either index is out of bounds.
+    public func moveQueueItem(from sourceIndex: Int, to destinationIndex: Int) {
+        guard case .library(let queue, let playingIndex) = playbackSource,
+              queueAPI != nil else {
+            log.log("moveQueueItem: not in library mode — no-op", category: .player)
+            return
+        }
+        let count = queue.count
+        guard sourceIndex >= 0 && sourceIndex < count,
+              destinationIndex >= 0 && destinationIndex < count,
+              sourceIndex != destinationIndex else {
+            log.log("moveQueueItem: sourceIndex=\(sourceIndex) or destinationIndex=\(destinationIndex) invalid for \(count)-track queue — no-op", category: .player)
+            return
+        }
+
+        log.log("moveQueueItem: \(sourceIndex) → \(destinationIndex), playingIndex=\(playingIndex), shuffle=\(shuffleEnabled)", category: .player)
+
+        // Perform the move on the canonical queue.
+        var newQueue = queue
+        let item = newQueue.remove(at: sourceIndex)
+        newQueue.insert(item, at: destinationIndex)
+
+        // Compute the new canonical index of the currently-playing track.
+        // A move can shift the playing index when:
+        //   - sourceIndex < playingIndex and destinationIndex >= playingIndex: index shifts down by 1
+        //   - sourceIndex > playingIndex and destinationIndex <= playingIndex: index shifts up by 1
+        //   - sourceIndex == playingIndex: the playing track moved; index = destinationIndex
+        let newPlayingIndex: Int
+        if sourceIndex == playingIndex {
+            newPlayingIndex = destinationIndex
+        } else if sourceIndex < playingIndex && destinationIndex >= playingIndex {
+            newPlayingIndex = playingIndex - 1
+        } else if sourceIndex > playingIndex && destinationIndex <= playingIndex {
+            newPlayingIndex = playingIndex + 1
+        } else {
+            newPlayingIndex = playingIndex
+        }
+
+        // Remap shuffleOrder: each element is a canonical-queue index, so apply
+        // the same index-shift logic to every element in shuffleOrder.
+        if shuffleEnabled && !shuffleOrder.isEmpty {
+            shuffleOrder = shuffleOrder.map { idx -> Int in
+                if idx == sourceIndex { return destinationIndex }
+                if sourceIndex < idx && idx <= destinationIndex { return idx - 1 }
+                if destinationIndex <= idx && idx < sourceIndex { return idx + 1 }
+                return idx
+            }
+            // shufflePosition still points to the playing track's shuffle slot —
+            // no change needed there since shuffleOrder[shufflePosition] was remapped.
+            let remappedIdx = shufflePosition < shuffleOrder.count ? shuffleOrder[shufflePosition] : -1
+            log.log("moveQueueItem: shuffleOrder remapped, shufflePosition=\(shufflePosition) now points to queueIndex=\(remappedIdx)", category: .player)
+        }
+
+        currentQueueIndex = newPlayingIndex
+        // Update playbackSource with the new queue snapshot and playing index.
+        playbackSource = .library(queue: newQueue, index: newPlayingIndex)
+
+        log.log("moveQueueItem: done — newPlayingIndex=\(newPlayingIndex), queueCount=\(newQueue.count)", category: .player)
+    }
+
     /// Internal worker: tears down any active stream and starts playing a
     /// specific track within the supplied queue snapshot.
     ///
@@ -1690,6 +1845,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         isReducedBufferRetry = false
         accumulatedListeningTime = 0
 
+        trackElapsed = 0.0          // d6q.6: reset scrubber at track start
+        trackDuration = nil
         listeningStartDate = Date()
         updateNowPlayingInfoForTrack()
         // Note: sxmService is radio-specific; not notified for library tracks.
@@ -1852,6 +2009,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         if let artwork {
             info[MPMediaItemPropertyArtwork] = artwork
         }
+
+        // d6q.6: Publish elapsed + duration for the in-app seek bar.
+        // Only update when the value changed meaningfully (>0.1s drift) to
+        // avoid spurious SwiftUI redraws on every timer tick.
+        if abs(elapsed - trackElapsed) > 0.1 { trackElapsed = elapsed }
+        if trackDuration != duration { trackDuration = duration }
 
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = info
@@ -2500,6 +2663,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         queueDisplayArtistName = nil
         shuffleOrder = []                  // d6q.4: clear shuffle state on stop
         shufflePosition = 0
+        trackElapsed = 0.0                 // d6q.6: clear scrubber on stop
+        trackDuration = nil
         playbackSource = nil               // d6q.7: mirror into PlaybackSource seam
         // d6q.5: disable scrubber when no source is active.
         updateRemoteCommandsForSource(nil)

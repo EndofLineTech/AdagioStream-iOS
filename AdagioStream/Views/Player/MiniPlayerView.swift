@@ -154,6 +154,22 @@ struct MiniPlayerView: View {
         .hoverEffect(.highlight)
         .glassBackground()
         .glassContainer()
+        // d6q.6: 2pt determinate progress hairline for library tracks only.
+        // Radio mini-player is unchanged (isLiveStream == true, so no hairline).
+        .overlay(alignment: .bottom) {
+            if let item = audioPlayer.nowPlaying, !item.isLiveStream,
+               let duration = audioPlayer.trackDuration, duration > 0 {
+                GeometryReader { geo in
+                    let fraction = min(1.0, max(0.0, audioPlayer.trackElapsed / duration))
+                    Rectangle()
+                        .fill(.tint.opacity(0.7))
+                        .frame(width: geo.size.width * fraction, height: 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 2)
+                .accessibilityHidden(true)
+            }
+        }
         .sheet(isPresented: $showNowPlaying) {
             NowPlayingView()
                 .presentationDetents([.large])
