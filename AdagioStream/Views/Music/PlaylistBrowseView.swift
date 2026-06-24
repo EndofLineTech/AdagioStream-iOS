@@ -1,5 +1,6 @@
 // msl.2 — Navidrome playlist browse + play-as-queue in Music tab
 // msl.3 — Playlist editing: create / delete / rename / remove tracks / add-to-playlist
+// 65x.2 — Star/unstar toggle on playlist track rows
 //
 // Two-level navigation:
 //   PlaylistListView  (fetches getPlaylists, shows name + song count + cover art)
@@ -282,6 +283,17 @@ struct PlaylistDetailView: View {
                     api: api
                 )
             }
+            .alert(
+                "Star Error",
+                isPresented: Binding(
+                    get: { viewModel.starError != nil },
+                    set: { if !$0 { viewModel.clearStarError() } }
+                )
+            ) {
+                Button("OK") { viewModel.clearStarError() }
+            } message: {
+                Text(viewModel.starError ?? "")
+            }
     }
 
     @ToolbarContentBuilder
@@ -395,10 +407,13 @@ struct PlaylistDetailView: View {
                 ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
                     PlaylistTrackRowView(
                         track: track,
-                        position: index + 1
-                    ) {
-                        play(track: track)
-                    }
+                        position: index + 1,
+                        onPlay: { play(track: track) },
+                        starred: viewModel.playlistTrackStarStates[track.id]?.starred,
+                        onToggleStar: {
+                            Task { await viewModel.toggleStar(id: track.id) }
+                        }
+                    )
                     .accessibilityLabel(playlistTrackAccessibilityLabel(track, position: index + 1))
                     .accessibilityHint(isEditingTracks ? "Swipe to remove from playlist" : "Tap to play")
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -523,6 +538,10 @@ struct PlaylistTrackRowView: View {
     let track: Track
     let position: Int
     let onPlay: () -> Void
+    /// 65x.2: When non-nil the row shows a heart button reflecting starred state.
+    var starred: Bool? = nil
+    /// 65x.2: Called when the heart button is tapped.
+    var onToggleStar: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -550,6 +569,15 @@ struct PlaylistTrackRowView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .accessibilityHidden(true)
+            }
+
+            // 65x.2: Star toggle — shown when star state is available
+            if let isStarred = starred, let toggle = onToggleStar {
+                NavidromeStarButton(
+                    starred: isStarred,
+                    accessibilityLabel: isStarred ? "Unstar \(track.title)" : "Star \(track.title)",
+                    onToggle: toggle
+                )
             }
 
             // Play button

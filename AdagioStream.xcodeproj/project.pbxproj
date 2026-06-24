@@ -84,6 +84,7 @@
 		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
 		685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */; };
 		698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */; };
+		69F087A3002E8C7101C7BF2D /* NavidromeStarButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */; };
 		6AEDCD88BA06E999C0BC2D30 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */; };
 		6BD1E1B2F9E151F4C20C002C /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B258B0EF620197CC9833E0 /* ChannelListView.swift */; };
 		6CABC39D02DBF5872AB91F75 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = F32076461D1698393DE4F46B /* AppSettings.swift */; };
@@ -286,6 +287,7 @@
 		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
 		654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerServiceTests.swift; sourceTree = "<group>"; };
 		6B53DA1A6B961046A0188A39 /* AdagioStream-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AdagioStream-Bridging-Header.h"; sourceTree = "<group>"; };
+		6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeStarButton.swift; sourceTree = "<group>"; };
 		6D13D3C7E0800E76E4872C0C /* PrivacyPolicyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyPolicyView.swift; sourceTree = "<group>"; };
 		6F1D1D4B7326AC4A2D505DE9 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		7434EFB265DF59B08B4394B3 /* SXMTrack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SXMTrack.swift; sourceTree = "<group>"; };
@@ -519,6 +521,7 @@
 				FF42FE4E355FDB76ED8BD76D /* GenreBrowseView.swift */,
 				BAEEB586D30C3867A74F7B11 /* MusicLibraryView.swift */,
 				1D3200355927ECEE975520D8 /* NavidromeAddToPlaylistSheet.swift */,
+				6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */,
 				EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */,
 				0B48DC2BAF144D6832406885 /* SearchResultsView.swift */,
 				4764DC58A87DECEFE53BB799 /* SubsonicCoverArt.swift */,
@@ -1090,6 +1093,7 @@
 				7BC7258215469E754549E37A /* NavidromeAddToPlaylistSheet.swift in Sources */,
 				685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */,
 				4193BA80B429CAB452283E97 /* NavidromeModels.swift in Sources */,
+				69F087A3002E8C7101C7BF2D /* NavidromeStarButton.swift in Sources */,
 				9B9B71470CE809C09FAC29BF /* NavidromeStore.swift in Sources */,
 				23D89FC8A6D7E6C0C13EEACD /* NowPlayingView.swift in Sources */,
 				F16FB5B7AAAD58B12598B292 /* PersistenceService.swift in Sources */,

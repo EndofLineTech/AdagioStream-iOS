@@ -233,6 +233,85 @@ public struct NavidromeAPI {
         return (album, tracks)
     }
 
+    // MARK: - Star-state-aware fetch variants (65x.2)
+
+    /// A per-item star/rating snapshot from the server response.
+    ///
+    /// Carried on the DTO layer only — never persisted to the GRDB v1 schema.
+    /// Keyed by the item's Subsonic `id`; used by the browse UI to display and
+    /// toggle star state without adding GRDB columns.
+    public struct StarState {
+        /// Whether the item is currently starred on the server.
+        public var starred: Bool
+        /// 0–5 user rating; `nil` when no rating has been set.
+        public var userRating: Int?
+
+        public init(starred: Bool, userRating: Int?) {
+            self.starred = starred
+            self.userRating = userRating
+        }
+    }
+
+    /// Like `getAlbum(id:)` but also returns per-track `StarState` keyed by track ID,
+    /// and the album's own `StarState`.
+    ///
+    /// Used by the browse UI (AlbumDetailView) to reflect server-side star state
+    /// without writing to the GRDB schema.
+    public func getAlbumWithStarState(id: String) async throws -> (
+        album: Album,
+        albumStarState: StarState,
+        tracks: [Track],
+        trackStarStates: [String: StarState]
+    ) {
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try await fetch("getAlbum", params: ["id": id], as: GetAlbumPayload.self)
+        let album = payload.album.toRecord(updatedAt: now)
+        let albumStarState = StarState(
+            starred: payload.album.albumDTO.starred,
+            userRating: payload.album.albumDTO.userRating
+        )
+        let tracks = payload.album.song.map { $0.toRecord(updatedAt: now) }
+        var trackStarStates: [String: StarState] = [:]
+        for dto in payload.album.song {
+            trackStarStates[dto.id] = StarState(starred: dto.starred, userRating: dto.userRating)
+        }
+        return (album, albumStarState, tracks, trackStarStates)
+    }
+
+    /// Like `getArtist(id:)` but also returns the artist's `StarState`.
+    ///
+    /// Used by the browse UI (ArtistDetailView) to reflect server-side star state.
+    public func getArtistWithStarState(id: String) async throws -> (
+        artist: Artist,
+        artistStarState: StarState,
+        albums: [Album]
+    ) {
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try await fetch("getArtist", params: ["id": id], as: GetArtistPayload.self)
+        let artist = payload.artist.toRecord(updatedAt: now)
+        let artistStarState = StarState(starred: payload.artist.starred, userRating: nil)
+        let albums = payload.artist.album.map { $0.toRecord(updatedAt: now) }
+        return (artist, artistStarState, albums)
+    }
+
+    /// Like `getPlaylist(id:)` but also returns per-track `StarState` keyed by track ID.
+    ///
+    /// Used by PlaylistDetailView to reflect server-side star state on playlist tracks.
+    public func getPlaylistWithStarState(id: String) async throws -> (
+        playlist: Playlist,
+        tracks: [Track],
+        trackStarStates: [String: StarState]
+    ) {
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try await fetch("getPlaylist", params: ["id": id], as: GetPlaylistPayload.self)
+        let tracks = payload.playlist.entry.map { $0.toRecord(updatedAt: now) }
+        var trackStarStates: [String: StarState] = [:]
+        for dto in payload.playlist.entry {
+            trackStarStates[dto.id] = StarState(starred: dto.starred, userRating: dto.userRating)
+        }
+        return (payload.playlist.playlistMeta, tracks, trackStarStates)
+    }
+
     /// Fetches a list of albums from `getAlbumList2.view`.
     ///
     /// - Parameters:
@@ -426,6 +505,60 @@ public struct NavidromeAPI {
         )
     }
 
+    // MARK: - Star / unstar / setRating endpoints (65x.2)
+    //
+    // FAVORITES SEPARATION NOTE:
+    // Navidrome `star` is SERVER-SIDE and applies to music tracks, albums, and
+    // artists. The app's existing `ProviderManager.toggleFavorite` / `favoriteOrder`
+    // system is LOCAL and applies only to radio channels (live streams). These are
+    // entirely separate domains and must NOT be merged. A future unified "Favorites"
+    // view could combine both for display purposes, but the backing stores remain
+    // distinct: server-side Subsonic star vs. local channel favorite order.
+
+    /// Stars (favorites) an item on the Navidrome server via `star.view?id=`.
+    ///
+    /// Subsonic also supports `albumId` and `artistId` params, but Navidrome
+    /// accepts a plain `id` for all three entity types — track, album, or artist.
+    ///
+    /// Returns normally on `status == "ok"`.  Throws a mapped `APIError` on failure.
+    public func star(id: String) async throws {
+        guard let url = buildURL(endpoint: "star", params: ["id": id]) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        try decodeWriteOK(data: data)
+    }
+
+    /// Removes the star (unfavorites) an item on the Navidrome server via `unstar.view?id=`.
+    ///
+    /// Returns normally on `status == "ok"`.  Throws a mapped `APIError` on failure.
+    public func unstar(id: String) async throws {
+        guard let url = buildURL(endpoint: "unstar", params: ["id": id]) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        try decodeWriteOK(data: data)
+    }
+
+    /// Sets a 0–5 star rating for an item via `setRating.view?id=&rating=`.
+    ///
+    /// - Parameters:
+    ///   - id: The Subsonic/Navidrome entity ID (track, album, or artist).
+    ///   - rating: Integer 0–5.  0 clears the rating; 1–5 set it.
+    ///
+    /// Returns normally on `status == "ok"`.  Throws a mapped `APIError` on failure.
+    public func setRating(id: String, rating: Int) async throws {
+        let clampedRating = max(0, min(5, rating))
+        guard let url = buildURL(endpoint: "setRating", params: [
+            "id": id,
+            "rating": String(clampedRating),
+        ]) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        try decodeWriteOK(data: data)
+    }
+
     // MARK: - Scrobble endpoints (65x.1)
 
     /// Reports a track play to the server via `scrobble.view`.
@@ -610,6 +743,8 @@ public struct NavidromeAPI {
             let albumCount: Int?
             let coverArt: String?
             let album: [SubsonicAlbumDTO]
+            /// True when the Subsonic `starred` date-string field is present.
+            let starred: Bool
 
             func toRecord(updatedAt: Int) -> Artist {
                 Artist(
@@ -629,9 +764,14 @@ public struct NavidromeAPI {
                 albumCount = try? c.decodeIfPresent(Int.self, forKey: .albumCount)
                 coverArt   = try? c.decodeIfPresent(String.self, forKey: .coverArt)
                 album      = (try? c.decode([SubsonicAlbumDTO].self, forKey: .album)) ?? []
+                let starredValue = try? c.decodeIfPresent(String.self, forKey: .starredField)
+                starred = starredValue != nil
             }
 
-            enum CodingKeys: String, CodingKey { case id, name, albumCount, coverArt, album }
+            enum CodingKeys: String, CodingKey {
+                case id, name, albumCount, coverArt, album
+                case starredField = "starred"
+            }
         }
     }
 

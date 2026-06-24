@@ -104,9 +104,11 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         guard albumsState != .loading else { return }
         selectedArtist = artist
         artistAlbums = []
+        selectedArtistStarState = nil
         albumsState = .loading
         do {
-            let (_, albums) = try await api.getArtist(id: artist.id)
+            let (_, artistStarState, albums) = try await api.getArtistWithStarState(id: artist.id)
+            selectedArtistStarState = artistStarState
             artistAlbums = albums.sorted {
                 // Sort by year ascending; ties broken by album title.
                 switch ($0.year, $1.year) {
@@ -122,6 +124,134 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Star / rating state (65x.2)
+
+    // NOTE on favorites separation:
+    // These star states are for Navidrome music library items (server-side).
+    // They are entirely separate from ProviderManager.favoriteOrder, which
+    // manages LOCAL radio-channel favorites. Do not mix these domains.
+
+    /// Star state for the current album (loaded via getAlbumWithStarState).
+    @Published public private(set) var selectedAlbumStarState: NavidromeAPI.StarState?
+    /// Per-track star states for the current album's tracks. Keyed by track ID.
+    @Published public private(set) var albumTrackStarStates: [String: NavidromeAPI.StarState] = [:]
+    /// Star state for the current artist (loaded via getArtistWithStarState).
+    @Published public private(set) var selectedArtistStarState: NavidromeAPI.StarState?
+    /// Per-track star states for the current playlist's tracks. Keyed by track ID.
+    @Published public private(set) var playlistTrackStarStates: [String: NavidromeAPI.StarState] = [:]
+
+    /// Error message from a recent star/rating operation; surfaces via existing error-alert pattern.
+    @Published public private(set) var starError: String? = nil
+
+    public func clearStarError() { starError = nil }
+
+    /// Toggles the star state for any Navidrome entity (track, album, or artist).
+    ///
+    /// Optimistically updates the local state dictionary before the network call,
+    /// then reverts on failure.
+    public func toggleStar(id: String) async {
+        // Determine current state and the dictionary to update.
+        if albumTrackStarStates[id] != nil {
+            let currentlyStarred = albumTrackStarStates[id]?.starred ?? false
+            albumTrackStarStates[id]?.starred = !currentlyStarred
+            do {
+                if currentlyStarred {
+                    try await api.unstar(id: id)
+                } else {
+                    try await api.star(id: id)
+                }
+            } catch let apiErr as NavidromeAPI.APIError {
+                albumTrackStarStates[id]?.starred = currentlyStarred // revert
+                starError = apiErr.errorDescription ?? "Failed to update star."
+            } catch {
+                albumTrackStarStates[id]?.starred = currentlyStarred
+                starError = error.localizedDescription
+            }
+        } else if playlistTrackStarStates[id] != nil {
+            let currentlyStarred = playlistTrackStarStates[id]?.starred ?? false
+            playlistTrackStarStates[id]?.starred = !currentlyStarred
+            do {
+                if currentlyStarred {
+                    try await api.unstar(id: id)
+                } else {
+                    try await api.star(id: id)
+                }
+            } catch let apiErr as NavidromeAPI.APIError {
+                playlistTrackStarStates[id]?.starred = currentlyStarred
+                starError = apiErr.errorDescription ?? "Failed to update star."
+            } catch {
+                playlistTrackStarStates[id]?.starred = currentlyStarred
+                starError = error.localizedDescription
+            }
+        } else if id == selectedAlbum?.id {
+            let currentlyStarred = selectedAlbumStarState?.starred ?? false
+            selectedAlbumStarState?.starred = !currentlyStarred
+            do {
+                if currentlyStarred {
+                    try await api.unstar(id: id)
+                } else {
+                    try await api.star(id: id)
+                }
+            } catch let apiErr as NavidromeAPI.APIError {
+                selectedAlbumStarState?.starred = currentlyStarred
+                starError = apiErr.errorDescription ?? "Failed to update star."
+            } catch {
+                selectedAlbumStarState?.starred = currentlyStarred
+                starError = error.localizedDescription
+            }
+        } else if id == selectedArtist?.id {
+            let currentlyStarred = selectedArtistStarState?.starred ?? false
+            selectedArtistStarState?.starred = !currentlyStarred
+            do {
+                if currentlyStarred {
+                    try await api.unstar(id: id)
+                } else {
+                    try await api.star(id: id)
+                }
+            } catch let apiErr as NavidromeAPI.APIError {
+                selectedArtistStarState?.starred = currentlyStarred
+                starError = apiErr.errorDescription ?? "Failed to update star."
+            } catch {
+                selectedArtistStarState?.starred = currentlyStarred
+                starError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Sets a 0–5 rating for a track or album.  0 clears the rating.
+    ///
+    /// Updates the local star-state dictionary optimistically, then reverts on failure.
+    public func setRating(id: String, rating: Int) async {
+        let previousRating: Int?
+        if albumTrackStarStates[id] != nil {
+            previousRating = albumTrackStarStates[id]?.userRating
+            albumTrackStarStates[id]?.userRating = rating == 0 ? nil : rating
+        } else if id == selectedAlbum?.id {
+            previousRating = selectedAlbumStarState?.userRating
+            selectedAlbumStarState?.userRating = rating == 0 ? nil : rating
+        } else {
+            return
+        }
+        do {
+            try await api.setRating(id: id, rating: rating)
+        } catch let apiErr as NavidromeAPI.APIError {
+            // Revert
+            if albumTrackStarStates[id] != nil {
+                albumTrackStarStates[id]?.userRating = previousRating
+            } else {
+                selectedAlbumStarState?.userRating = previousRating
+            }
+            starError = apiErr.errorDescription ?? "Failed to set rating."
+        } catch {
+            if albumTrackStarStates[id] != nil {
+                albumTrackStarStates[id]?.userRating = previousRating
+            } else {
+                selectedAlbumStarState?.userRating = previousRating
+            }
+            starError = error.localizedDescription
+        }
+    }
+
     // MARK: - Load: tracks for an album
 
     public func loadTracks(for album: Album) async {
@@ -129,29 +259,19 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         selectedAlbum = album
         selectedAlbumArtistName = nil
         albumTracks = []
+        albumTrackStarStates = [:]
+        selectedAlbumStarState = nil
         tracksState = .loading
         do {
-            let (returnedAlbum, tracks) = try await api.getAlbum(id: album.id)
-            // getAlbum returns an Album record; but the DTO-level artistName is
-            // captured in the NavidromeAPI private AlbumDetail payload.  To surface
-            // it we call via the public fetch<T> path by re-fetching with
-            // SubsonicAlbumDTOPayload — simpler to store it in the intermediate
-            // fetch.  Workaround: the DTO's artistName is not forwarded through
-            // toRecord() (Album has no artistName column in v1 schema).
-            //
-            // Resolution: fetch the raw DTO separately to read artistName.
-            // This is a second HTTP call only on the first album open; the
-            // image cache warms the cover art. Trade-off accepted for startup tier.
-            //
-            // Actually the cleaner path: NavidromeAPI.getAlbum already decodes the
-            // album DTO internally; we extend it to return artistName too.
-            // Until that extension lands, fall back to resolving via selectedArtist.
-            //
+            let (returnedAlbum, albumStarState, tracks, trackStates) =
+                try await api.getAlbumWithStarState(id: album.id)
             // Use the artist name we already have from the artist list / artist
             // detail load — it's in selectedArtist.name which we loaded one
             // screen back.  No extra network call needed for the common path.
             selectedAlbumArtistName = selectedArtist?.name
             selectedAlbum = returnedAlbum
+            selectedAlbumStarState = albumStarState
+            albumTrackStarStates = trackStates
             albumTracks = tracks.sorted {
                 // Sort by disc then track number.
                 if $0.discNumber != $1.discNumber {
@@ -278,10 +398,12 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         guard playlistTracksState != .loading else { return }
         playlistTracks = []
         playlistTracksState = .loading
+        playlistTrackStarStates = [:]
         do {
-            let (playlist, tracks) = try await api.getPlaylist(id: id)
+            let (playlist, tracks, trackStates) = try await api.getPlaylistWithStarState(id: id)
             selectedPlaylist = playlist
             playlistTracks = tracks
+            playlistTrackStarStates = trackStates
             playlistTracksState = tracks.isEmpty ? .empty : .loaded
         } catch let apiErr as NavidromeAPI.APIError {
             playlistTracksState = .error(apiErr.errorDescription ?? "Unknown error")
@@ -296,6 +418,7 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         selectedPlaylist = nil
         playlistTracks = []
         playlistTracksState = .idle
+        playlistTrackStarStates = [:]
     }
 
     // MARK: - Playlist editing actions (msl.3)
@@ -486,6 +609,7 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         selectedArtist = nil
         artistAlbums = []
         albumsState = .idle
+        selectedArtistStarState = nil
     }
 
     public func resetAlbumDetail() {
@@ -493,6 +617,8 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         selectedAlbumArtistName = nil
         albumTracks = []
         tracksState = .idle
+        selectedAlbumStarState = nil
+        albumTrackStarStates = [:]
     }
 }
 

@@ -1,4 +1,5 @@
 // 0xy.3 — Navidrome browse UI: artist → albums
+// 65x.2 — Star/unstar toggle for artist header
 //
 // Shows the albums for a single artist.  Navigates to AlbumDetailView on tap.
 // Cover art displayed via SubsonicCoverArt; loading/error/empty states follow
@@ -23,11 +24,33 @@ struct ArtistDetailView: View {
         content
             .navigationTitle(artist.name)
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                // 65x.2: Artist star toggle in toolbar
+                ToolbarItem(placement: .primaryAction) {
+                    NavidromeStarButton(
+                        starred: viewModel.selectedArtistStarState?.starred ?? false,
+                        accessibilityLabel: "Star \(artist.name)"
+                    ) {
+                        Task { await viewModel.toggleStar(id: artist.id) }
+                    }
+                }
+            }
             .task {
                 // Re-load only if this artist differs from the previously loaded one.
                 if viewModel.selectedArtist?.id != artist.id {
                     await viewModel.loadAlbums(for: artist)
                 }
+            }
+            .alert(
+                "Star Error",
+                isPresented: Binding(
+                    get: { viewModel.starError != nil },
+                    set: { if !$0 { viewModel.clearStarError() } }
+                )
+            ) {
+                Button("OK") { viewModel.clearStarError() }
+            } message: {
+                Text(viewModel.starError ?? "")
             }
     }
 

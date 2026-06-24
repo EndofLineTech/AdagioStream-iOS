@@ -1,4 +1,5 @@
 // 0xy.3 — Navidrome browse UI: album → tracks + tap-to-play
+// 65x.2 — Star/unstar toggle for album header and track rows; rating control
 //
 // Shows tracks for a single album with a header (cover art + title + artist).
 // Tapping a track row OR the play button enqueues the WHOLE ALBUM as a queue
@@ -36,6 +37,17 @@ struct AlbumDetailView: View {
                     viewModel: viewModel,
                     api: api
                 )
+            }
+            .alert(
+                "Star Error",
+                isPresented: Binding(
+                    get: { viewModel.starError != nil },
+                    set: { if !$0 { viewModel.clearStarError() } }
+                )
+            ) {
+                Button("OK") { viewModel.clearStarError() }
+            } message: {
+                Text(viewModel.starError ?? "")
             }
     }
 
@@ -100,10 +112,13 @@ struct AlbumDetailView: View {
                 ForEach(viewModel.albumTracks, id: \.id) { track in
                     TrackRowView(
                         track: track,
-                        artistName: viewModel.selectedAlbumArtistName
-                    ) {
-                        play(track: track)
-                    }
+                        artistName: viewModel.selectedAlbumArtistName,
+                        onPlay: { play(track: track) },
+                        starred: viewModel.albumTrackStarStates[track.id]?.starred,
+                        onToggleStar: {
+                            Task { await viewModel.toggleStar(id: track.id) }
+                        }
+                    )
                     .accessibilityLabel(trackAccessibilityLabel(track))
                     .accessibilityHint("Tap to play")
                     .contextMenu {
@@ -149,6 +164,15 @@ struct AlbumDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+
+                // 65x.2: Album star toggle
+                NavidromeStarButton(
+                    starred: viewModel.selectedAlbumStarState?.starred ?? false,
+                    accessibilityLabel: "Star \(album.title)"
+                ) {
+                    Task { await viewModel.toggleStar(id: album.id) }
+                }
+                .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity)
@@ -187,6 +211,10 @@ struct TrackRowView: View {
     let track: Track
     let artistName: String?
     let onPlay: () -> Void
+    /// 65x.2: When non-nil the row shows a heart button reflecting starred state.
+    var starred: Bool? = nil
+    /// 65x.2: Called when the heart button is tapped.
+    var onToggleStar: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -228,6 +256,15 @@ struct TrackRowView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
                     .accessibilityHidden(true)
+            }
+
+            // 65x.2: Star toggle — shown when star state is available
+            if let isStarred = starred, let toggle = onToggleStar {
+                NavidromeStarButton(
+                    starred: isStarred,
+                    accessibilityLabel: isStarred ? "Unstar \(track.title)" : "Star \(track.title)",
+                    onToggle: toggle
+                )
             }
 
             // Play button

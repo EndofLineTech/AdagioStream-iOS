@@ -1310,6 +1310,302 @@ final class NavidromeAPITests: XCTestCase {
         }
     }
 
+    // MARK: - star / unstar / setRating (65x.2)
+
+    /// star.view: URL must contain the correct path, id param, and auth.
+    func testStarURLContainsIdAndAuth() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.star(id: "track-42")
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/star.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"), "track-42")
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"), "token must be present")
+        XCTAssertNotNil(q("s"), "salt must be present")
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// star.view: status=ok → success (no throw).
+    func testStarStatusOkSucceeds() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+        // Must not throw.
+        try await api.star(id: "trk-1")
+    }
+
+    /// star.view: status=failed → throws mapped APIError.
+    func testStarStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":70,"message":"Not found"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            try await api.star(id: "bad-id")
+            XCTFail("Expected throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 70)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
+
+    /// unstar.view: URL must contain the correct path, id param, and auth.
+    func testUnstarURLContainsIdAndAuth() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.unstar(id: "album-99")
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/unstar.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"), "album-99")
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+        XCTAssertNotNil(q("s"))
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// unstar.view: status=ok → success (no throw).
+    func testUnstarStatusOkSucceeds() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+        try await api.unstar(id: "trk-1")
+    }
+
+    /// unstar.view: status=failed → throws.
+    func testUnstarStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":70,"message":"Not found"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            try await api.unstar(id: "bad-id")
+            XCTFail("Expected throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 70)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
+
+    /// setRating.view: URL must contain id, rating, and auth params.
+    func testSetRatingURLContainsIdRatingAndAuth() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.setRating(id: "song-7", rating: 4)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/setRating.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"),     "song-7")
+        XCTAssertEqual(q("rating"), "4")
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+        XCTAssertNotNil(q("s"))
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// setRating.view: rating=0 clears the rating (still sends 0, not absent).
+    func testSetRatingZeroSendsZeroParam() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.setRating(id: "song-8", rating: 0)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        let ratingParam = items.first(where: { $0.name == "rating" })?.value
+        XCTAssertEqual(ratingParam, "0", "rating=0 must be sent to clear the rating")
+    }
+
+    /// setRating.view: rating is clamped to 0–5 (values > 5 become 5, < 0 become 0).
+    func testSetRatingClampsAboveMaxToFive() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.setRating(id: "song-9", rating: 99)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        let ratingParam = items.first(where: { $0.name == "rating" })?.value
+        XCTAssertEqual(ratingParam, "5", "rating must be clamped to 5 max")
+    }
+
+    /// setRating.view: status=ok → success (no throw).
+    func testSetRatingStatusOkSucceeds() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+        try await api.setRating(id: "trk-1", rating: 3)
+    }
+
+    /// setRating.view: status=failed → throws.
+    func testSetRatingStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":70,"message":"Not found"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            try await api.setRating(id: "bad-id", rating: 3)
+            XCTFail("Expected throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 70)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
+
+    // MARK: - DTO starred / userRating decoding (65x.2)
+
+    /// SubsonicTrackDTO: starred=true when the `starred` date-string field is present.
+    func testTrackDTOStarredTrueWhenStarredFieldPresent() throws {
+        let json = Data("""
+        {"id":"t1","albumId":"al1","artistId":"ar1","title":"Track One","starred":"2024-01-15T12:00:00"}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: json)
+        XCTAssertTrue(dto.starred, "starred must be true when the 'starred' field is present")
+    }
+
+    /// SubsonicTrackDTO: starred=false when the `starred` field is absent.
+    func testTrackDTOStarredFalseWhenStarredFieldAbsent() throws {
+        let json = Data("""
+        {"id":"t2","albumId":"al1","artistId":"ar1","title":"Track Two"}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: json)
+        XCTAssertFalse(dto.starred, "starred must be false when the 'starred' field is absent")
+    }
+
+    /// SubsonicTrackDTO: userRating is parsed when present.
+    func testTrackDTOUserRatingParsedWhenPresent() throws {
+        let json = Data("""
+        {"id":"t3","albumId":"al1","artistId":"ar1","title":"Track Three","userRating":4}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: json)
+        XCTAssertEqual(dto.userRating, 4)
+    }
+
+    /// SubsonicTrackDTO: userRating is nil when absent.
+    func testTrackDTOUserRatingNilWhenAbsent() throws {
+        let json = Data("""
+        {"id":"t4","albumId":"al1","artistId":"ar1","title":"Track Four"}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicTrackDTO.self, from: json)
+        XCTAssertNil(dto.userRating, "userRating must be nil when absent")
+    }
+
+    /// SubsonicAlbumDTO: starred=true when field present; userRating parsed.
+    func testAlbumDTOStarredAndRatingDecoding() throws {
+        let json = Data("""
+        {"id":"al1","artistId":"ar1","name":"Album","starred":"2024-06-01T00:00:00","userRating":3}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: json)
+        XCTAssertTrue(dto.starred)
+        XCTAssertEqual(dto.userRating, 3)
+    }
+
+    /// SubsonicAlbumDTO: starred=false when field absent; userRating nil.
+    func testAlbumDTOStarredFalseAndRatingNilWhenAbsent() throws {
+        let json = Data("""
+        {"id":"al2","artistId":"ar2","name":"Another Album"}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicAlbumDTO.self, from: json)
+        XCTAssertFalse(dto.starred)
+        XCTAssertNil(dto.userRating)
+    }
+
+    /// SubsonicArtistDTO: starred=true when field present.
+    func testArtistDTOStarredTrueWhenPresent() throws {
+        let json = Data("""
+        {"id":"ar1","name":"Radiohead","albumCount":9,"starred":"2024-01-01T00:00:00"}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicArtistDTO.self, from: json)
+        XCTAssertTrue(dto.starred)
+    }
+
+    /// SubsonicArtistDTO: starred=false when field absent.
+    func testArtistDTOStarredFalseWhenAbsent() throws {
+        let json = Data("""
+        {"id":"ar2","name":"Blur","albumCount":7}
+        """.utf8)
+        let dto = try JSONDecoder().decode(SubsonicArtistDTO.self, from: json)
+        XCTAssertFalse(dto.starred)
+    }
+
+    /// getAlbum: track-level starred/userRating come through in getAlbumWithStarState.
+    func testGetAlbumWithStarStateReturnsTrackStarStates() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","album":{
+            "id":"al1","artistId":"ar1","title":"OK Computer","songCount":2,"year":1997,
+            "starred":"2024-03-01T00:00:00","userRating":5,
+            "song":[
+                {"id":"t1","albumId":"al1","artistId":"ar1","title":"Airbag","track":1,"duration":228,"starred":"2024-01-01T00:00:00","userRating":4},
+                {"id":"t2","albumId":"al1","artistId":"ar1","title":"Paranoid Android","track":2,"duration":387}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let result = try await api.getAlbumWithStarState(id: "al1")
+
+        // Album star state
+        XCTAssertTrue(result.albumStarState.starred, "Album must be starred")
+        XCTAssertEqual(result.albumStarState.userRating, 5)
+
+        // Track t1: starred, rating 4
+        let t1State = result.trackStarStates["t1"]
+        XCTAssertNotNil(t1State)
+        XCTAssertTrue(t1State?.starred ?? false, "t1 must be starred")
+        XCTAssertEqual(t1State?.userRating, 4)
+
+        // Track t2: not starred, no rating
+        let t2State = result.trackStarStates["t2"]
+        XCTAssertNotNil(t2State)
+        XCTAssertFalse(t2State?.starred ?? true, "t2 must not be starred")
+        XCTAssertNil(t2State?.userRating)
+    }
+
     // MARK: - scrobble.view (65x.1)
 
     /// Scrobble now-playing (submission=false): verifies URL path, id param,

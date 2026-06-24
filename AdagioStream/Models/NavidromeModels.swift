@@ -232,15 +232,60 @@ public struct Playlist: Codable, Hashable {
 
 // MARK: - Subsonic DTO Layer
 
+// MARK: - Transient star / rating overlay (65x.2)
+//
+// `starred` and `userRating` are NOT persisted to the GRDB v1 schema — there
+// are no columns for them in the `artists`, `albums`, or `tracks` tables.
+// They are carried in-memory on the DTO layer only (SubsonicArtistDTO,
+// SubsonicAlbumDTO, SubsonicTrackDTO) and derived from the live server response.
+//
+// The GRDB record types (Artist, Album, Track) remain unchanged; adding
+// transient properties to those types would require excluding them from the
+// synthesised Codable CodingKeys or the GRDB row would fail to decode.
+// Keeping them on the DTOs is the cleanest separation.
+//
+// `starred` is derived from the Subsonic `starred` field: the server emits a
+// date-string value (e.g. "2024-01-15T12:00:00") when the item is starred and
+// omits the key entirely when it is not.  We map presence → `true`, absence → `false`.
+//
+// FAVORITES SEPARATION:
+// Navidrome `starred` is server-side and applies to music library items
+// (tracks, albums, artists). The app's ProviderManager `favoriteOrder` /
+// `toggleFavorite` system is LOCAL and applies only to radio channels (live
+// streams). These domains are kept strictly separate — do NOT route Navidrome
+// stars through the channel favorites pipeline.
+
 /// Decodes a single artist entry from Subsonic `getArtists` / `getIndexes`.
 ///
 /// Subsonic fields: `id`, `name`, `albumCount`, `coverArt`, `artistImageUrl`
 /// (artistImageUrl is intentionally discarded — no v1 column).
+///
+/// `starred` is a transient field — not stored in GRDB — derived from whether
+/// the Subsonic `starred` date-string field is present in the response.
 public struct SubsonicArtistDTO: Decodable {
     public let id: String
     public let name: String
     public let albumCount: Int?
     public let coverArt: String?
+    /// True when the Subsonic `starred` field is present (non-null) in the response.
+    /// This is a transient/display field — not persisted to the GRDB `artists` table.
+    public let starred: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, albumCount, coverArt
+        case starredField = "starred"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id         = try c.decode(String.self, forKey: .id)
+        name       = try c.decode(String.self, forKey: .name)
+        albumCount = try? c.decodeIfPresent(Int.self, forKey: .albumCount)
+        coverArt   = try? c.decodeIfPresent(String.self, forKey: .coverArt)
+        // starred: present (any non-null value) → true; absent → false
+        let starredValue = try? c.decodeIfPresent(String.self, forKey: .starredField)
+        starred = starredValue != nil
+    }
 
     public func toRecord(updatedAt: Int) -> Artist {
         Artist(
@@ -266,6 +311,9 @@ public struct SubsonicArtistDTO: Decodable {
 /// `artist` (display name string) is captured in `artistName` for UI display
 /// (e.g. album-detail header and now-playing subtitle); `artistId` is the
 /// foreign key used for DB relations.
+///
+/// `starred` and `userRating` are transient display fields — not persisted to
+/// the GRDB `albums` table (no v1 columns exist for them).
 public struct SubsonicAlbumDTO: Decodable {
     public let id: String
     public let artistId: String
@@ -283,6 +331,12 @@ public struct SubsonicAlbumDTO: Decodable {
     public let genre: String?
     public let songCount: Int?
     public let coverArt: String?
+    /// True when the Subsonic `starred` date-string field is present in the response.
+    /// Transient — not persisted to the GRDB `albums` table.
+    public let starred: Bool
+    /// User-assigned 0–5 star rating from the Subsonic `userRating` field.
+    /// Transient — not persisted to the GRDB `albums` table.
+    public let userRating: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -294,6 +348,25 @@ public struct SubsonicAlbumDTO: Decodable {
         case genre
         case songCount
         case coverArt
+        case starredField  = "starred"
+        case userRating
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id         = try c.decode(String.self, forKey: .id)
+        artistId   = try c.decode(String.self, forKey: .artistId)
+        artistName = try? c.decodeIfPresent(String.self, forKey: .artistName)
+        nameField  = try? c.decodeIfPresent(String.self, forKey: .nameField)
+        titleField = try? c.decodeIfPresent(String.self, forKey: .titleField)
+        year       = try? c.decodeIfPresent(Int.self,    forKey: .year)
+        genre      = try? c.decodeIfPresent(String.self, forKey: .genre)
+        songCount  = try? c.decodeIfPresent(Int.self,    forKey: .songCount)
+        coverArt   = try? c.decodeIfPresent(String.self, forKey: .coverArt)
+        userRating = try? c.decodeIfPresent(Int.self,    forKey: .userRating)
+        // starred: present (any non-null string) → true; absent → false
+        let starredValue = try? c.decodeIfPresent(String.self, forKey: .starredField)
+        starred = starredValue != nil
     }
 
     /// The resolved album title: `title` field wins over `name` field.
@@ -323,6 +396,9 @@ public struct SubsonicAlbumDTO: Decodable {
 ///   • `duration` is passed through as-is (seconds, Int)
 ///   • `artist` (name string) is discarded — `artistId` is used
 ///   • `album` (name string) is discarded — `albumId` is used
+///
+/// `starred` and `userRating` are transient display fields — not persisted to
+/// the GRDB `tracks` table (no v1 columns exist for them).
 public struct SubsonicTrackDTO: Decodable {
     public let id: String
     public let albumId: String
@@ -338,6 +414,12 @@ public struct SubsonicTrackDTO: Decodable {
     public let suffix: String?
     public let contentType: String?
     public let path: String?
+    /// True when the Subsonic `starred` date-string field is present in the response.
+    /// Transient — not persisted to the GRDB `tracks` table.
+    public let starred: Bool
+    /// User-assigned 0–5 star rating from the Subsonic `userRating` field.
+    /// Transient — not persisted to the GRDB `tracks` table.
+    public let userRating: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -354,6 +436,30 @@ public struct SubsonicTrackDTO: Decodable {
         case suffix
         case contentType
         case path
+        case starredField = "starred"
+        case userRating
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id          = try c.decode(String.self, forKey: .id)
+        albumId     = try c.decode(String.self, forKey: .albumId)
+        artistId    = try c.decode(String.self, forKey: .artistId)
+        title       = try c.decode(String.self, forKey: .title)
+        trackField  = try? c.decodeIfPresent(Int.self,    forKey: .trackField)
+        discNumber  = try? c.decodeIfPresent(Int.self,    forKey: .discNumber)
+        duration    = try? c.decodeIfPresent(Int.self,    forKey: .duration)
+        year        = try? c.decodeIfPresent(Int.self,    forKey: .year)
+        genre       = try? c.decodeIfPresent(String.self, forKey: .genre)
+        coverArt    = try? c.decodeIfPresent(String.self, forKey: .coverArt)
+        bitRate     = try? c.decodeIfPresent(Int.self,    forKey: .bitRate)
+        suffix      = try? c.decodeIfPresent(String.self, forKey: .suffix)
+        contentType = try? c.decodeIfPresent(String.self, forKey: .contentType)
+        path        = try? c.decodeIfPresent(String.self, forKey: .path)
+        userRating  = try? c.decodeIfPresent(Int.self,    forKey: .userRating)
+        // starred: present (any non-null string) → true; absent → false
+        let starredValue = try? c.decodeIfPresent(String.self, forKey: .starredField)
+        starred = starredValue != nil
     }
 
     public func toRecord(updatedAt: Int) -> Track {
