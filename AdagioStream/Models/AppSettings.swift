@@ -95,6 +95,36 @@ public enum ArtworkDisplayMode: String, Codable, CaseIterable {
     }
 }
 
+/// Repeat mode for the library queue.
+///
+/// - off: Play through the queue once and stop at the end.
+/// - all: Loop the whole queue; after the last track restart from index 0.
+/// - one: Repeat the current track indefinitely on natural track-end
+///        (auto-advance only).  Manual next/previous still moves to the
+///        adjacent track — `.one` does NOT trap the user on one track.
+public enum RepeatMode: String, Codable, CaseIterable {
+    case off
+    case all
+    case one
+
+    /// The mode that follows this one when the user cycles through.
+    public var next: RepeatMode {
+        switch self {
+        case .off: return .all
+        case .all: return .one
+        case .one: return .off
+        }
+    }
+
+    public var label: String {
+        switch self {
+        case .off: return "Off"
+        case .all: return "All"
+        case .one: return "One"
+        }
+    }
+}
+
 /// How channels are grouped in the browse UI.
 public enum ChannelGroupingMode: String, Codable, CaseIterable {
     case allGroups
@@ -158,6 +188,10 @@ public struct AppSettings: Codable {
     /// Set to true after the one-time "We reorganized" tab tip is dismissed.
     /// False on first launch after the 0xy.5 tab restructure; persists thereafter.
     public var hasSeenTabReorgTip: Bool
+    /// Library queue repeat mode (d6q.4). Does not affect radio.
+    public var repeatMode: RepeatMode
+    /// Library queue shuffle enabled (d6q.4). Does not affect radio.
+    public var shuffleEnabled: Bool
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -172,7 +206,9 @@ public struct AppSettings: Codable {
         espnLivePollInterval: ESPNLivePollInterval = .fifteen,
         channelGroupingMode: ChannelGroupingMode = .allGroups,
         hasCompletedSetup: Bool = false,
-        hasSeenTabReorgTip: Bool = false
+        hasSeenTabReorgTip: Bool = false,
+        repeatMode: RepeatMode = .off,
+        shuffleEnabled: Bool = false
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -187,6 +223,8 @@ public struct AppSettings: Codable {
         self.channelGroupingMode = channelGroupingMode
         self.hasCompletedSetup = hasCompletedSetup
         self.hasSeenTabReorgTip = hasSeenTabReorgTip
+        self.repeatMode = repeatMode
+        self.shuffleEnabled = shuffleEnabled
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -207,6 +245,8 @@ public struct AppSettings: Codable {
         channelGroupingMode = try container.decodeIfPresent(ChannelGroupingMode.self, forKey: .channelGroupingMode) ?? .allGroups
         hasCompletedSetup = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedSetup) ?? false
         hasSeenTabReorgTip = try container.decodeIfPresent(Bool.self, forKey: .hasSeenTabReorgTip) ?? false
+        repeatMode = try container.decodeIfPresent(RepeatMode.self, forKey: .repeatMode) ?? .off
+        shuffleEnabled = try container.decodeIfPresent(Bool.self, forKey: .shuffleEnabled) ?? false
     }
 }
 

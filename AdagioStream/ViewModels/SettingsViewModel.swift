@@ -37,6 +37,10 @@ public final class SettingsViewModel: ObservableObject {
         DebugLogger.shared.log("Settings loaded: bufferDuration=\(Int(settings.bufferDuration))s (\(source))", category: .player)
         audioPlayer.updateBufferDuration(settings.bufferDuration)
         audioPlayer.artworkDisplayMode = settings.artworkDisplayMode
+        audioPlayer.applyQueuePreferences(
+            repeatMode: settings.repeatMode,
+            shuffleEnabled: settings.shuffleEnabled
+        )
         DebugLogger.shared.isEnabled = settings.debugLoggingEnabled
         ESPNScoreService.shared.setLivePollInterval(settings.espnLivePollInterval.interval)
         logSettingsSnapshot()

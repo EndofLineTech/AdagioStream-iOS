@@ -79,6 +79,54 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// Nil when in radio mode or when nothing is playing.
     @Published public private(set) var currentQueueIndex: Int?
 
+    // MARK: - Repeat + Shuffle (d6q.4)
+
+    /// Repeat mode for the library queue (`.off` / `.all` / `.one`).
+    ///
+    /// - `.off`: Play through the queue once and stop at the end.
+    /// - `.all`: After the last track, wrap to index 0 and continue.
+    /// - `.one`: On natural track-end, restart the same track.  Manual
+    ///           next/previous still moves to the adjacent track — `.one` only
+    ///           governs auto-advance, not user-initiated navigation.
+    ///
+    /// Radio is unaffected; this value is ignored when `playbackSource == .radio`.
+    @Published public var repeatMode: RepeatMode = .off
+
+    /// Whether the library queue plays in shuffled order.
+    ///
+    /// **Order model:** the canonical `[Track]` queue inside `PlaybackSource`
+    /// is never mutated.  When shuffle is enabled, `shuffleOrder` holds a
+    /// permutation of indices into that queue.  `shufflePosition` is the
+    /// cursor into `shuffleOrder` (so `shuffleOrder[shufflePosition]` is the
+    /// index of the currently-playing track in the canonical queue).
+    ///
+    /// **Toggle-on behaviour:** the current track keeps playing; the remaining
+    /// positions in `shuffleOrder` after the current one are shuffled randomly.
+    ///
+    /// **Toggle-off behaviour:** `shuffleOrder` is cleared.  Navigation resumes
+    /// using the track's natural index in the canonical queue (the value already
+    /// stored in `currentQueueIndex`).
+    ///
+    /// **Wrap-on-repeat-all:** when `repeatMode == .all` and the shuffle cursor
+    /// reaches the end, the order is reshuffled from scratch (the current track
+    /// is allowed to appear at any position in the new order — it may repeat
+    /// back-to-back).
+    ///
+    /// Radio is unaffected.
+    @Published public var shuffleEnabled: Bool = false
+
+    /// The shuffled index sequence.  Each element is an index into the
+    /// canonical queue.  Empty when shuffle is off.
+    ///
+    /// Invariant while shuffle is on: `shuffleOrder` is a permutation of
+    /// `0..<queue.count`.  The element at `shufflePosition` equals
+    /// `currentQueueIndex`.
+    private var shuffleOrder: [Int] = []
+
+    /// Cursor into `shuffleOrder` pointing at the currently-playing track.
+    /// Undefined when `shuffleEnabled == false`.
+    private var shufflePosition: Int = 0
+
     /// The display artist name that applies to every track in the current
     /// library queue (e.g. the album artist).  Stored alongside the queue so
     /// it carries forward as next/previous advance the index.
@@ -949,12 +997,22 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("setQueue: startIndex=\(startIndex) out of bounds for \(tracks.count) tracks — clamped to \(clampedIndex)", category: .player)
         }
 
-        log.log("setQueue: \(tracks.count) tracks, startIndex=\(clampedIndex), artist=\"\(displayArtistName ?? "nil")\"", category: .player)
+        log.log("setQueue: \(tracks.count) tracks, startIndex=\(clampedIndex), artist=\"\(displayArtistName ?? "nil")\", shuffle=\(shuffleEnabled)", category: .player)
 
         // Store queue-level state before calling the internal player setup.
         queueDisplayArtistName = displayArtistName
         queueAPI = api
         currentQueueIndex = clampedIndex
+
+        // (Re-)build the shuffle order for the new queue when shuffle is on.
+        // The start track is pinned to position 0; the rest are randomised.
+        if shuffleEnabled {
+            shuffleOrder = buildShuffleOrder(queueCount: tracks.count, pinning: clampedIndex)
+            shufflePosition = 0
+        } else {
+            shuffleOrder = []
+            shufflePosition = 0
+        }
 
         let track = tracks[clampedIndex]
         startLibraryTrack(track, inQueue: tracks, at: clampedIndex, via: api)
@@ -1024,18 +1082,97 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// (double-buffering), or a dedicated spike to validate reusing
     /// VLCMediaPlayer without retire.  File as a follow-up task (d6q gapless
     /// improvement) when the basic queue playback is proven stable.
-    private func advance() {
-        // d6q.4 seam: check repeatMode here when that bead is built.
-        // Currently repeat is always effectively .off — fall through to next/stop.
-        playNextInQueue()
+    // MARK: - Shuffle helpers (d6q.4)
+
+    /// Builds a shuffle permutation for `queueCount` tracks with `pinned`
+    /// fixed at position 0 (so the current track is first in the play order).
+    private func buildShuffleOrder(queueCount: Int, pinning pinnedIndex: Int) -> [Int] {
+        var rest = Array(0..<queueCount).filter { $0 != pinnedIndex }
+        rest.shuffle()
+        return [pinnedIndex] + rest
     }
 
-    /// Advances to the next track in the library queue.
+    /// Builds a full shuffle permutation for `queueCount` tracks with no
+    /// position pinned (used on repeat-all wrap).
+    private func buildShuffleOrderFull(queueCount: Int) -> [Int] {
+        var order = Array(0..<queueCount)
+        order.shuffle()
+        return order
+    }
+
+    // MARK: - Auto-advance (d6q.3 / d6q.4)
+
+    /// Advance the library queue after a natural track-end event.
+    ///
+    /// This is the d6q.3 seam extended by d6q.4.
+    ///
+    /// **Repeat semantics (auto-advance only):**
+    /// - `.one`: restart the same track index — do NOT call playNextInQueue().
+    /// - `.all`: wrap at the end (shuffle-aware) and continue playing.
+    /// - `.off`: existing behaviour — next; stop at end of queue.
+    ///
+    /// **Distinction from manual next/previous:**
+    /// `playNextInQueue()` and `playPreviousInQueue()` are the user-gesture /
+    /// remote-command path.  Repeat `.one` does NOT affect those methods —
+    /// a user pressing next always moves to the adjacent track even in
+    /// repeat-one mode.  Only auto-advance (this method) honours `.one`.
+    private func advance() {
+        guard case .library(let queue, let index) = playbackSource,
+              let api = queueAPI else {
+            log.log("advance: not in library mode — no-op", category: .player)
+            return
+        }
+
+        switch repeatMode {
+        case .one:
+            // Repeat current track: restart at the same index.
+            log.log("advance (repeat=.one): restarting track at index=\(index)", category: .player)
+            currentQueueIndex = index
+            startLibraryTrack(queue[index], inQueue: queue, at: index, via: api)
+
+        case .all:
+            if shuffleEnabled {
+                // Advance the shuffle cursor; wrap at the end.
+                let nextShufflePos = shufflePosition + 1
+                if nextShufflePos >= shuffleOrder.count {
+                    // Wrap: reshuffle the whole order (current track may reappear
+                    // at any position — that is the intended behaviour on wrap).
+                    log.log("advance (repeat=.all, shuffle): wrap — reshuffling \(queue.count) tracks", category: .player)
+                    shuffleOrder = buildShuffleOrderFull(queueCount: queue.count)
+                    shufflePosition = 0
+                } else {
+                    shufflePosition = nextShufflePos
+                    log.log("advance (repeat=.all, shuffle): shufflePos \(shufflePosition - 1) → \(shufflePosition)", category: .player)
+                }
+                let nextIndex = shuffleOrder[shufflePosition]
+                currentQueueIndex = nextIndex
+                startLibraryTrack(queue[nextIndex], inQueue: queue, at: nextIndex, via: api)
+            } else {
+                // No shuffle: advance linearly, wrap at the last track.
+                let nextIndex = (index + 1) % queue.count
+                log.log("advance (repeat=.all): \(index) → \(nextIndex) of \(queue.count)", category: .player)
+                currentQueueIndex = nextIndex
+                startLibraryTrack(queue[nextIndex], inQueue: queue, at: nextIndex, via: api)
+            }
+
+        case .off:
+            // Existing behaviour: next; stop at end of queue.
+            playNextInQueue()
+        }
+    }
+
+    /// Advances to the next track in the library queue (user-initiated).
     ///
     /// No-op when not in `.library` mode.
     ///
-    /// **Edge rule:** at the last index with no repeat mode, playback stops.
-    /// (Repeat/shuffle are d6q.4 — not built here.)
+    /// **Edge rules (d6q.4):**
+    /// - Shuffle on: advance the shuffle cursor; if at the end and repeat=.all,
+    ///   wrap (reshuffle); if at the end and repeat=.off, stop.
+    /// - Shuffle off, repeat=.all: wrap from last to first.
+    /// - Shuffle off, repeat=.off: stop at end.
+    /// - repeat=.one: `.one` does NOT trap manual next — advance to the next
+    ///   track exactly as `.off` would (one step forward, stop at end unless
+    ///   shuffle provides a wrap).
     public func playNextInQueue() {
         guard case .library(let queue, let index) = playbackSource,
               let api = queueAPI else {
@@ -1043,28 +1180,63 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             return
         }
 
-        let nextIndex = index + 1
-        if nextIndex >= queue.count {
-            // End of queue with no repeat: stop playback.
-            log.log("playNextInQueue: reached end of queue (\(index + 1)/\(queue.count)) — stopping", category: .player)
-            stop()
-            // Preserve the queue in playbackSource as nil (stop() clears it)
-            // so the browse UI can detect "queue ended".  This is intentional:
-            // d6q.4 (repeat) will intercept here before calling stop().
+        if shuffleEnabled {
+            // Advance the shuffle cursor.
+            let nextShufflePos = shufflePosition + 1
+            if nextShufflePos >= shuffleOrder.count {
+                // End of shuffle order.
+                if repeatMode == .all {
+                    // Repeat-all: reshuffle and wrap.
+                    shuffleOrder = buildShuffleOrderFull(queueCount: queue.count)
+                    shufflePosition = 0
+                } else {
+                    // No repeat (or .one — same behaviour as .off for manual nav): stop.
+                    log.log("playNextInQueue(shuffle): reached end of shuffle order (\(shufflePosition + 1)/\(shuffleOrder.count)) — stopping", category: .player)
+                    stop()
+                    return
+                }
+            } else {
+                shufflePosition = nextShufflePos
+            }
+            let nextIndex = shuffleOrder[shufflePosition]
+            log.log("playNextInQueue(shuffle): shufflePos \(shufflePosition), queueIndex \(index) → \(nextIndex)", category: .player)
+            currentQueueIndex = nextIndex
+            startLibraryTrack(queue[nextIndex], inQueue: queue, at: nextIndex, via: api)
             return
         }
 
-        log.log("playNextInQueue: \(index) → \(nextIndex) of \(queue.count)", category: .player)
+        // No shuffle.
+        let nextIndex: Int
+        if index + 1 >= queue.count {
+            if repeatMode == .all {
+                // Wrap to start.
+                nextIndex = 0
+            } else {
+                // No repeat (or .one — one is a no-trap for manual nav): stop.
+                log.log("playNextInQueue: reached end of queue (\(index + 1)/\(queue.count)) — stopping", category: .player)
+                stop()
+                return
+            }
+        } else {
+            nextIndex = index + 1
+        }
+
+        log.log("playNextInQueue: \(index) → \(nextIndex) of \(queue.count) (repeat=\(repeatMode))", category: .player)
         currentQueueIndex = nextIndex
         startLibraryTrack(queue[nextIndex], inQueue: queue, at: nextIndex, via: api)
     }
 
-    /// Moves to the previous track in the library queue.
+    /// Moves to the previous track in the library queue (user-initiated).
     ///
     /// No-op when not in `.library` mode.
     ///
-    /// **Edge rule:** at index 0 (first track), restarts the current track
-    /// rather than wrapping or stopping — matching standard iOS Music behavior.
+    /// **Edge rules (d6q.4):**
+    /// - Shuffle on: move the shuffle cursor backward; if at the start and
+    ///   repeat=.all, wrap to the last shuffle position.  If repeat=.off (or
+    ///   .one — no-trap for manual), restart the current track (cursor stays).
+    /// - Shuffle off, repeat=.all: wrap from first track to last.
+    /// - Shuffle off, repeat=.off (or .one): at index 0, restart current track
+    ///   (standard iOS Music behaviour).
     public func playPreviousInQueue() {
         guard case .library(let queue, let index) = playbackSource,
               let api = queueAPI else {
@@ -1072,11 +1244,107 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             return
         }
 
-        let prevIndex = max(0, index - 1)
-        // At index 0, prevIndex == index: this restarts the current track.
-        log.log("playPreviousInQueue: \(index) → \(prevIndex) of \(queue.count)", category: .player)
+        if shuffleEnabled {
+            if shufflePosition > 0 {
+                shufflePosition -= 1
+            } else if repeatMode == .all {
+                // Wrap to end of shuffle order.
+                shufflePosition = shuffleOrder.count - 1
+            }
+            // else: at start with no repeat — stay (restart current track).
+            let prevIndex = shuffleOrder[shufflePosition]
+            log.log("playPreviousInQueue(shuffle): shufflePos \(shufflePosition), queueIndex \(index) → \(prevIndex)", category: .player)
+            currentQueueIndex = prevIndex
+            startLibraryTrack(queue[prevIndex], inQueue: queue, at: prevIndex, via: api)
+            return
+        }
+
+        // No shuffle.
+        let prevIndex: Int
+        if index == 0 {
+            if repeatMode == .all {
+                // Wrap to last track.
+                prevIndex = queue.count - 1
+            } else {
+                // No repeat (or .one): restart current track.
+                prevIndex = 0
+            }
+        } else {
+            prevIndex = index - 1
+        }
+
+        log.log("playPreviousInQueue: \(index) → \(prevIndex) of \(queue.count) (repeat=\(repeatMode))", category: .player)
         currentQueueIndex = prevIndex
         startLibraryTrack(queue[prevIndex], inQueue: queue, at: prevIndex, via: api)
+    }
+
+    // MARK: - Shuffle + Repeat toggle API (d6q.4)
+
+    /// Cycles repeat mode: .off → .all → .one → .off.
+    ///
+    /// Applies only to the `.library` queue; radio is unaffected.
+    /// The change is immediate — the next auto-advance event will use the new mode.
+    public func cycleRepeatMode() {
+        repeatMode = repeatMode.next
+        log.log("cycleRepeatMode: → \(repeatMode)", category: .player)
+        persistQueuePreferences()
+    }
+
+    /// Toggle shuffle on or off.
+    ///
+    /// **Toggle-on:** keeps the current track playing; shuffles all remaining
+    /// tracks after it in a random order.
+    ///
+    /// **Toggle-off:** clears the shuffle order.  Navigation resumes from the
+    /// current track's natural position in the canonical queue.
+    ///
+    /// Applies only to the `.library` queue; radio is unaffected.
+    public func toggleShuffle() {
+        shuffleEnabled.toggle()
+        log.log("toggleShuffle: → \(shuffleEnabled)", category: .player)
+
+        if shuffleEnabled {
+            // Build a new shuffle order, pinning the current track at position 0.
+            if case .library(let queue, let index) = playbackSource {
+                shuffleOrder = buildShuffleOrder(queueCount: queue.count, pinning: index)
+                shufflePosition = 0
+                log.log("toggleShuffle: built order for \(queue.count) tracks, current=\(index) pinned at pos 0", category: .player)
+            }
+        } else {
+            // Restore natural order — currentQueueIndex already holds the correct
+            // canonical index, so just clear the shuffle structures.
+            shuffleOrder = []
+            shufflePosition = 0
+            log.log("toggleShuffle: cleared shuffle order, resuming from queueIndex=\(currentQueueIndex.map(String.init) ?? "nil")", category: .player)
+        }
+
+        persistQueuePreferences()
+    }
+
+    /// Persists `repeatMode` and `shuffleEnabled` to `AppSettings` so they
+    /// survive app restarts.
+    ///
+    /// Uses a fire-and-forget `Task` to avoid blocking the caller.  The write
+    /// is idempotent and cheap; no error handling is needed — if it fails the
+    /// in-memory value is still correct for the current session.
+    private func persistQueuePreferences() {
+        Task {
+            var settings = await PersistenceService.shared.loadOrDefault(
+                from: Constants.StorageKeys.settings, default: AppSettings.default
+            )
+            settings.repeatMode = self.repeatMode
+            settings.shuffleEnabled = self.shuffleEnabled
+            try? await PersistenceService.shared.save(settings, to: Constants.StorageKeys.settings)
+        }
+    }
+
+    /// Applies `repeatMode` and `shuffleEnabled` from loaded settings.
+    /// Called by `SettingsViewModel.loadSettings()` on startup.
+    public func applyQueuePreferences(repeatMode: RepeatMode, shuffleEnabled: Bool) {
+        self.repeatMode = repeatMode
+        self.shuffleEnabled = shuffleEnabled
+        // No shuffle order to build here — no queue is active at startup.
+        log.log("applyQueuePreferences: repeatMode=\(repeatMode), shuffleEnabled=\(shuffleEnabled)", category: .player)
     }
 
     /// Internal worker: tears down any active stream and starts playing a
@@ -1953,6 +2221,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentQueueIndex = nil            // d6q.1: clear queue index on stop
         queueAPI = nil
         queueDisplayArtistName = nil
+        shuffleOrder = []                  // d6q.4: clear shuffle state on stop
+        shufflePosition = 0
         playbackSource = nil               // d6q.7: mirror into PlaybackSource seam
         // d6q.5: disable scrubber when no source is active.
         updateRemoteCommandsForSource(nil)
