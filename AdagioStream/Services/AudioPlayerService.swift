@@ -140,6 +140,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var lastNowPlayingRate: Double?
     private var lastNowPlayingState: MPNowPlayingPlaybackState?
     private var lastNowPlayingArtwork: MPMediaItemArtwork?
+    /// Last elapsed time (seconds) written to MPNowPlayingInfoCenter for change-detection.
+    /// nil when in radio mode or nothing is playing.
+    private var lastNowPlayingElapsed: Double?
     private var bufferedChannel: Channel?
     private var currentBufferFileURL: URL?
     private var interruptionTime: Date?
@@ -820,6 +823,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let channelChanged = currentChannel?.id != channel.id
         currentChannel = channel
         playbackSource = .radio(channel)   // d6q.7: mirror into PlaybackSource seam
+        // d6q.5: disable scrubber for radio (live streams are not seekable).
+        updateRemoteCommandsForSource(playbackSource)
         UserDefaults.standard.set(channel.id, forKey: "lastPlayedChannelID")
         isActiveSession = false
         isBuffering = true
@@ -1141,6 +1146,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentTrackArtistName = queueDisplayArtistName
         currentTrackArtwork = nil
         playbackSource = .library(queue: queue, index: index)
+        // d6q.5: enable scrubber + ensure next/prev are on for library mode.
+        updateRemoteCommandsForSource(playbackSource)
 
         isActiveSession = false
         isBuffering = true
@@ -1237,8 +1244,21 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
     /// Updates `MPNowPlayingInfoCenter` for a track playing in `.library` mode.
     ///
-    /// Called from `play(track:via:)` and the async artwork fetch.  The radio
-    /// path continues to call `updateNowPlayingInfo()` unchanged.
+    /// Sets elapsed time, duration, and playback rate so the lock-screen /
+    /// Control Center / CarPlay show a live progress bar and a functional
+    /// scrubber.  iOS extrapolates the moving position from
+    /// `MPNowPlayingInfoPropertyElapsedPlaybackTime` + `PlaybackRate`, so
+    /// updates on every timer tick (0.5–3 s) are sufficient — no tight timer needed.
+    ///
+    /// Called from `startLibraryTrack`, the async artwork fetch, `syncState`
+    /// (via the per-mode dispatch at the bottom of the state machine), and
+    /// `pause()`.  The radio path continues to call `updateNowPlayingInfo()` unchanged.
+    ///
+    /// **Elapsed change-detection:**
+    /// The `changed` guard is intentionally bypassed for elapsed / rate so that
+    /// pause→resume transitions are always flushed even when title / artist
+    /// haven't changed.  A rate change from 0.0→1.0 without a matching elapsed
+    /// update would freeze the lock-screen scrubber at the paused position.
     private func updateNowPlayingInfoForTrack() {
         guard let track = currentTrack else { return }
 
@@ -1250,16 +1270,38 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let artist = currentTrackArtistName ?? track.displaySubtitle ?? ""
         let artwork = currentTrackArtwork
         let isLive = false
-        let rate: Double = (isPlaying || isBuffering) ? 1.0 : 0.0
+        // Rate: 1.0 while playing or buffering (iOS interpolates); 0.0 when paused.
+        let rate: Double = isPlaying ? 1.0 : 0.0
         let state: MPNowPlayingPlaybackState = (isPlaying || isBuffering) ? .playing : .paused
 
-        let changed = title != lastNowPlayingTitle
+        // Elapsed time from VLC (milliseconds → seconds).
+        // VLCTime.intValue returns -1 when no position is known yet; clamp to 0.
+        let vlcTimeMs = mediaPlayer.time.intValue
+        let elapsed: Double = vlcTimeMs > 0 ? Double(vlcTimeMs) / 1000.0 : 0.0
+
+        // Duration: prefer VLC's runtime length (available after the stream is
+        // parsed), fall back to the static Track.duration from the database.
+        let vlcLengthMs = mediaPlayer.media?.length.intValue ?? 0
+        let duration: Double? = {
+            if vlcLengthMs > 0 { return Double(vlcLengthMs) / 1000.0 }
+            if let d = track.duration, d > 0 { return Double(d) }
+            return nil
+        }()
+
+        // Metadata fields that warrant a full re-publish (title, artist, etc.)
+        let metaChanged = title != lastNowPlayingTitle
             || artist != lastNowPlayingArtist
             || isLive != lastNowPlayingIsLive
-            || rate != lastNowPlayingRate
-            || state != lastNowPlayingState
             || artwork !== lastNowPlayingArtwork
-        guard changed else { return }
+
+        // Rate / elapsed always re-published on rate change or elapsed drift > 1 s.
+        // This ensures pause→resume and seek flush the scrubber immediately.
+        let elapsedDrift = abs(elapsed - (lastNowPlayingElapsed ?? -99))
+        let rateChanged = rate != lastNowPlayingRate
+        let stateChanged = state != lastNowPlayingState
+        let needsElapsedUpdate = rateChanged || stateChanged || elapsedDrift > 1.0
+
+        guard metaChanged || needsElapsedUpdate else { return }
 
         lastNowPlayingTitle = title
         lastNowPlayingArtist = artist
@@ -1267,14 +1309,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         lastNowPlayingRate = rate
         lastNowPlayingState = state
         lastNowPlayingArtwork = artwork
+        lastNowPlayingElapsed = elapsed
 
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyArtist: artist,
             MPNowPlayingInfoPropertyIsLiveStream: false,
             MPNowPlayingInfoPropertyPlaybackRate: rate,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
         ]
-        if let duration = track.duration {
+        if let duration {
             info[MPMediaItemPropertyPlaybackDuration] = NSNumber(value: duration)
         }
         if let artwork {
@@ -1291,7 +1335,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         case .paused:  stateName = "paused"
         default:       stateName = "other"
         }
-        log.log("NowPlaying (track): title=\"\(title)\", artist=\"\(artist)\", isLive=false, state=\(stateName)", category: .player)
+        log.log("NowPlaying (track): title=\"\(title)\", artist=\"\(artist)\", isLive=false, state=\(stateName), elapsed=\(String(format: "%.1f", elapsed))s, duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil")s, rate=\(rate)", category: .player)
     }
 
     /// Deactivate→reactivate the session so iOS formally hands audio focus
@@ -1811,7 +1855,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         isPlaying = false
         isBuffering = false
         sxmService.stopPolling()
-        updateNowPlayingInfo()
+        // Update the correct now-playing surface: library tracks need elapsed/rate
+        // cleared to 0 immediately on pause so the scrubber doesn't keep advancing.
+        if currentTrack != nil {
+            updateNowPlayingInfoForTrack()
+        } else {
+            updateNowPlayingInfo()
+        }
 
         // NOTE: deliberately do NOT deactivate the audio session here.
         // The AVAudioEngine in AudioOutput is running on this session;
@@ -1904,6 +1954,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         queueAPI = nil
         queueDisplayArtistName = nil
         playbackSource = nil               // d6q.7: mirror into PlaybackSource seam
+        // d6q.5: disable scrubber when no source is active.
+        updateRemoteCommandsForSource(nil)
         isPlaying = false
         isBuffering = false
         currentArtwork = nil
@@ -2419,7 +2471,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         lastNowPlayingRate = nil
         lastNowPlayingState = nil
         lastNowPlayingArtwork = nil
-        updateNowPlayingInfo()
+        lastNowPlayingElapsed = nil
+        if currentTrack != nil {
+            updateNowPlayingInfoForTrack()
+        } else {
+            updateNowPlayingInfo()
+        }
     }
 
     private func updateNowPlayingInfo() {
@@ -2543,9 +2600,42 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         lastNowPlayingRate = nil
         lastNowPlayingState = nil
         lastNowPlayingArtwork = nil
+        lastNowPlayingElapsed = nil
     }
 
     // MARK: - Remote Commands
+
+    /// Update the enable/disable state of source-dependent remote commands.
+    ///
+    /// Called whenever `playbackSource` changes (track start, radio start, stop).
+    /// Keeps the radio path unchanged and enables the library-specific controls
+    /// (scrubber, per-track next/prev) only when in `.library` mode.
+    ///
+    /// **Why a separate helper instead of inline in `configureRemoteCommands`:**
+    /// `configureRemoteCommands` runs once at init and registers handlers.
+    /// Enable/disable must respond to runtime source changes — radio vs library —
+    /// without re-registering handlers (which would double-fire them).
+    private func updateRemoteCommandsForSource(_ source: PlaybackSource?) {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        let isLibrary: Bool
+        if case .library = source {
+            isLibrary = true
+        } else {
+            isLibrary = false
+        }
+
+        // next/prev: enabled for both modes (radio: channel cycling, library: queue nav).
+        // Already wired in configureRemoteCommands; ensure enabled state is correct.
+        commandCenter.nextTrackCommand.isEnabled = true
+        commandCenter.previousTrackCommand.isEnabled = true
+
+        // Scrubber (changePlaybackPosition): enabled only for finite library tracks.
+        // Live radio is seekable=false at the VLC level and must NOT advertise
+        // scrubbing — it would confuse the lock-screen and CarPlay UI.
+        commandCenter.changePlaybackPositionCommand.isEnabled = isLibrary
+
+        log.log("RemoteCommands updated: isLibrary=\(isLibrary), changePlaybackPosition=\(isLibrary)", category: .remoteCommand)
+    }
 
     private func configureRemoteCommands() {
         let commandCenter = MPRemoteCommandCenter.shared()
@@ -2610,6 +2700,30 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         commandCenter.skipBackwardCommand.isEnabled = false
         commandCenter.seekForwardCommand.isEnabled = false
         commandCenter.seekBackwardCommand.isEnabled = false
+
+        // Scrubber: enabled dynamically per source via updateRemoteCommandsForSource().
+        // Disabled here at init; enabled when a library queue starts.
         commandCenter.changePlaybackPositionCommand.isEnabled = false
+        commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let self,
+                  let seekEvent = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            let positionSeconds = seekEvent.positionTime
+            DebugLogger.shared.log("Remote command: CHANGE_PLAYBACK_POSITION pos=\(String(format: "%.1f", positionSeconds))s", category: .remoteCommand)
+            Task { @MainActor [weak self] in
+                guard let self, case .library = self.playbackSource else { return }
+                // VLCTime takes milliseconds as Int32.
+                let ms = Int32(exactly: max(0, positionSeconds * 1000).rounded()) ?? Int32(max(0, positionSeconds * 1000))
+                self.mediaPlayer.time = VLCTime(int: ms)
+                // Force an immediate now-playing update so the lock-screen
+                // scrubber snaps to the new position without waiting for the
+                // next timer tick.
+                self.lastNowPlayingElapsed = nil
+                self.updateNowPlayingInfoForTrack()
+                self.log.log("Seek via remote command: pos=\(String(format: "%.1f", positionSeconds))s, vlcTimeMs=\(ms)", category: .player)
+            }
+            return .success
+        }
     }
 }
