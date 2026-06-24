@@ -329,6 +329,17 @@ struct WelcomeSetupView: View {
                             .accessibilityLabel("Xtream Codes password")
                     }
 
+                    if isXtreamCodesHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
+                    }
+
                 case .subsonic:
                     Section {
                         TextField("Server URL", text: $subsonicHost)
@@ -469,6 +480,13 @@ struct WelcomeSetupView: View {
     private var isSubsonicHTTP: Bool {
         guard connectionType == .subsonic,
               let url = URL(string: subsonicHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
+    private var isXtreamCodesHTTP: Bool {
+        guard connectionType == .xtreamCodes,
+              let url = URL(string: xcHost),
               let scheme = url.scheme?.lowercased() else { return false }
         return scheme == "http"
     }

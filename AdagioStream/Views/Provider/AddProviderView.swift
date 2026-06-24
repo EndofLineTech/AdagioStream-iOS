@@ -96,6 +96,17 @@ struct AddProviderView: View {
                             .accessibilityLabel("Xtream Codes password")
                     }
 
+                    if isXtreamCodesHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
+                    }
+
                     Section {
                         Toggle("Strip numeric prefix from channel names", isOn: $stripStreamIDs)
                     } footer: {
@@ -169,6 +180,13 @@ struct AddProviderView: View {
     private var isSubsonicHTTP: Bool {
         guard formProviderType == .subsonic,
               let url = URL(string: subsonicHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
+    private var isXtreamCodesHTTP: Bool {
+        guard formProviderType == .xtreamCodes,
+              let url = URL(string: xcHost),
               let scheme = url.scheme?.lowercased() else { return false }
         return scheme == "http"
     }
