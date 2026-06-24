@@ -30,13 +30,10 @@ jobs:
 
       - name: Run unit tests
         run: |
-          # Destination: iPhone 16 Pro is chosen over iPhone 17 Pro because named
-          # simulator runtimes for the current-gen device (17) may require an
-          # additional download on fresh runner images, whereas iPhone 16 Pro ships
-          # bundled with Xcode 26 by default. If GitHub updates the macos-26 image
-          # to include iPhone 17 Pro out of the box, switch to that name.
+          # Destination: iPhone 17 Pro is present on the macos-26 runner image.
+          # (iPhone 16 Pro is NOT available on macos-26 — do not revert to it.)
           xcodebuild test \
             -scheme AdagioStream \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
             -only-testing:AdagioStreamTests \
             CODE_SIGNING_ALLOWED=NO
