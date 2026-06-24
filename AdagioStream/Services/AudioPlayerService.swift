@@ -65,6 +65,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var sxmArtwork: MPMediaItemArtwork?
     /// The track being played in `.library` mode; nil when in radio mode.
     private var currentTrack: Track?
+
+    // MARK: - Scrobble state (65x.1)
+
+    /// Whether the submission scrobble has already been fired for the currently-playing
+    /// library track.  Reset to `false` at the start of every new track
+    /// (`startLibraryTrack`).  Guard: once true it stays true for the lifetime of
+    /// the track play so a second call is never sent even if `syncState` ticks
+    /// several more times past the threshold.
+    private var scrobbleSubmissionSent: Bool = false
     /// Human-readable artist display name threaded in from the album context
     /// by `play(track:displayArtistName:via:)`.  Overrides `Track.displaySubtitle`
     /// (which falls back to `artistId`) in `updateNowPlayingInfoForTrack`.
@@ -1759,6 +1768,58 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         log.log("moveQueueItem: done — newPlayingIndex=\(newPlayingIndex), queueCount=\(newQueue.count)", category: .player)
     }
 
+    // MARK: - Scrobble helpers (65x.1)
+
+    /// Determines whether the submission scrobble threshold has been reached.
+    ///
+    /// Standard Last.fm rule: submission fires when the track has been played
+    /// for **≥ 4 minutes** OR **≥ 50% of its duration**, whichever comes first.
+    ///
+    /// - If `duration` is nil or zero (unknown): falls back to the 4-minute rule only.
+    /// - Returns `true` when the threshold is reached, `false` otherwise.
+    ///
+    /// This is a pure function so it can be unit-tested independently of playback state.
+    /// `nonisolated` so tests can call it without a MainActor context.
+    nonisolated static func scrobbleShouldSubmit(elapsed: Double, duration: Double?) -> Bool {
+        if elapsed >= 240 { return true }           // ≥ 4 minutes
+        guard let dur = duration, dur > 0 else { return false }
+        return elapsed >= dur * 0.5                 // ≥ 50 % of duration
+    }
+
+    /// Fires a now-playing (`submission=false`) scrobble for the given track.
+    /// Fire-and-forget: errors are logged at debug level and swallowed so they
+    /// can never disrupt or stop playback.
+    private func fireNowPlayingScrobble(trackID: String, via api: NavidromeAPI) {
+        Task {
+            do {
+                try await api.scrobble(id: trackID, submission: false)
+                DebugLogger.shared.log("Scrobble now-playing sent: trackID=\(trackID)", category: .player)
+            } catch {
+                DebugLogger.shared.log("Scrobble now-playing FAILED (swallowed): \(error.localizedDescription)", category: .player)
+            }
+        }
+    }
+
+    /// Fires a submission (`submission=true`) scrobble for the given track, once.
+    ///
+    /// Guards on `scrobbleSubmissionSent` to ensure exactly one submission per
+    /// track play.  Marks the guard immediately before the async call so a second
+    /// tick of `syncState` arriving before the network round-trip completes cannot
+    /// enqueue a duplicate.
+    private func fireSubmissionScrobbleIfNeeded(trackID: String, via api: NavidromeAPI) {
+        guard !scrobbleSubmissionSent else { return }
+        scrobbleSubmissionSent = true
+        let timeMs = Int64(Date().timeIntervalSince1970 * 1000)
+        Task {
+            do {
+                try await api.scrobble(id: trackID, submission: true, time: timeMs)
+                DebugLogger.shared.log("Scrobble submission sent: trackID=\(trackID)", category: .player)
+            } catch {
+                DebugLogger.shared.log("Scrobble submission FAILED (swallowed): \(error.localizedDescription)", category: .player)
+            }
+        }
+    }
+
     /// Internal worker: tears down any active stream and starts playing a
     /// specific track within the supplied queue snapshot.
     ///
@@ -1829,6 +1890,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentTrackArtistName = queueDisplayArtistName
         currentTrackArtwork = nil
         playbackSource = .library(queue: queue, index: index)
+
+        // 65x.1: Reset the per-track submission guard and fire the now-playing scrobble.
+        scrobbleSubmissionSent = false
+        fireNowPlayingScrobble(trackID: track.id, via: api)
         // d6q.5: enable scrubber + ensure next/prev are on for library mode.
         updateRemoteCommandsForSource(playbackSource)
 
@@ -3084,6 +3149,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     // .stopped or .error — those branches set an error
                     // message and leave the queue halted.  See the advance()
                     // doc-comment for the full guard rationale.
+                    //
+                    // 65x.1: Natural end-of-track counts as sufficient play;
+                    // fire the submission scrobble if not already sent.
+                    if let track = currentTrack, let api = queueAPI {
+                        fireSubmissionScrobbleIfNeeded(trackID: track.id, via: api)
+                    }
                     log.log("Library track ended naturally — auto-advancing queue (d6q.3)", category: .player)
                     advance()
                 }
@@ -3098,6 +3169,26 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             let elapsed = Date().timeIntervalSince(pbStart)
             let estimatedAudioTime = intTime.addingTimeInterval(elapsed)
             sxmService.showTrack(at: estimatedAudioTime)
+        }
+
+        // 65x.1: Scrobble submission threshold check — library only.
+        // Runs every timer tick so even a final tick just before .ended can
+        // satisfy the threshold.  The `scrobbleSubmissionSent` flag ensures
+        // exactly one submission per track play.
+        if case .library = playbackSource,
+           let track = currentTrack,
+           let api = queueAPI,
+           isPlaying {
+            let elapsed = Double(mediaPlayer.time.intValue > 0 ? mediaPlayer.time.intValue : 0) / 1000.0
+            let duration: Double? = {
+                let vlcMs = mediaPlayer.media?.length.intValue ?? 0
+                if vlcMs > 0 { return Double(vlcMs) / 1000.0 }
+                if let d = track.duration, d > 0 { return Double(d) }
+                return nil
+            }()
+            if AudioPlayerService.scrobbleShouldSubmit(elapsed: elapsed, duration: duration) {
+                fireSubmissionScrobbleIfNeeded(trackID: track.id, via: api)
+            }
         }
 
         updateStreamStats()

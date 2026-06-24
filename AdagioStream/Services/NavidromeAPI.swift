@@ -426,6 +426,34 @@ public struct NavidromeAPI {
         )
     }
 
+    // MARK: - Scrobble endpoints (65x.1)
+
+    /// Reports a track play to the server via `scrobble.view`.
+    ///
+    /// - Parameters:
+    ///   - id: The Subsonic/Navidrome track identifier.
+    ///   - submission: `false` = "now playing" notification (track just started);
+    ///     `true` = play submission (track played past the scrobble threshold,
+    ///     increments play count and reports to Last.fm if configured server-side).
+    ///   - time: Unix timestamp in milliseconds at which the track was played.
+    ///     Pass `nil` to omit (server uses current time).
+    ///
+    /// Returns normally when the server responds with `status == "ok"`.
+    /// Throws a mapped `APIError` on `status == "failed"` or network error.
+    public func scrobble(id: String, submission: Bool, time: Int64? = nil) async throws {
+        var params: [String: String] = [
+            "id": id,
+            "submission": submission ? "true" : "false",
+        ]
+        if let time { params["time"] = String(time) }
+
+        guard let url = buildURL(endpoint: "scrobble", params: params) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        try decodeWriteOK(data: data)
+    }
+
     // MARK: - Playlist write endpoints (msl.3)
 
     /// Creates a new playlist with an optional set of initial tracks.

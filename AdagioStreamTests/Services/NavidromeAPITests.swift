@@ -1309,4 +1309,88 @@ final class NavidromeAPITests: XCTestCase {
             XCTFail("Expected .subsonicError but got: \(error)")
         }
     }
+
+    // MARK: - scrobble.view (65x.1)
+
+    /// Scrobble now-playing (submission=false): verifies URL path, id param,
+    /// submission=false param, auth items, and no time param when nil.
+    func testScrobbleNowPlayingURLConstruction() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.scrobble(id: "song-abc", submission: false)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/scrobble.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"), "song-abc")
+        XCTAssertEqual(q("submission"), "false")
+        XCTAssertNil(q("time"), "time param must be absent when nil")
+        // Auth params
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+        XCTAssertNotNil(q("s"))
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// Scrobble submission (submission=true): verifies submission=true and time param.
+    func testScrobbleSubmissionURLConstruction() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let timestamp: Int64 = 1_700_000_000_000
+        try await api.scrobble(id: "song-xyz", submission: true, time: timestamp)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/scrobble.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"), "song-xyz")
+        XCTAssertEqual(q("submission"), "true")
+        XCTAssertEqual(q("time"), "1700000000000")
+        // Auth params present
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+    }
+
+    /// status=ok (empty-body) → success (no throw).
+    func testScrobbleStatusOkSucceeds() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        // Must not throw.
+        try await api.scrobble(id: "track-1", submission: false)
+    }
+
+    /// status=failed → throws mapped APIError.
+    func testScrobbleStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":70,"message":"Not found"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            try await api.scrobble(id: "track-bad", submission: true)
+            XCTFail("Expected throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 70)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
 }
