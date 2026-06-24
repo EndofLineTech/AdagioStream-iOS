@@ -1,15 +1,30 @@
 // 0xy.3 — Navidrome browse UI: root artists list
+// 0xy.4 — Extended with album-browse and genre-browse modes via a segmented Picker.
 //
 // MusicLibraryView is the NavigationStack root for the "Music" tab (mounted by
 // 0xy.5).  It resolves the NavidromeAPI from ProviderManager.shared.subsonicAPI
 // on first appear and builds the NavidromeLibraryViewModel from it.
 //
 // Self-contained NavigationStack — does NOT expect to be embedded in one.
-// Displays all Navidrome artists with a SubsonicCoverArt thumbnail and name.
-// Tapping an artist navigates to ArtistDetailView.
+//
+// Browse modes (segmented Picker in the toolbar):
+//   • Artists  — artist list → ArtistDetailView → AlbumDetailView (0xy.3)
+//   • Albums   — BrowseAlbumsView with a type picker (newest/recent/frequent/random/A–Z)
+//   • Genres   — GenreListView → GenreDetailView (0xy.4)
 
 #if canImport(UIKit)
 import SwiftUI
+
+// MARK: - Browse mode
+
+/// Top-level browse mode selector for the Music tab.
+enum MusicBrowseMode: String, CaseIterable {
+    case artists = "Artists"
+    case albums  = "Albums"
+    case genres  = "Genres"
+}
+
+// MARK: - MusicLibraryView
 
 public struct MusicLibraryView: View {
 
@@ -23,13 +38,16 @@ public struct MusicLibraryView: View {
     // The view-model is created lazily once we have a valid API.
     @State private var viewModel: NavidromeLibraryViewModel?
 
+    // Current browse mode — persists across tab switches.
+    @State private var browseMode: MusicBrowseMode = .artists
+
     public init() {}
 
     public var body: some View {
         NavigationStack {
             Group {
                 if let vm = viewModel, let resolvedAPI = api {
-                    artistBrowser(vm: vm, api: resolvedAPI)
+                    libraryBrowser(vm: vm, api: resolvedAPI)
                 } else if providerManager.subsonicAPI == nil {
                     ScrollView {
                         EmptyStateView(
@@ -46,6 +64,11 @@ public struct MusicLibraryView: View {
             }
             .navigationTitle("Music")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    browseModeSelector
+                }
+            }
             .task {
                 guard let resolved = providerManager.subsonicAPI else { return }
                 if api == nil {
@@ -57,6 +80,36 @@ public struct MusicLibraryView: View {
             }
         }
     }
+
+    // MARK: - Mode selector
+
+    private var browseModeSelector: some View {
+        Picker("Browse", selection: $browseMode) {
+            ForEach(MusicBrowseMode.allCases, id: \.self) { mode in
+                Text(mode.rawValue).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .frame(maxWidth: 280)
+        .accessibilityLabel("Browse mode")
+        .accessibilityHint("Switch between Artists, Albums, and Genres")
+    }
+
+    // MARK: - Library browser (dispatches to mode-specific view)
+
+    @ViewBuilder
+    private func libraryBrowser(vm: NavidromeLibraryViewModel, api: NavidromeAPI) -> some View {
+        switch browseMode {
+        case .artists:
+            artistBrowser(vm: vm, api: api)
+        case .albums:
+            BrowseAlbumsView(viewModel: vm, api: api)
+        case .genres:
+            GenreListView(viewModel: vm, api: api)
+        }
+    }
+
+    // MARK: - Artist browser (0xy.3, unchanged)
 
     @ViewBuilder
     private func artistBrowser(vm: NavidromeLibraryViewModel, api: NavidromeAPI) -> some View {

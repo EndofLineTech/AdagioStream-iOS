@@ -1,10 +1,16 @@
 // 0xy.3 — Navidrome browse UI: view-model
+// 0xy.4 — Extended with album-list-by-type and genre/song-by-genre browsing.
 //
 // MVVM, @MainActor ObservableObject following the ChannelListViewModel pattern.
-// Drives three screens: artist list, artist→albums, album→tracks.
+// Drives five screens: artist list, artist→albums, album→tracks,
+// browse-albums (by type), genres list, genre→tracks.
 //
 // Loading states: .idle → .loading → .loaded / .error
 // Error messages surface NavidromeAPI.APIError.errorDescription directly.
+//
+// Pagination: album-list-by-type and songs-by-genre fetch a single page of
+// size 50.  Pagination is intentionally omitted in this bead; a page-size
+// constant is declared here so it is easy to locate and upgrade later.
 
 import Foundation
 
@@ -31,6 +37,34 @@ public final class NavidromeLibraryViewModel: ObservableObject {
     @Published public private(set) var selectedAlbumArtistName: String?
     @Published public private(set) var albumTracks: [Track] = []
     @Published public private(set) var tracksState: LoadState = .idle
+
+    // MARK: - Browse albums by type (0xy.4)
+
+    /// The last album-list type that was successfully fetched (or is loading).
+    @Published public private(set) var browseAlbumsType: NavidromeAPI.AlbumListType = .newest
+    @Published public private(set) var browseAlbums: [Album] = []
+    @Published public private(set) var browseAlbumsState: LoadState = .idle
+
+    // MARK: - Genre list (0xy.4)
+
+    @Published public private(set) var genres: [Genre] = []
+    @Published public private(set) var genresState: LoadState = .idle
+
+    // MARK: - Genre detail: songs by genre (0xy.4)
+
+    @Published public private(set) var selectedGenre: Genre?
+    @Published public private(set) var genreTracks: [Track] = []
+    @Published public private(set) var genreTracksState: LoadState = .idle
+
+    // MARK: - Page sizes (single-page, no pagination in 0xy.4)
+
+    /// Maximum albums returned by getAlbumList2 in a single fetch.
+    /// Navidrome accepts 1–500; 50 is a reasonable single-page default.
+    /// Pagination is deferred to a future bead.
+    static let albumBrowsePageSize = 50
+
+    /// Maximum songs returned by getSongsByGenre in a single fetch.
+    static let genreSongsPageSize = 50
 
     // MARK: - API source
 
@@ -136,6 +170,87 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         } catch {
             tracksState = .error(error.localizedDescription)
         }
+    }
+
+    // MARK: - Load: browse albums by type (0xy.4)
+
+    /// Fetches a page of albums for the given list type via getAlbumList2.
+    /// A single page of `albumBrowsePageSize` is fetched (no pagination in 0xy.4).
+    public func loadBrowseAlbums(type: NavidromeAPI.AlbumListType) async {
+        guard browseAlbumsState != .loading else { return }
+        browseAlbumsType = type
+        browseAlbums = []
+        browseAlbumsState = .loading
+        do {
+            let albums = try await api.getAlbumList2(
+                type: type,
+                size: NavidromeLibraryViewModel.albumBrowsePageSize,
+                offset: 0
+            )
+            browseAlbums = albums
+            browseAlbumsState = albums.isEmpty ? .empty : .loaded
+        } catch let apiErr as NavidromeAPI.APIError {
+            browseAlbumsState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            browseAlbumsState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Load: genre list (0xy.4)
+
+    /// Fetches all genres via getGenres.
+    public func loadGenres() async {
+        guard genresState != .loading else { return }
+        genres = []
+        genresState = .loading
+        do {
+            let loaded = try await api.getGenres()
+            genres = loaded.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            genresState = loaded.isEmpty ? .empty : .loaded
+        } catch let apiErr as NavidromeAPI.APIError {
+            genresState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            genresState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Load: tracks for a genre (0xy.4)
+
+    /// Fetches songs for the given genre via getSongsByGenre.
+    /// A single page of `genreSongsPageSize` is fetched (no pagination in 0xy.4).
+    public func loadTracks(forGenre genre: Genre) async {
+        guard genreTracksState != .loading else { return }
+        selectedGenre = genre
+        genreTracks = []
+        genreTracksState = .loading
+        do {
+            let tracks = try await api.getSongsByGenre(
+                genre: genre.name,
+                count: NavidromeLibraryViewModel.genreSongsPageSize,
+                offset: 0
+            )
+            genreTracks = tracks
+            genreTracksState = tracks.isEmpty ? .empty : .loaded
+        } catch let apiErr as NavidromeAPI.APIError {
+            genreTracksState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            genreTracksState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Reset helpers (0xy.4 additions)
+
+    public func resetBrowseAlbums() {
+        browseAlbums = []
+        browseAlbumsState = .idle
+    }
+
+    public func resetGenreDetail() {
+        selectedGenre = nil
+        genreTracks = []
+        genreTracksState = .idle
     }
 
     // MARK: - Reset helpers
