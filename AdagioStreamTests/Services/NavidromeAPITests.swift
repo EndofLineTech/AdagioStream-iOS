@@ -314,6 +314,293 @@ final class NavidromeAPITests: XCTestCase {
                        "Password must not appear in debugDescription")
     }
 
+    // MARK: - getArtists: flattens index buckets
+
+    func testGetArtistsFlattensIndexBuckets() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","artists":{"index":[
+            {"name":"A","artist":[{"id":"a1","name":"Adele","albumCount":3}]},
+            {"name":"B","artist":[{"id":"b1","name":"Beatles","albumCount":13},{"id":"b2","name":"Blur","albumCount":7}]}
+        ]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let artists = try await api.getArtists()
+
+        XCTAssertEqual(artists.count, 3)
+        XCTAssertEqual(artists[0].id, "a1")
+        XCTAssertEqual(artists[0].name, "Adele")
+        XCTAssertEqual(artists[0].albumCount, 3)
+        XCTAssertEqual(artists[1].id, "b1")
+        XCTAssertEqual(artists[2].id, "b2")
+        XCTAssertEqual(artists[2].name, "Blur")
+    }
+
+    func testGetArtistsEmptyIndexReturnsEmptyArray() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","artists":{"index":[]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let artists = try await api.getArtists()
+        XCTAssertTrue(artists.isEmpty)
+    }
+
+    func testGetArtistsBucketWithMissingArtistArrayDecodesToEmpty() async throws {
+        // A bucket with no "artist" key at all — must not throw.
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","artists":{"index":[
+            {"name":"#"}
+        ]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let artists = try await api.getArtists()
+        XCTAssertTrue(artists.isEmpty)
+    }
+
+    // MARK: - getArtist: returns artist + albums
+
+    func testGetArtistReturnsArtistAndAlbums() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","artist":{
+            "id":"ar1","name":"Radiohead","albumCount":9,"coverArt":"art-ar1",
+            "album":[
+                {"id":"al1","artistId":"ar1","name":"OK Computer","songCount":12,"year":1997},
+                {"id":"al2","artistId":"ar1","name":"Kid A","songCount":10,"year":2000}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (artist, albums) = try await api.getArtist(id: "ar1")
+
+        XCTAssertEqual(artist.id, "ar1")
+        XCTAssertEqual(artist.name, "Radiohead")
+        XCTAssertEqual(artist.albumCount, 9)
+        XCTAssertEqual(artist.coverArt, "art-ar1")
+        XCTAssertEqual(albums.count, 2)
+        XCTAssertEqual(albums[0].id, "al1")
+        XCTAssertEqual(albums[0].title, "OK Computer")
+        XCTAssertEqual(albums[0].trackCount, 12)
+        XCTAssertEqual(albums[0].year, 1997)
+        XCTAssertEqual(albums[1].id, "al2")
+    }
+
+    func testGetArtistWithNoAlbumsKeyDecodesToEmptyAlbums() async throws {
+        // "album" key absent — must not throw; returns []
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","artist":{
+            "id":"ar2","name":"Solo Artist"
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (artist, albums) = try await api.getArtist(id: "ar2")
+        XCTAssertEqual(artist.id, "ar2")
+        XCTAssertTrue(albums.isEmpty)
+    }
+
+    // MARK: - getAlbum: returns album + tracks with correct track numbers
+
+    func testGetAlbumReturnsSongsWithTrackNumbers() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","album":{
+            "id":"al1","artistId":"ar1","title":"OK Computer","songCount":3,"year":1997,
+            "song":[
+                {"id":"t1","albumId":"al1","artistId":"ar1","title":"Airbag","track":1,"duration":228},
+                {"id":"t2","albumId":"al1","artistId":"ar1","title":"Paranoid Android","track":2,"duration":387},
+                {"id":"t3","albumId":"al1","artistId":"ar1","title":"Subterranean Homesick Alien","track":3,"duration":271}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (album, tracks) = try await api.getAlbum(id: "al1")
+
+        XCTAssertEqual(album.id, "al1")
+        XCTAssertEqual(album.title, "OK Computer")
+        XCTAssertEqual(album.artistId, "ar1")
+        XCTAssertEqual(tracks.count, 3)
+        XCTAssertEqual(tracks[0].id, "t1")
+        XCTAssertEqual(tracks[0].trackNumber, 1)
+        XCTAssertEqual(tracks[0].duration, 228)
+        XCTAssertEqual(tracks[1].trackNumber, 2)
+        XCTAssertEqual(tracks[1].title, "Paranoid Android")
+        XCTAssertEqual(tracks[2].trackNumber, 3)
+    }
+
+    func testGetAlbumWithNoSongKeyDecodesToEmptyTracks() async throws {
+        // "song" key absent — must not throw
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","album":{
+            "id":"al9","artistId":"ar9","title":"Empty Album"
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let (album, tracks) = try await api.getAlbum(id: "al9")
+        XCTAssertEqual(album.id, "al9")
+        XCTAssertTrue(tracks.isEmpty)
+    }
+
+    // MARK: - getAlbumList2: maps to [Album]
+
+    func testGetAlbumList2MapsAlbums() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","albumList2":{
+            "album":[
+                {"id":"al1","artistId":"ar1","name":"Album One","songCount":8,"year":2020},
+                {"id":"al2","artistId":"ar2","name":"Album Two","songCount":12,"year":2021}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let albums = try await api.getAlbumList2(type: .newest, size: 2, offset: 0)
+
+        XCTAssertEqual(albums.count, 2)
+        XCTAssertEqual(albums[0].id, "al1")
+        XCTAssertEqual(albums[0].title, "Album One")
+        XCTAssertEqual(albums[0].trackCount, 8)
+        XCTAssertEqual(albums[1].id, "al2")
+        XCTAssertEqual(albums[1].title, "Album Two")
+        XCTAssertEqual(albums[1].year, 2021)
+    }
+
+    func testGetAlbumList2MissingAlbumKeyDecodesToEmpty() async throws {
+        // "album" key absent in albumList2 wrapper — must not throw
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","albumList2":{}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let albums = try await api.getAlbumList2(type: .random)
+        XCTAssertTrue(albums.isEmpty)
+    }
+
+    func testGetAlbumList2RequestURLContainsTypeAndSize() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","albumList2":{"album":[]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        _ = try await api.getAlbumList2(type: .alphabeticalByName, size: 25, offset: 50)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("type"), "alphabeticalByName")
+        XCTAssertEqual(q("size"), "25")
+        XCTAssertEqual(q("offset"), "50")
+    }
+
+    // MARK: - getGenres: maps value → name
+
+    func testGetGenresMapsValueToName() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","genres":{
+            "genre":[
+                {"value":"Rock","songCount":42,"albumCount":8},
+                {"value":"Jazz","songCount":17,"albumCount":3}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let genres = try await api.getGenres()
+
+        XCTAssertEqual(genres.count, 2)
+        XCTAssertEqual(genres[0].name, "Rock")
+        XCTAssertEqual(genres[0].songCount, 42)
+        XCTAssertEqual(genres[0].albumCount, 8)
+        XCTAssertEqual(genres[1].name, "Jazz")
+        XCTAssertEqual(genres[1].songCount, 17)
+    }
+
+    func testGetGenresMissingGenreKeyDecodesToEmpty() async throws {
+        // "genre" array absent — must not throw
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","genres":{}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let genres = try await api.getGenres()
+        XCTAssertTrue(genres.isEmpty)
+    }
+
+    // MARK: - getSongsByGenre: maps to [Track]
+
+    func testGetSongsByGenreMapsToTracks() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","songsByGenre":{
+            "song":[
+                {"id":"s1","albumId":"al1","artistId":"ar1","title":"Stairway to Heaven","track":4,"duration":482,"genre":"Rock"},
+                {"id":"s2","albumId":"al2","artistId":"ar1","title":"Kashmir","track":2,"duration":515,"genre":"Rock"}
+            ]
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let tracks = try await api.getSongsByGenre(genre: "Rock", count: 2, offset: 0)
+
+        XCTAssertEqual(tracks.count, 2)
+        XCTAssertEqual(tracks[0].id, "s1")
+        XCTAssertEqual(tracks[0].title, "Stairway to Heaven")
+        XCTAssertEqual(tracks[0].trackNumber, 4)
+        XCTAssertEqual(tracks[0].duration, 482)
+        XCTAssertEqual(tracks[0].genre, "Rock")
+        XCTAssertEqual(tracks[1].id, "s2")
+        XCTAssertEqual(tracks[1].trackNumber, 2)
+    }
+
+    func testGetSongsByGenreMissingSongKeyDecodesToEmpty() async throws {
+        // "song" array absent — must not throw
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","songsByGenre":{}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let tracks = try await api.getSongsByGenre(genre: "Classical", count: 10, offset: 0)
+        XCTAssertTrue(tracks.isEmpty)
+    }
+
+    func testGetSongsByGenreRequestURLContainsGenreCountOffset() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","songsByGenre":{"song":[]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        _ = try await api.getSongsByGenre(genre: "Jazz", count: 50, offset: 20)
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("genre"), "Jazz")
+        XCTAssertEqual(q("count"), "50")
+        XCTAssertEqual(q("offset"), "20")
+    }
+
+    func testGetArtistsUpdatedAtIsPopulated() async throws {
+        let before = Int(Date().timeIntervalSince1970)
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","artists":{"index":[
+            {"name":"A","artist":[{"id":"a1","name":"Artist One","albumCount":1}]}
+        ]}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let artists = try await api.getArtists()
+        let after = Int(Date().timeIntervalSince1970)
+
+        XCTAssertFalse(artists.isEmpty)
+        let updatedAt = artists[0].updatedAt
+        XCTAssertGreaterThanOrEqual(updatedAt, before, "updatedAt must be >= time before call")
+        XCTAssertLessThanOrEqual(updatedAt, after,   "updatedAt must be <= time after call")
+    }
+
     // MARK: - invalidURL guard
 
     func testFetchWithEmptyEndpointStillBuildsValidURL() async throws {

@@ -183,6 +183,251 @@ public struct NavidromeAPI {
         }
     }
 
+    // MARK: - Library browse endpoints
+
+    /// Fetches all artists from `getArtists.view`, flattening the alphabetical
+    /// index buckets into a single `[Artist]`.
+    ///
+    /// Subsonic payload structure:
+    /// ```json
+    /// {"artists":{"index":[{"name":"A","artist":[…]}]}}
+    /// ```
+    public func getArtists() async throws -> [Artist] {
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try await fetch("getArtists", params: [:], as: GetArtistsPayload.self)
+        return payload.artists.index.flatMap { bucket in
+            bucket.artist.map { $0.toRecord(updatedAt: now) }
+        }
+    }
+
+    /// Fetches a single artist and their albums from `getArtist.view?id=`.
+    ///
+    /// Subsonic payload structure:
+    /// ```json
+    /// {"artist":{"id":…,"name":…,"album":[…]}}
+    /// ```
+    /// - Returns: The `Artist` record and all of its `[Album]` records.
+    public func getArtist(id: String) async throws -> (artist: Artist, albums: [Album]) {
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try await fetch("getArtist", params: ["id": id], as: GetArtistPayload.self)
+        let artist = payload.artist.toRecord(updatedAt: now)
+        let albums = payload.artist.album.map { $0.toRecord(updatedAt: now) }
+        return (artist, albums)
+    }
+
+    /// Fetches an album and its tracks from `getAlbum.view?id=`.
+    ///
+    /// Subsonic payload structure:
+    /// ```json
+    /// {"album":{"id":…,"title":…,"song":[…]}}
+    /// ```
+    /// - Returns: The `Album` record and all of its `[Track]` records.
+    public func getAlbum(id: String) async throws -> (album: Album, tracks: [Track]) {
+        let now = Int(Date().timeIntervalSince1970)
+        let payload = try await fetch("getAlbum", params: ["id": id], as: GetAlbumPayload.self)
+        let album = payload.album.toRecord(updatedAt: now)
+        let tracks = payload.album.song.map { $0.toRecord(updatedAt: now) }
+        return (album, tracks)
+    }
+
+    /// Fetches a list of albums from `getAlbumList2.view`.
+    ///
+    /// - Parameters:
+    ///   - type: The list ordering/filter type.
+    ///   - size: Maximum number of albums to return (1–500; defaults to 10).
+    ///   - offset: Offset into the album list for pagination.
+    /// - Returns: `[Album]` records.
+    public func getAlbumList2(
+        type: AlbumListType,
+        size: Int = 10,
+        offset: Int = 0
+    ) async throws -> [Album] {
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = [
+            "type":   type.rawValue,
+            "size":   String(size),
+            "offset": String(offset),
+        ]
+        let payload = try await fetch("getAlbumList2", params: params, as: GetAlbumList2Payload.self)
+        return payload.albumList2.album.map { $0.toRecord(updatedAt: now) }
+    }
+
+    /// Fetches all genres from `getGenres.view`.
+    ///
+    /// Subsonic payload structure:
+    /// ```json
+    /// {"genres":{"genre":[{"value":"Rock","songCount":12,"albumCount":3}]}}
+    /// ```
+    public func getGenres() async throws -> [Genre] {
+        let payload = try await fetch("getGenres", params: [:], as: GetGenresPayload.self)
+        return payload.genres.genre
+    }
+
+    /// Fetches songs by genre from `getSongsByGenre.view`.
+    ///
+    /// - Parameters:
+    ///   - genre: Genre name to filter by.
+    ///   - count: Maximum number of songs to return (1–500; defaults to 10).
+    ///   - offset: Offset into the results for pagination.
+    /// - Returns: `[Track]` records.
+    public func getSongsByGenre(
+        genre: String,
+        count: Int = 10,
+        offset: Int = 0
+    ) async throws -> [Track] {
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = [
+            "genre":  genre,
+            "count":  String(count),
+            "offset": String(offset),
+        ]
+        let payload = try await fetch("getSongsByGenre", params: params, as: GetSongsByGenrePayload.self)
+        return payload.songsByGenre.song.map { $0.toRecord(updatedAt: now) }
+    }
+
+    // MARK: - AlbumListType enum
+
+    /// Ordering/filter modes for `getAlbumList2`.
+    public enum AlbumListType: String {
+        /// Most recently added albums.
+        case newest
+        /// Most recently played albums.
+        case recent
+        /// Most-played albums.
+        case frequent
+        /// Randomly-selected albums.
+        case random
+        /// Albums sorted alphabetically by name.
+        case alphabeticalByName
+    }
+
+    // MARK: - Private payload types for library-browse endpoints
+
+    // getArtists
+    private struct GetArtistsPayload: Decodable {
+        let artists: ArtistsWrapper
+
+        struct ArtistsWrapper: Decodable {
+            let index: [IndexBucket]
+        }
+
+        struct IndexBucket: Decodable {
+            let name: String
+            let artist: [SubsonicArtistDTO]
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                name   = try c.decode(String.self, forKey: .name)
+                artist = (try? c.decode([SubsonicArtistDTO].self, forKey: .artist)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case name, artist }
+        }
+    }
+
+    // getArtist
+    private struct GetArtistPayload: Decodable {
+        let artist: ArtistDetail
+
+        struct ArtistDetail: Decodable {
+            let id: String
+            let name: String
+            let albumCount: Int?
+            let coverArt: String?
+            let album: [SubsonicAlbumDTO]
+
+            func toRecord(updatedAt: Int) -> Artist {
+                Artist(
+                    id: id,
+                    name: name,
+                    sortName: nil,
+                    albumCount: albumCount ?? album.count,
+                    coverArt: coverArt,
+                    updatedAt: updatedAt
+                )
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                id         = try c.decode(String.self, forKey: .id)
+                name       = try c.decode(String.self, forKey: .name)
+                albumCount = try? c.decodeIfPresent(Int.self, forKey: .albumCount)
+                coverArt   = try? c.decodeIfPresent(String.self, forKey: .coverArt)
+                album      = (try? c.decode([SubsonicAlbumDTO].self, forKey: .album)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case id, name, albumCount, coverArt, album }
+        }
+    }
+
+    // getAlbum
+    private struct GetAlbumPayload: Decodable {
+        let album: AlbumDetail
+
+        struct AlbumDetail: Decodable {
+            let albumDTO: SubsonicAlbumDTO
+            let song: [SubsonicTrackDTO]
+
+            func toRecord(updatedAt: Int) -> Album { albumDTO.toRecord(updatedAt: updatedAt) }
+
+            init(from decoder: Decoder) throws {
+                albumDTO = try SubsonicAlbumDTO(from: decoder)
+                let c    = try decoder.container(keyedBy: CodingKeys.self)
+                song     = (try? c.decode([SubsonicTrackDTO].self, forKey: .song)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case song }
+        }
+    }
+
+    // getAlbumList2
+    private struct GetAlbumList2Payload: Decodable {
+        let albumList2: AlbumList2Wrapper
+
+        struct AlbumList2Wrapper: Decodable {
+            let album: [SubsonicAlbumDTO]
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                album = (try? c.decode([SubsonicAlbumDTO].self, forKey: .album)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case album }
+        }
+    }
+
+    // getGenres
+    private struct GetGenresPayload: Decodable {
+        let genres: GenresWrapper
+
+        struct GenresWrapper: Decodable {
+            let genre: [Genre]
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                genre = (try? c.decode([Genre].self, forKey: .genre)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case genre }
+        }
+    }
+
+    // getSongsByGenre
+    private struct GetSongsByGenrePayload: Decodable {
+        let songsByGenre: SongsByGenreWrapper
+
+        struct SongsByGenreWrapper: Decodable {
+            let song: [SubsonicTrackDTO]
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                song  = (try? c.decode([SubsonicTrackDTO].self, forKey: .song)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case song }
+        }
+    }
+
     // MARK: - Private helpers
 
     private func buildURL(endpoint: String, params: [String: String]) -> URL? {
