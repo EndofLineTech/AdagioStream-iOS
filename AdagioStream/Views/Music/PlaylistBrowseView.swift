@@ -1,8 +1,19 @@
 // msl.2 — Navidrome playlist browse + play-as-queue in Music tab
+// msl.3 — Playlist editing: create / delete / rename / remove tracks / add-to-playlist
 //
 // Two-level navigation:
 //   PlaylistListView  (fetches getPlaylists, shows name + song count + cover art)
 //     └── PlaylistDetailView  (fetches getPlaylist(id:), shows header + track list)
+//
+// Editing affordances:
+//   PlaylistListView:
+//     • "+" toolbar button → create new playlist (alert with name field)
+//     • Swipe-to-delete on a row → confirm → deletePlaylist
+//
+//   PlaylistDetailView:
+//     • Toolbar "Rename" → rename alert
+//     • Edit mode → swipe-to-delete on track rows → removeTracksFromPlaylist (by index)
+//     • Track context menu → "Add to Playlist" → NavidromeAddToPlaylistSheet
 //
 // Track playback: tapping a row calls
 //   audioPlayer.setQueue(tracks, startIndex: index, displayArtistName: nil, via: api)
@@ -24,14 +35,77 @@ struct PlaylistListView: View {
     @ObservedObject var viewModel: NavidromeLibraryViewModel
     let api: NavidromeAPI
 
+    @State private var showNewPlaylistAlert = false
+    @State private var newPlaylistName = ""
+    @State private var playlistToDelete: Playlist?
+    @State private var showDeleteConfirm = false
+    @State private var isCreating = false
+
     var body: some View {
         content
             .navigationTitle("Playlists")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        newPlaylistName = ""
+                        showNewPlaylistAlert = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("New playlist")
+                    .disabled(isCreating)
+                }
+            }
             .task {
                 if viewModel.playlistsState == .idle {
                     await viewModel.loadPlaylists()
                 }
+            }
+            .alert("New Playlist", isPresented: $showNewPlaylistAlert) {
+                TextField("Playlist name", text: $newPlaylistName)
+                    .autocorrectionDisabled()
+                Button("Create") {
+                    let name = newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { return }
+                    Task {
+                        isCreating = true
+                        await viewModel.createPlaylist(name: name)
+                        isCreating = false
+                    }
+                }
+                .disabled(newPlaylistName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) {
+                    newPlaylistName = ""
+                }
+            } message: {
+                Text("Enter a name for the new playlist.")
+            }
+            .confirmationDialog(
+                "Delete \"\(playlistToDelete?.name ?? "")\"?",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Playlist", role: .destructive) {
+                    guard let playlist = playlistToDelete else { return }
+                    Task { await viewModel.deletePlaylist(id: playlist.id) }
+                }
+                Button("Cancel", role: .cancel) {
+                    playlistToDelete = nil
+                }
+            } message: {
+                Text("This action cannot be undone.")
+            }
+            .alert(
+                "Error",
+                isPresented: Binding(
+                    get: { viewModel.playlistEditError != nil },
+                    set: { if !$0 { viewModel.clearPlaylistEditError() } }
+                )
+            ) {
+                Button("OK") { viewModel.clearPlaylistEditError() }
+            } message: {
+                Text(viewModel.playlistEditError ?? "")
             }
     }
 
@@ -53,7 +127,7 @@ struct PlaylistListView: View {
                 EmptyStateView(
                     title: "No Playlists",
                     systemImage: "music.note.list",
-                    description: "Your Navidrome library has no playlists yet."
+                    description: "Tap + to create your first playlist."
                 )
                 .containerRelativeFrame([.horizontal, .vertical])
             }
@@ -96,6 +170,15 @@ struct PlaylistListView: View {
             .accessibilityHint(
                 "\(playlist.songCount) \(playlist.songCount == 1 ? "song" : "songs")"
             )
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    playlistToDelete = playlist
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .accessibilityLabel("Delete \(playlist.name)")
+            }
         }
         .listStyle(.plain)
         .refreshable {
@@ -148,29 +231,17 @@ struct PlaylistDetailView: View {
 
     @EnvironmentObject private var audioPlayer: AudioPlayerService
 
+    @State private var isEditingTracks = false
+    @State private var showRenameAlert = false
+    @State private var renameText = ""
+    @State private var trackForAddToPlaylist: Track?
+
     var body: some View {
         content
             .navigationTitle(playlist.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if case .loaded = viewModel.playlistTracksState,
-                   !viewModel.playlistTracks.isEmpty {
-                    ToolbarItemGroup(placement: .primaryAction) {
-                        Button {
-                            shuffleAndPlay()
-                        } label: {
-                            Label("Shuffle", systemImage: "shuffle")
-                        }
-                        .accessibilityLabel("Shuffle playlist")
-
-                        Button {
-                            playFromStart()
-                        } label: {
-                            Label("Play", systemImage: "play.fill")
-                        }
-                        .accessibilityLabel("Play playlist from beginning")
-                    }
-                }
+                toolbarContent
             }
             .task {
                 if viewModel.selectedPlaylist?.id != playlist.id {
@@ -178,6 +249,86 @@ struct PlaylistDetailView: View {
                     await viewModel.loadPlaylist(id: playlist.id)
                 }
             }
+            .alert("Rename Playlist", isPresented: $showRenameAlert) {
+                TextField("Playlist name", text: $renameText)
+                    .autocorrectionDisabled()
+                Button("Rename") {
+                    let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !name.isEmpty else { return }
+                    Task { await viewModel.renamePlaylist(id: playlist.id, newName: name) }
+                }
+                .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Cancel", role: .cancel) {
+                    renameText = playlist.name
+                }
+            } message: {
+                Text("Enter a new name for the playlist.")
+            }
+            .alert(
+                "Error",
+                isPresented: Binding(
+                    get: { viewModel.playlistEditError != nil },
+                    set: { if !$0 { viewModel.clearPlaylistEditError() } }
+                )
+            ) {
+                Button("OK") { viewModel.clearPlaylistEditError() }
+            } message: {
+                Text(viewModel.playlistEditError ?? "")
+            }
+            .sheet(item: $trackForAddToPlaylist) { track in
+                NavidromeAddToPlaylistSheet(
+                    track: track,
+                    viewModel: viewModel,
+                    api: api
+                )
+            }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if case .loaded = viewModel.playlistTracksState,
+           !viewModel.playlistTracks.isEmpty {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if !isEditingTracks {
+                    Button {
+                        shuffleAndPlay()
+                    } label: {
+                        Label("Shuffle", systemImage: "shuffle")
+                    }
+                    .accessibilityLabel("Shuffle playlist")
+
+                    Button {
+                        playFromStart()
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                    }
+                    .accessibilityLabel("Play playlist from beginning")
+                }
+            }
+        }
+
+        ToolbarItemGroup(placement: .secondaryAction) {
+            Button {
+                renameText = viewModel.selectedPlaylist?.name ?? playlist.name
+                showRenameAlert = true
+            } label: {
+                Label("Rename Playlist", systemImage: "pencil")
+            }
+            .accessibilityLabel("Rename playlist")
+
+            if case .loaded = viewModel.playlistTracksState,
+               !viewModel.playlistTracks.isEmpty {
+                Button {
+                    isEditingTracks.toggle()
+                } label: {
+                    Label(
+                        isEditingTracks ? "Done Editing" : "Edit Tracks",
+                        systemImage: isEditingTracks ? "checkmark.circle" : "list.bullet"
+                    )
+                }
+                .accessibilityLabel(isEditingTracks ? "Done editing tracks" : "Edit tracks")
+            }
+        }
     }
 
     @ViewBuilder
@@ -228,13 +379,15 @@ struct PlaylistDetailView: View {
 
     private var trackList: some View {
         List {
-            // Playlist header
-            Section {
-                playlistHeader
+            // Playlist header (hidden in edit mode to keep focus on tracks)
+            if !isEditingTracks {
+                Section {
+                    playlistHeader
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets())
             }
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets())
 
             // Track rows
             Section {
@@ -247,11 +400,35 @@ struct PlaylistDetailView: View {
                         play(track: track)
                     }
                     .accessibilityLabel(playlistTrackAccessibilityLabel(track, position: index + 1))
-                    .accessibilityHint("Tap to play")
+                    .accessibilityHint(isEditingTracks ? "Swipe to remove from playlist" : "Tap to play")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if isEditingTracks {
+                            Button(role: .destructive) {
+                                Task {
+                                    await viewModel.removeTracksFromPlaylist(
+                                        playlistId: playlist.id,
+                                        indexes: [index]
+                                    )
+                                }
+                            } label: {
+                                Label("Remove", systemImage: "minus.circle")
+                            }
+                            .accessibilityLabel("Remove \(track.title) from playlist")
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            trackForAddToPlaylist = track
+                        } label: {
+                            Label("Add to Playlist…", systemImage: "music.note.list")
+                        }
+                        .accessibilityLabel("Add \(track.title) to a playlist")
+                    }
                 }
             }
         }
         .listStyle(.insetGrouped)
+        .environment(\.editMode, isEditingTracks ? .constant(.active) : .constant(.inactive))
         .refreshable {
             await viewModel.loadPlaylist(id: playlist.id)
         }
@@ -270,13 +447,14 @@ struct PlaylistDetailView: View {
             .accessibilityHidden(true)
 
             VStack(spacing: 4) {
-                Text(playlist.name)
+                Text(viewModel.selectedPlaylist?.name ?? playlist.name)
                     .font(.title3)
                     .fontWeight(.semibold)
                     .multilineTextAlignment(.center)
 
-                let songWord = playlist.songCount == 1 ? "song" : "songs"
-                Text("\(playlist.songCount) \(songWord) · \(formatDuration(playlist.duration))")
+                let p = viewModel.selectedPlaylist ?? playlist
+                let songWord = p.songCount == 1 ? "song" : "songs"
+                Text("\(p.songCount) \(songWord) · \(formatDuration(p.duration))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -288,6 +466,7 @@ struct PlaylistDetailView: View {
     // MARK: - Playback actions
 
     private func play(track: Track) {
+        guard !isEditingTracks else { return }
         let tracks = viewModel.playlistTracks
         let startIndex = tracks.firstIndex(where: { $0.id == track.id }) ?? 0
         audioPlayer.setQueue(
@@ -397,6 +576,10 @@ struct PlaylistTrackRowView: View {
         return String(format: "%d:%02d", m, s)
     }
 }
+
+// MARK: - Track conformance to Identifiable for sheet(item:)
+
+extension Track: Identifiable {}
 
 // MARK: - Preview
 

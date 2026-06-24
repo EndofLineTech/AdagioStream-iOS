@@ -1071,4 +1071,242 @@ final class NavidromeAPITests: XCTestCase {
             // Any other error is acceptable here.
         }
     }
+
+    // MARK: - createPlaylist (msl.3)
+
+    /// URL must contain the correct endpoint path, the name param, and auth items.
+    func testCreatePlaylistURLContainsNameAndAuth() async throws {
+        // Some servers return the new playlist in the response.
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl-new","name":"My Mix","songCount":0,"duration":0
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        _ = try await api.createPlaylist(name: "My Mix")
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/createPlaylist.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("name"), "My Mix")
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"), "token must be present")
+        XCTAssertNotNil(q("s"), "salt must be present")
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// Repeated `songId=` params must all appear in the URL.
+    func testCreatePlaylistURLContainsRepeatedSongIdParams() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        _ = try await api.createPlaylist(name: "Mix", songIds: ["s1", "s2", "s3"])
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        let songIds = items.filter { $0.name == "songId" }.compactMap { $0.value }
+
+        XCTAssertEqual(songIds.sorted(), ["s1", "s2", "s3"])
+    }
+
+    /// Status-ok with NO playlist payload must return nil (not throw).
+    func testCreatePlaylistStatusOkEmptyPayloadReturnsNil() async throws {
+        // Server returns status-only ok with no "playlist" key — must succeed.
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let result = try await api.createPlaylist(name: "Empty OK")
+        XCTAssertNil(result, "status-ok with no playlist payload must return nil, not throw")
+    }
+
+    /// Status-ok WITH a playlist payload must return the playlist.
+    func testCreatePlaylistStatusOkWithPayloadReturnsPlaylist() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1","playlist":{
+            "id":"pl-99","name":"Returned","songCount":2,"duration":400
+        }}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        let result = try await api.createPlaylist(name: "Returned")
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.id, "pl-99")
+        XCTAssertEqual(result?.name, "Returned")
+        XCTAssertEqual(result?.songCount, 2)
+    }
+
+    /// Status-failed must throw (not silently succeed).
+    func testCreatePlaylistStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":50,"message":"Permission denied"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            _ = try await api.createPlaylist(name: "Bad")
+            XCTFail("Expected a throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 50)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
+
+    // MARK: - updatePlaylist (msl.3)
+
+    /// URL must contain playlistId, all optional fields, repeated add/remove params, and auth.
+    func testUpdatePlaylistURLContainsAllParams() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.updatePlaylist(
+            playlistId: "pl-1",
+            name: "New Name",
+            comment: "Great mix",
+            public: true,
+            songIdsToAdd: ["s10", "s11"],
+            songIndexesToRemove: [0, 2]
+        )
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/updatePlaylist.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+        func all(_ name: String) -> [String] { items.filter { $0.name == name }.compactMap { $0.value } }
+
+        XCTAssertEqual(q("playlistId"), "pl-1")
+        XCTAssertEqual(q("name"),    "New Name")
+        XCTAssertEqual(q("comment"), "Great mix")
+        XCTAssertEqual(q("public"),  "true")
+
+        XCTAssertEqual(all("songIdToAdd").sorted(),       ["s10", "s11"])
+        XCTAssertEqual(all("songIndexToRemove").sorted(), ["0", "2"])
+
+        // Auth
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+        XCTAssertNotNil(q("s"))
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// Optional params omitted when nil — only playlistId must appear.
+    func testUpdatePlaylistOmitsNilOptionalParams() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.updatePlaylist(playlistId: "pl-2")
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("playlistId"), "pl-2")
+        XCTAssertNil(q("name"),    "name must be absent when not provided")
+        XCTAssertNil(q("comment"), "comment must be absent when not provided")
+        XCTAssertNil(q("public"),  "public must be absent when not provided")
+        XCTAssertTrue(items.filter { $0.name == "songIdToAdd" }.isEmpty)
+        XCTAssertTrue(items.filter { $0.name == "songIndexToRemove" }.isEmpty)
+    }
+
+    /// Status-ok (empty body) = success, no throw.
+    func testUpdatePlaylistStatusOkEmptyBodySucceeds() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        // Must not throw.
+        try await api.updatePlaylist(playlistId: "pl-3", name: "Updated")
+    }
+
+    /// Status-failed must throw.
+    func testUpdatePlaylistStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":70,"message":"Not found"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            try await api.updatePlaylist(playlistId: "bad-id")
+            XCTFail("Expected throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 70)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
+
+    // MARK: - deletePlaylist (msl.3)
+
+    /// URL must contain the id param and auth.
+    func testDeletePlaylistURLContainsIdAndAuth() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        try await api.deletePlaylist(id: "pl-del")
+
+        let captured = MockURLProtocolHandler.capturedRequests.first
+        XCTAssertNotNil(captured)
+        XCTAssertEqual(captured?.url?.path, "/rest/deletePlaylist.view")
+
+        let items = URLComponents(string: captured?.url?.absoluteString ?? "")?.queryItems ?? []
+        func q(_ name: String) -> String? { items.first(where: { $0.name == name })?.value }
+
+        XCTAssertEqual(q("id"), "pl-del")
+        XCTAssertEqual(q("u"), "alice")
+        XCTAssertNotNil(q("t"))
+        XCTAssertNotNil(q("s"))
+        XCTAssertEqual(q("c"), SubsonicAuth.clientName)
+        XCTAssertEqual(q("v"), SubsonicAuth.apiVersion)
+        XCTAssertEqual(q("f"), "json")
+    }
+
+    /// Status-ok (empty body) = success.
+    func testDeletePlaylistStatusOkSucceeds() async throws {
+        let json = """
+        {"subsonic-response":{"status":"ok","version":"1.16.1"}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        // Must not throw.
+        try await api.deletePlaylist(id: "pl-x")
+    }
+
+    /// Status-failed must throw.
+    func testDeletePlaylistStatusFailedThrows() async {
+        let json = """
+        {"subsonic-response":{"status":"failed","version":"1.16.1","error":{"code":70,"message":"Not found"}}}
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+
+        do {
+            try await api.deletePlaylist(id: "nonexistent")
+            XCTFail("Expected throw on status=failed")
+        } catch NavidromeAPI.APIError.subsonicError(let code, _) {
+            XCTAssertEqual(code, 70)
+        } catch {
+            XCTFail("Expected .subsonicError but got: \(error)")
+        }
+    }
 }

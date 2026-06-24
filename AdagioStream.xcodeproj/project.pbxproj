@@ -99,6 +99,7 @@
 		781DB2044B7B08D363A75F59 /* AdagioStreamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC92A0CDDC4C9AFBAAC3DDA /* AdagioStreamApp.swift */; };
 		7917CA44193478337496D3F8 /* NoProvidersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC965CA67735F73D26E34C17 /* NoProvidersView.swift */; };
 		7A11D46D2A8071F1D2C7F23C /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
+		7BC7258215469E754549E37A /* NavidromeAddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D3200355927ECEE975520D8 /* NavidromeAddToPlaylistSheet.swift */; };
 		7C3AEE80890B1C650C67086B /* AdagioStreamTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27924384C8E4F5B4A4E37EA3 /* AdagioStreamTVApp.swift */; };
 		7DA31C5B2FD1C9760F2788D3 /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
 		81309FDC907C4498CA44535D /* SearchResultsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B48DC2BAF144D6832406885 /* SearchResultsView.swift */; };
@@ -246,6 +247,7 @@
 		1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		1CB6CC077DE7865648EC949C /* ESPNModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ESPNModels.swift; sourceTree = "<group>"; };
 		1CB97A4EB0205E8425BC244C /* M3UParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParserTests.swift; sourceTree = "<group>"; };
+		1D3200355927ECEE975520D8 /* NavidromeAddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeAddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		1DCAEB426F36F498D4A42B59 /* CustomPlaylistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistDetailView.swift; sourceTree = "<group>"; };
 		20796E24826A70D504E871C4 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSetupView.swift; sourceTree = "<group>"; };
@@ -513,6 +515,7 @@
 				D663E9B0E8D477B2AB96374E /* BrowseAlbumsView.swift */,
 				FF42FE4E355FDB76ED8BD76D /* GenreBrowseView.swift */,
 				BAEEB586D30C3867A74F7B11 /* MusicLibraryView.swift */,
+				1D3200355927ECEE975520D8 /* NavidromeAddToPlaylistSheet.swift */,
 				EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */,
 				0B48DC2BAF144D6832406885 /* SearchResultsView.swift */,
 				4764DC58A87DECEFE53BB799 /* SubsonicCoverArt.swift */,
@@ -1080,6 +1083,7 @@
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
 				C85820E109EA2CBDBE1BEE4F /* MusicLibraryView.swift in Sources */,
 				498ACC4F91C0773EF45C183A /* NavidromeAPI.swift in Sources */,
+				7BC7258215469E754549E37A /* NavidromeAddToPlaylistSheet.swift in Sources */,
 				685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */,
 				4193BA80B429CAB452283E97 /* NavidromeModels.swift in Sources */,
 				9B9B71470CE809C09FAC29BF /* NavidromeStore.swift in Sources */,

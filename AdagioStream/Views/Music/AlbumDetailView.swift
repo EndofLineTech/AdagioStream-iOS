@@ -19,6 +19,8 @@ struct AlbumDetailView: View {
 
     @EnvironmentObject private var audioPlayer: AudioPlayerService
 
+    @State private var trackForAddToPlaylist: Track?
+
     var body: some View {
         content
             .navigationTitle(album.title)
@@ -27,6 +29,13 @@ struct AlbumDetailView: View {
                 if viewModel.selectedAlbum?.id != album.id {
                     await viewModel.loadTracks(for: album)
                 }
+            }
+            .sheet(item: $trackForAddToPlaylist) { track in
+                NavidromeAddToPlaylistSheet(
+                    track: track,
+                    viewModel: viewModel,
+                    api: api
+                )
             }
     }
 
@@ -97,6 +106,14 @@ struct AlbumDetailView: View {
                     }
                     .accessibilityLabel(trackAccessibilityLabel(track))
                     .accessibilityHint("Tap to play")
+                    .contextMenu {
+                        Button {
+                            trackForAddToPlaylist = track
+                        } label: {
+                            Label("Add to Playlist…", systemImage: "music.note.list")
+                        }
+                        .accessibilityLabel("Add \(track.title) to a playlist")
+                    }
                 }
             }
         }

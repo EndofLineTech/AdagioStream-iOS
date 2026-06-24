@@ -426,6 +426,81 @@ public struct NavidromeAPI {
         )
     }
 
+    // MARK: - Playlist write endpoints (msl.3)
+
+    /// Creates a new playlist with an optional set of initial tracks.
+    ///
+    /// Subsonic endpoint: `createPlaylist.view?name=<name>&songId=<id>&songId=<id>…`
+    ///
+    /// Some servers return the new playlist object inside the response; others
+    /// return a status-only envelope with no payload.  Both are valid:
+    /// - Payload present → return `Playlist`
+    /// - Status-only ok → return `nil`
+    /// - Status failed → throw the mapped `APIError`
+    ///
+    /// - Parameters:
+    ///   - name: Display name for the new playlist.
+    ///   - songIds: Optional list of track IDs to add as the initial content.
+    /// - Returns: The created `Playlist` when the server echoes it; `nil` on an empty-ok response.
+    public func createPlaylist(name: String, songIds: [String] = []) async throws -> Playlist? {
+        var items: [URLQueryItem] = [URLQueryItem(name: "name", value: name)]
+        for id in songIds {
+            items.append(URLQueryItem(name: "songId", value: id))
+        }
+        guard let url = buildURLMulti(endpoint: "createPlaylist", items: items) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        return try decodeWriteResponse(data: data, payloadType: CreatePlaylistPayload.self)?.playlist
+    }
+
+    /// Updates an existing playlist's metadata and/or track list.
+    ///
+    /// Subsonic endpoint: `updatePlaylist.view?playlistId=…[&name=…][&comment=…]
+    ///   [&public=…][&songIdToAdd=…][&songIndexToRemove=…]`
+    ///
+    /// All parameters except `playlistId` are optional.  Pass non-nil values only
+    /// for the fields you want to change.  Removal uses the track's **index** in the
+    /// playlist (0-based), not the song ID — pass `songIndexesToRemove` accordingly.
+    ///
+    /// Returns on a status-ok response (with or without a payload body).
+    /// Throws a mapped `APIError` on status-failed.
+    public func updatePlaylist(
+        playlistId: String,
+        name: String? = nil,
+        comment: String? = nil,
+        public isPublic: Bool? = nil,
+        songIdsToAdd: [String] = [],
+        songIndexesToRemove: [Int] = []
+    ) async throws {
+        var items: [URLQueryItem] = [URLQueryItem(name: "playlistId", value: playlistId)]
+        if let name      { items.append(URLQueryItem(name: "name",    value: name)) }
+        if let comment   { items.append(URLQueryItem(name: "comment", value: comment)) }
+        if let isPublic  { items.append(URLQueryItem(name: "public",  value: isPublic ? "true" : "false")) }
+        for id    in songIdsToAdd        { items.append(URLQueryItem(name: "songIdToAdd",        value: id)) }
+        for index in songIndexesToRemove { items.append(URLQueryItem(name: "songIndexToRemove",  value: String(index))) }
+
+        guard let url = buildURLMulti(endpoint: "updatePlaylist", items: items) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        // updatePlaylist always returns status-only — no payload expected.
+        try decodeWriteOK(data: data)
+    }
+
+    /// Deletes a playlist by ID.
+    ///
+    /// Subsonic endpoint: `deletePlaylist.view?id=<id>`
+    ///
+    /// Returns on a status-ok response.  Throws a mapped `APIError` on failure.
+    public func deletePlaylist(id: String) async throws {
+        guard let url = buildURL(endpoint: "deletePlaylist", params: ["id": id]) else {
+            throw APIError.invalidURL
+        }
+        let data = try await fetchRawData(from: url, attempt: 1)
+        try decodeWriteOK(data: data)
+    }
+
     // MARK: - Playlist endpoints
 
     /// Fetches all playlists visible to the authenticated user from `getPlaylists.view`.
@@ -654,6 +729,68 @@ public struct NavidromeAPI {
         }
     }
 
+    // MARK: - Playlist write payload types (msl.3)
+
+    // createPlaylist — some servers echo the new playlist; others return status-only.
+    // The outer decoder picks this up from the inner "subsonic-response" container.
+    private struct CreatePlaylistPayload: Decodable {
+        let playlist: Playlist?
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            playlist = try? c.decodeIfPresent(Playlist.self, forKey: .playlist)
+        }
+
+        enum CodingKeys: String, CodingKey { case playlist }
+    }
+
+    // MARK: - Write-response helpers (msl.3)
+
+    /// Decodes a write-endpoint response that may or may not carry a payload.
+    ///
+    /// - If the envelope status is "ok", decode and return `T`.
+    /// - If the envelope status is "ok" but the inner payload is absent, return `nil`.
+    /// - If the envelope status is "failed", throw the mapped `APIError`.
+    /// - If the data is not a Subsonic envelope at all, throw `.notSubsonicServer`.
+    private func decodeWriteResponse<T: Decodable>(
+        data: Data,
+        payloadType: T.Type
+    ) throws -> T? {
+        // First validate the status envelope.
+        let statusEnvelope: SubsonicStatusEnvelope
+        do {
+            statusEnvelope = try JSONDecoder().decode(SubsonicStatusEnvelope.self, from: data)
+        } catch {
+            throw APIError.notSubsonicServer
+        }
+        try checkStatus(statusEnvelope.status, error: statusEnvelope.error)
+
+        // Status is "ok" — attempt to decode the payload.  Missing payload is fine.
+        do {
+            let wrapper = try JSONDecoder().decode(SubsonicEnvelope<T>.self, from: data)
+            return wrapper.payload
+        } catch {
+            // The envelope status was "ok" but the payload is absent or unparseable.
+            // Treat as a successful write with no returned body.
+            return nil
+        }
+    }
+
+    /// Decodes a write-endpoint response that is always status-only (no payload).
+    ///
+    /// - status "ok" → returns normally
+    /// - status "failed" → throws the mapped `APIError`
+    /// - not a Subsonic envelope → throws `.notSubsonicServer`
+    private func decodeWriteOK(data: Data) throws {
+        let envelope: SubsonicStatusEnvelope
+        do {
+            envelope = try JSONDecoder().decode(SubsonicStatusEnvelope.self, from: data)
+        } catch {
+            throw APIError.notSubsonicServer
+        }
+        try checkStatus(envelope.status, error: envelope.error)
+    }
+
     // MARK: - Private helpers
 
     private func buildURL(endpoint: String, params: [String: String]) -> URL? {
@@ -666,6 +803,22 @@ public struct NavidromeAPI {
         for (key, value) in params {
             queryItems.append(URLQueryItem(name: key, value: value))
         }
+        components?.queryItems = queryItems
+        return components?.url
+    }
+
+    /// Builds a URL with repeated query items (e.g. multiple `songId=` params).
+    ///
+    /// Unlike `buildURL(endpoint:params:)` which takes a `[String: String]` (one
+    /// value per key), this variant accepts a full `[URLQueryItem]` list so the
+    /// caller can repeat the same key name multiple times.
+    private func buildURLMulti(endpoint: String, items: [URLQueryItem]) -> URL? {
+        var components = URLComponents(url: host, resolvingAgainstBaseURL: false)
+        components?.path = "/rest/\(endpoint).view"
+
+        let auth = SubsonicAuth(username: username, password: password)
+        var queryItems = auth.queryItems()
+        queryItems.append(contentsOf: items)
         components?.queryItems = queryItems
         return components?.url
     }
