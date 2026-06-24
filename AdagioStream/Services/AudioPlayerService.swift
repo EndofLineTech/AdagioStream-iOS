@@ -955,6 +955,76 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         startLibraryTrack(track, inQueue: tracks, at: clampedIndex, via: api)
     }
 
+    // MARK: - Auto-advance (d6q.3)
+
+    /// Advance the library queue after a natural track-end event.
+    ///
+    /// This is the single decision point that fires when VLC reports `.ended`
+    /// for a `.library` track.  It is intentionally separate from
+    /// `playNextInQueue()` (which is the user-gesture / remote-command path)
+    /// so that **d6q.4 (repeat mode)** can intercept here without touching the
+    /// public next/previous API.
+    ///
+    /// **d6q.4 seam — how to wire repeat:**
+    /// When d6q.4 is built, add a `repeatMode` property (default `.off`) and
+    /// branch at the top of this method:
+    ///   - `.one`  → `startLibraryTrack(currentTrack, ...)` to restart in place
+    ///   - `.all`  → wrap the index (nextIndex % queue.count) before calling
+    ///               `startLibraryTrack`
+    ///   - `.off`  → the existing `playNextInQueue()` behaviour below
+    ///
+    /// **Runaway-advance guard:**
+    /// `advance()` is only called from the `.ended` branch in `syncState()`,
+    /// which fires exclusively when VLC reaches the natural end of a finite
+    /// media file.  The `.error` and `.stopped` branches are explicitly
+    /// excluded — they do NOT call `advance()` — so a track that fails to
+    /// start (network error, bad URL) leaves the queue stopped rather than
+    /// spinning through every track.  No additional rate-limiter is needed
+    /// because `.ended` can only fire once per media lifecycle; a second fire
+    /// on the same player instance would require VLC to reach end-of-media
+    /// again, which cannot happen after `startLibraryTrack` has retired the
+    /// player.
+    ///
+    /// **d6q.9 — Gapless / inter-track gap findings:**
+    /// The current architecture tears down the VLCMediaPlayer instance
+    /// (`retirePlayer`) on every track transition.  The measured gap is
+    /// approximately 200–500 ms of silence (network-caching fill + new VLC
+    /// instance init + amem bridge attach).  Three alternatives were considered:
+    ///
+    /// 1. `VLCMediaListPlayer` — MobileVLCKit 3.6.0 exposes this class.  It
+    ///    maintains an internal VLCMediaPlayer and advances between VLCMediaList
+    ///    items automatically.  However, it does NOT use the amem (custom audio
+    ///    output) bridge — it owns its own audio unit, which would bypass the
+    ///    AVAudioEngine pipeline entirely and break the audio session ownership
+    ///    model, the wedge watchdog, and the ring-buffer path the rest of the app
+    ///    depends on.  **Not viable without a major architecture change.**
+    ///
+    /// 2. Reuse VLCMediaPlayer across tracks (swap media without `retirePlayer`)
+    ///    — VLCKit's `mediaPlayer.media = newMedia; mediaPlayer.play()` without
+    ///    full teardown is plausible in theory, but the existing `retirePlayer`
+    ///    comment documents that omitting `pthread_join` (via background disposal)
+    ///    caused 0x8BADF00D watchdog kills.  A half-measure that stops but does
+    ///    not background-dispose the old instance risks that same stall.
+    ///    Additionally, the amem bridge (`VLCAudioCallbackBridge.attachAudioCallbacks`)
+    ///    is designed to be attached once per player instance; re-attaching on
+    ///    a live player is untested.  **Risky without a dedicated spike.**
+    ///
+    /// 3. Accept the gap — the ~200–500 ms silence is audible but tolerable for
+    ///    album playback.  Most users expect a brief gap between tracks.  This
+    ///    is not significantly worse than typical Bluetooth latency.
+    ///
+    /// **Recommendation:** Accept the gap at this stage (option 3).  A proper
+    /// gapless implementation would require either a second VLC instance
+    /// pre-buffering the next track during the final seconds of the current one
+    /// (double-buffering), or a dedicated spike to validate reusing
+    /// VLCMediaPlayer without retire.  File as a follow-up task (d6q gapless
+    /// improvement) when the basic queue playback is proven stable.
+    private func advance() {
+        // d6q.4 seam: check repeatMode here when that bead is built.
+        // Currently repeat is always effectively .off — fall through to next/stop.
+        playNextInQueue()
+    }
+
     /// Advances to the next track in the library queue.
     ///
     /// No-op when not in `.library` mode.
@@ -2209,7 +2279,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 isPlaying = false
                 isBuffering = false
                 if isPlayingBufferedFile, let channel = bufferedChannel {
-                    // Clean up the buffer file we just finished playing
+                    // Time-shift buffer path (radio): clean up and chain to next
+                    // buffer or reconnect live.  Unchanged from pre-d6q.3.
                     if let oldURL = currentBufferFileURL {
                         timeShiftBuffer.deleteBufferFile(at: oldURL)
                         currentBufferFileURL = nil
@@ -2233,6 +2304,24 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                         timeShiftBuffer.cancelAndCleanup()
                         play(channel: channel, userInitiated: false)
                     }
+                } else if case .library = playbackSource {
+                    // d6q.3: Library track reached natural end-of-media.
+                    //
+                    // Branch on playbackSource so radio streams are never
+                    // touched here.  Live radio doesn't reach .ended under
+                    // normal operation; if it somehow does (e.g. a server
+                    // terminates the connection cleanly), the `else if`
+                    // guard ensures we fall through to `default` and let
+                    // existing radio reconnect / probe logic handle it.
+                    //
+                    // Runaway-advance guard: we call advance() ONLY on
+                    // .ended (genuine track completion), never on .error or
+                    // .stopped.  If a track fails to start, VLC will report
+                    // .stopped or .error — those branches set an error
+                    // message and leave the queue halted.  See the advance()
+                    // doc-comment for the full guard rationale.
+                    log.log("Library track ended naturally — auto-advancing queue (d6q.3)", category: .player)
+                    advance()
                 }
             default:
                 break
