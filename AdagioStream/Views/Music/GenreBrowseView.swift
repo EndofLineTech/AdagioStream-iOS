@@ -138,6 +138,9 @@ struct GenreDetailView: View {
 
     @EnvironmentObject private var audioPlayer: AudioPlayerService
 
+    // j7d.1: "Add to Playlist" sheet state — mirrors AlbumDetailView/PlaylistDetailView
+    @State private var trackForAddToPlaylist: Track?
+
     var body: some View {
         content
             .navigationTitle(genre.name)
@@ -146,6 +149,14 @@ struct GenreDetailView: View {
                 if viewModel.selectedGenre?.name != genre.name {
                     await viewModel.loadTracks(forGenre: genre)
                 }
+            }
+            // j7d.1: "Add to Playlist" sheet — mirrors AlbumDetailView/PlaylistDetailView
+            .sheet(item: $trackForAddToPlaylist) { track in
+                NavidromeAddToPlaylistSheet(
+                    track: track,
+                    viewModel: viewModel,
+                    api: api
+                )
             }
     }
 
@@ -216,6 +227,15 @@ struct GenreDetailView: View {
                 }
                 .accessibilityLabel(genreTrackAccessibilityLabel(track))
                 .accessibilityHint("Tap to play")
+                // j7d.1: "Add to Playlist" context menu — mirrors AlbumDetailView
+                .contextMenu {
+                    Button {
+                        trackForAddToPlaylist = track
+                    } label: {
+                        Label("Add to Playlist…", systemImage: "music.note.list")
+                    }
+                    .accessibilityLabel("Add \(track.title) to a playlist")
+                }
             }
         }
         .listStyle(.plain)

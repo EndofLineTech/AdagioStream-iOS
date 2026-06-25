@@ -27,7 +27,23 @@ struct SearchResultsView: View {
 
     @EnvironmentObject private var audioPlayer: AudioPlayerService
 
+    // j7d.1: "Add to Playlist" sheet state — mirrors AlbumDetailView/PlaylistDetailView
+    @State private var trackForAddToPlaylist: Track?
+
     var body: some View {
+        stateContent
+            // j7d.1: "Add to Playlist" sheet — mirrors AlbumDetailView/PlaylistDetailView
+            .sheet(item: $trackForAddToPlaylist) { track in
+                NavidromeAddToPlaylistSheet(
+                    track: track,
+                    viewModel: viewModel,
+                    api: api
+                )
+            }
+    }
+
+    @ViewBuilder
+    private var stateContent: some View {
         switch viewModel.searchState {
         case .idle:
             // Non-empty query debouncing — show a spinner while we wait.
@@ -143,6 +159,15 @@ struct SearchResultsView: View {
                         }
                         // 65x.3: Accessibility label built inside the row view
                         .accessibilityHint("Plays song")
+                        // j7d.1: "Add to Playlist" context menu — mirrors AlbumDetailView
+                        .contextMenu {
+                            Button {
+                                trackForAddToPlaylist = track
+                            } label: {
+                                Label("Add to Playlist…", systemImage: "music.note.list")
+                            }
+                            .accessibilityLabel("Add \(track.title) to a playlist")
+                        }
                     }
                 } header: {
                     Text("Songs")
