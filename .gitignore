@@ -19,3 +19,4 @@ build/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+.claude/
