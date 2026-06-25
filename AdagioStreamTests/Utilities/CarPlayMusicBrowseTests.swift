@@ -3,6 +3,7 @@
 // Unit tests for the pure-logic helpers added to CarPlayTemplateManager.
 //   8rg.1: formatDuration
 //   8rg.2: shuffleButtonSelected / repeatButtonSelected button-state mapping
+//   j7d.3: upNextRowDetail — row label logic for the Up Next queue list
 //
 // CarPlay UI itself can't be exercised in the simulator (no CPInterfaceController
 // without a real CarPlay connection), but these static helpers are
@@ -95,6 +96,57 @@ final class CarPlayMusicBrowseTests: XCTestCase {
         XCTAssertEqual(RepeatMode.off.next, .all)
         XCTAssertEqual(RepeatMode.all.next, .one)
         XCTAssertEqual(RepeatMode.one.next, .off)
+    }
+
+    // MARK: - upNextRowDetail (j7d.3)
+
+    func testUpNextRowDetailCurrentTrack() {
+        // The currently-playing track shows "Now Playing" regardless of duration.
+        XCTAssertEqual(
+            CarPlayTemplateManager.upNextRowDetail(index: 2, currentIndex: 2, duration: 225),
+            "Now Playing",
+            "Currently-playing track should show 'Now Playing'"
+        )
+        XCTAssertEqual(
+            CarPlayTemplateManager.upNextRowDetail(index: 0, currentIndex: 0, duration: nil),
+            "Now Playing",
+            "Currently-playing track with no duration should still show 'Now Playing'"
+        )
+    }
+
+    func testUpNextRowDetailOtherTrackWithDuration() {
+        // A non-playing track with a known duration shows the formatted duration.
+        XCTAssertEqual(
+            CarPlayTemplateManager.upNextRowDetail(index: 1, currentIndex: 0, duration: 225),
+            "3:45",
+            "Non-playing track with duration should show formatted duration"
+        )
+        XCTAssertEqual(
+            CarPlayTemplateManager.upNextRowDetail(index: 3, currentIndex: 0, duration: 3661),
+            "1:01:01",
+            "Non-playing track with hour-range duration should format correctly"
+        )
+    }
+
+    func testUpNextRowDetailOtherTrackNoDuration() {
+        // A non-playing track with no duration returns nil.
+        XCTAssertNil(
+            CarPlayTemplateManager.upNextRowDetail(index: 1, currentIndex: 0, duration: nil),
+            "Non-playing track with no duration should return nil detail"
+        )
+    }
+
+    func testUpNextRowDetailNoCurrentIndex() {
+        // When currentIndex is nil (queue not fully initialized), no "Now Playing" label.
+        XCTAssertEqual(
+            CarPlayTemplateManager.upNextRowDetail(index: 0, currentIndex: nil, duration: 60),
+            "1:00",
+            "With no currentIndex, row shows duration"
+        )
+        XCTAssertNil(
+            CarPlayTemplateManager.upNextRowDetail(index: 0, currentIndex: nil, duration: nil),
+            "With no currentIndex and no duration, row detail is nil"
+        )
     }
 }
 #endif

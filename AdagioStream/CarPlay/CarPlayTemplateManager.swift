@@ -5,7 +5,7 @@ import MediaPlayer
 import UIKit
 
 @MainActor
-class CarPlayTemplateManager {
+class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     let interfaceController: CPInterfaceController
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
@@ -45,10 +45,15 @@ class CarPlayTemplateManager {
         self.interfaceController = interfaceController
         self.audioPlayer = audioPlayer
         self.providerManager = providerManager
+        super.init()
     }
 
     func configure() {
         log.log("configure() starting", category: .carplay)
+        // j7d.3: register this manager as the CPNowPlayingTemplateObserver so the
+        // up-next button tap is delivered via nowPlayingTemplateUpNextButtonTapped(_:).
+        // Only one observer can be active at a time; adding again is a no-op.
+        CPNowPlayingTemplate.shared.add(self)
         Task {
             let settings: AppSettings = await PersistenceService.shared.loadOrDefault(
                 from: Constants.StorageKeys.settings, default: .default
@@ -274,10 +279,10 @@ class CarPlayTemplateManager {
     ///      from `.one` visually (it just shows a highlighted repeat icon), which
     ///      matches the single-button paradigm.
     ///
-    /// Up Next: `isUpNextButtonEnabled` is left `false` (default).  The
-    /// `CPNowPlayingTemplateObserver` protocol would be required to handle the
-    /// button tap and push a queue list template; that observer wiring is deferred
-    /// until a dedicated queue-browsing bead.
+    /// Up Next (j7d.3): `isUpNextButtonEnabled` is set to `true` for library
+    /// playback.  Taps are delivered to this manager via
+    /// `nowPlayingTemplateUpNextButtonTapped(_:)` (CPNowPlayingTemplateObserver),
+    /// which pushes a `CPListTemplate` showing the queue.
     private func updateNowPlayingButtonsForLibrary(_ nowPlaying: CPNowPlayingTemplate) {
         let shuffleButton = CPNowPlayingShuffleButton { [weak self] _ in
             Task { @MainActor in
@@ -300,6 +305,10 @@ class CarPlayTemplateManager {
 
         nowPlaying.updateNowPlayingButtons([shuffleButton, repeatButton])
 
+        // j7d.3: enable the Up Next affordance for library playback.
+        nowPlaying.upNextTitle = "Up Next"
+        nowPlaying.isUpNextButtonEnabled = true
+
         log.log("CarPlay NowPlaying (library): shuffle=\(audioPlayer.shuffleEnabled), repeat=\(audioPlayer.repeatMode)", category: .carplay)
     }
 
@@ -307,7 +316,12 @@ class CarPlayTemplateManager {
     ///
     /// This is the existing behavior, extracted verbatim so radio now-playing
     /// is never regressed by the library branch above.
+    ///
+    /// j7d.3: Up Next is explicitly disabled for radio — radio has no seekable
+    /// queue, so the affordance does not apply.
     private func updateNowPlayingButtonsForRadio(_ nowPlaying: CPNowPlayingTemplate) {
+        // j7d.3: disable Up Next for radio (no queue to browse).
+        nowPlaying.isUpNextButtonEnabled = false
         let buttonSize = CGSize(width: 44, height: 44)
 
         let isFavorite = providerManager.channels
@@ -1015,5 +1029,86 @@ class CarPlayTemplateManager {
     /// The full cycle driven by `cycleRepeatMode()` is: `.off → .all → .one → .off`.
     nonisolated static func repeatButtonSelected(repeatMode: RepeatMode) -> Bool {
         repeatMode != .off
+    }
+
+    // MARK: - Up Next Queue (j7d.3)
+
+    /// Called by CarPlay when the user taps the Up Next button on the
+    /// `CPNowPlayingTemplate`.  Only fires when `isUpNextButtonEnabled == true`,
+    /// which we set only during library playback.
+    ///
+    /// Pushes a `CPListTemplate` showing the full queue as a snapshot at the
+    /// moment of the tap.  Queue refresh while the list is open is best-effort:
+    /// because CarPlay template updates must go through
+    /// `CPListTemplate.updateSections`, and a track advance fires
+    /// `updateNowPlayingButtons` (not a direct list-refresh path), the queue
+    /// list is a snapshot.  This is acceptable: the list closes when the user
+    /// taps a row (the jump pops back to Now Playing), and track advances while
+    /// the list is open are an edge case that can be addressed in a follow-up.
+    func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
+        log.log("j7d.3: Up Next tapped", category: .carplay)
+        pushUpNextQueue()
+    }
+
+    /// Builds and pushes a `CPListTemplate` containing the current library queue.
+    ///
+    /// - The currently-playing track is indicated with "(Now Playing)" in its
+    ///   detail text.
+    /// - Tapping any row calls `audioPlayer.playQueueItem(at:)` to jump to that
+    ///   track and then pops back to the Now Playing template.
+    /// - Radio playback or an empty queue is a safe no-op (guard at the top).
+    /// - Cover art per row is omitted for simplicity; the Navidrome API requires
+    ///   a size-specific fetch per track, and the queue may be large.  If cover
+    ///   art is desired in a follow-up, reuse `loadMusicCoverArt(id:api:into:)`.
+    private func pushUpNextQueue() {
+        let queue = audioPlayer.currentLibraryQueue
+        guard !queue.isEmpty else {
+            log.log("j7d.3: Up Next — queue empty or not in library mode, no-op", category: .carplay)
+            return
+        }
+        let currentIndex = audioPlayer.currentQueueIndex
+
+        let items: [CPListItem] = queue.enumerated().map { (index, track) in
+            let isPlaying = index == currentIndex
+            let detail: String?
+            if isPlaying {
+                detail = "Now Playing"
+            } else if let duration = track.duration {
+                detail = Self.formatDuration(duration)
+            } else {
+                detail = nil
+            }
+            let item = CPListItem(text: track.title, detailText: detail)
+            item.handler = { [weak self] _, completion in
+                guard let self else { completion(); return }
+                self.log.log("j7d.3: Up Next row tapped — jumping to index=\(index) \"\(track.title)\"", category: .carplay)
+                self.audioPlayer.playQueueItem(at: index)
+                // Return to Now Playing after the jump.
+                self.pushNowPlaying()
+                completion()
+            }
+            return item
+        }
+
+        let section = CPListSection(items: items)
+        let template = CPListTemplate(title: "Up Next", sections: [section])
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+        log.log("j7d.3: Up Next list pushed — \(queue.count) tracks, currentIndex=\(currentIndex.map(String.init) ?? "nil")", category: .carplay)
+    }
+
+    /// Returns the detail text that should appear on an Up Next queue row.
+    ///
+    /// - If the row is the currently-playing track, returns `"Now Playing"`.
+    /// - Otherwise, returns the formatted duration string (if available) or `nil`.
+    ///
+    /// Extracted as a static helper so unit tests can verify the row-label
+    /// logic without instantiating a live `CarPlayTemplateManager`.
+    nonisolated static func upNextRowDetail(
+        index: Int,
+        currentIndex: Int?,
+        duration: Int?
+    ) -> String? {
+        if index == currentIndex { return "Now Playing" }
+        return duration.map { formatDuration($0) }
     }
 }
