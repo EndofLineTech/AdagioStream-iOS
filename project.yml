@@ -83,13 +83,12 @@ targets:
         # so NSAllowsArbitraryLoads does NOT silently downgrade them to HTTP.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-          NSAllowsArbitraryLoadsForMedia: true
           NSExceptionDomains:
-            # xmplaylist.com — SiriusXM track metadata (PinnedURLSession.xmplaylist)
+            # xmplaylist.com — SiriusXM track metadata (APISession.xmplaylist)
             xmplaylist.com:
               NSExceptionAllowsInsecureHTTPLoads: false
               NSIncludesSubdomains: true
-            # site.api.espn.com — ESPN live scores (PinnedURLSession.espn)
+            # site.api.espn.com — ESPN live scores (APISession.espn)
             espn.com:
               NSExceptionAllowsInsecureHTTPLoads: false
               NSIncludesSubdomains: true
@@ -192,7 +191,6 @@ targets:
         # Navidrome hosts, app's own API endpoints re-pinned to TLS.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
-          NSAllowsArbitraryLoadsForMedia: true
           NSExceptionDomains:
             xmplaylist.com:
               NSExceptionAllowsInsecureHTTPLoads: false
