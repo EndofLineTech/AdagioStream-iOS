@@ -15,6 +15,7 @@ ADR-NNNN".
 | [0001](0001-app-owned-avaudioengine-vlc-amem-pipeline.md) | App-owned AVAudioEngine with libvlc amem PCM callbacks | Accepted |
 | [0002](0002-vlckitspm-single-vendor-dependency.md) | VLCKitSPM as a single-vendor media engine dependency | Accepted |
 | [0003](0003-carplay-no-auto-resume-on-reconnect.md) | CarPlay disconnect/reconnect does not auto-resume playback | Accepted |
+| [0004](0004-gapless-playback-design-and-deferral.md) | Gapless Playback — Design and Deferral Finding | Proposed |
 
 ## Template
 
