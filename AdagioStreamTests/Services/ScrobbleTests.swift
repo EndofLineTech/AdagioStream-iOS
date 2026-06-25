@@ -142,4 +142,103 @@ final class ScrobbleThresholdTests: XCTestCase {
             "Pure threshold function is source-agnostic; source guard belongs to caller"
         )
     }
+
+    // MARK: - Scrobbler.shouldSubmit is accessible directly (extracted type)
+
+    /// Verifies that `Scrobbler.shouldSubmit` is the canonical implementation and
+    /// matches the forwarding alias on AudioPlayerService.
+    func testScrobblerShouldSubmitMatchesForwardingAlias() {
+        let cases: [(Double, Double?)] = [
+            (0, nil), (239, nil), (240, nil), (300, nil),
+            (119, 240), (120, 240), (180, 360), (44, 90),
+        ]
+        for (elapsed, duration) in cases {
+            XCTAssertEqual(
+                Scrobbler.shouldSubmit(elapsed: elapsed, duration: duration),
+                AudioPlayerService.scrobbleShouldSubmit(elapsed: elapsed, duration: duration),
+                "Scrobbler.shouldSubmit must match AudioPlayerService.scrobbleShouldSubmit for elapsed=\(elapsed) duration=\(String(describing: duration))"
+            )
+        }
+    }
+}
+
+// MARK: - Scrobbler state management tests
+
+@MainActor
+final class ScrobblerStateTests: XCTestCase {
+
+    // MARK: - Initial state
+
+    func testInitialSubmissionSentIsFalse() {
+        let scrobbler = Scrobbler()
+        XCTAssertFalse(scrobbler.submissionSent,
+            "Scrobbler starts with submissionSent=false")
+    }
+
+    // MARK: - reset()
+
+    func testResetClearsSubmissionSent() {
+        let scrobbler = Scrobbler()
+        // Simulate the submission being marked
+        scrobbler.fireSubmissionIfNeeded(
+            trackID: "t-1",
+            via: NavidromeAPI(host: URL(string: "https://test.example")!, username: "u", password: "p")
+        )
+        XCTAssertTrue(scrobbler.submissionSent,
+            "submissionSent must be true after fireSubmissionIfNeeded is called")
+
+        scrobbler.reset()
+        XCTAssertFalse(scrobbler.submissionSent,
+            "reset() must clear submissionSent for the next track")
+    }
+
+    func testResetIsIdempotent() {
+        let scrobbler = Scrobbler()
+        scrobbler.reset()
+        scrobbler.reset()
+        XCTAssertFalse(scrobbler.submissionSent, "Double reset() must leave submissionSent=false")
+    }
+
+    // MARK: - fireSubmissionIfNeeded once-guard
+
+    func testSubmissionSentAfterFirstFire() {
+        let scrobbler = Scrobbler()
+        let api = NavidromeAPI(host: URL(string: "https://test.example")!, username: "u", password: "p")
+        XCTAssertFalse(scrobbler.submissionSent, "Precondition: submissionSent=false before first fire")
+        scrobbler.fireSubmissionIfNeeded(trackID: "t-1", via: api)
+        XCTAssertTrue(scrobbler.submissionSent,
+            "submissionSent must be true immediately after fireSubmissionIfNeeded")
+    }
+
+    func testSubmissionSentRemainsAfterSecondFire() {
+        let scrobbler = Scrobbler()
+        let api = NavidromeAPI(host: URL(string: "https://test.example")!, username: "u", password: "p")
+        scrobbler.fireSubmissionIfNeeded(trackID: "t-1", via: api)
+        scrobbler.fireSubmissionIfNeeded(trackID: "t-1", via: api) // second call — must be no-op
+        XCTAssertTrue(scrobbler.submissionSent,
+            "submissionSent remains true; second fire is a no-op (once-per-track guard)")
+    }
+
+    // MARK: - reset() → fire → reset() cycle
+
+    func testResetFireResetCycle() {
+        let scrobbler = Scrobbler()
+        let api = NavidromeAPI(host: URL(string: "https://test.example")!, username: "u", password: "p")
+
+        // Track 1
+        scrobbler.reset()
+        XCTAssertFalse(scrobbler.submissionSent, "Track 1 start: submissionSent=false after reset")
+        scrobbler.fireSubmissionIfNeeded(trackID: "t-1", via: api)
+        XCTAssertTrue(scrobbler.submissionSent, "Track 1: submissionSent=true after fire")
+
+        // Track 2
+        scrobbler.reset()
+        XCTAssertFalse(scrobbler.submissionSent, "Track 2 start: submissionSent=false after reset")
+        scrobbler.fireSubmissionIfNeeded(trackID: "t-2", via: api)
+        XCTAssertTrue(scrobbler.submissionSent, "Track 2: submissionSent=true after fire")
+
+        // Track 3 (no submission fired — verify guard still false)
+        scrobbler.reset()
+        XCTAssertFalse(scrobbler.submissionSent, "Track 3 start: submissionSent=false after reset with no fire")
+    }
 }

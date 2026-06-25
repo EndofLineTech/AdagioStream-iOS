@@ -68,12 +68,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
     // MARK: - Scrobble state (65x.1)
 
-    /// Whether the submission scrobble has already been fired for the currently-playing
-    /// library track.  Reset to `false` at the start of every new track
-    /// (`startLibraryTrack`).  Guard: once true it stays true for the lifetime of
-    /// the track play so a second call is never sent even if `syncState` ticks
-    /// several more times past the threshold.
-    private var scrobbleSubmissionSent: Bool = false
+    /// Scrobble state + fire helpers.  Extracted to Scrobbler.swift; AudioPlayerService
+    /// owns the instance and delegates reset/fire calls to it.
+    private let scrobbler = Scrobbler()
+
     /// Human-readable artist display name threaded in from the album context
     /// by `play(track:displayArtistName:via:)`.  Overrides `Track.displaySubtitle`
     /// (which falls back to `artistId`) in `updateNowPlayingInfoForTrack`.
@@ -1769,55 +1767,23 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     // MARK: - Scrobble helpers (65x.1)
+    //
+    // Implementation lives in Scrobbler.swift.  AudioPlayerService keeps a
+    // forwarding static so existing call sites (including ScrobbleTests.swift)
+    // compile unchanged.
 
-    /// Determines whether the submission scrobble threshold has been reached.
-    ///
-    /// Standard Last.fm rule: submission fires when the track has been played
-    /// for **≥ 4 minutes** OR **≥ 50% of its duration**, whichever comes first.
-    ///
-    /// - If `duration` is nil or zero (unknown): falls back to the 4-minute rule only.
-    /// - Returns `true` when the threshold is reached, `false` otherwise.
-    ///
-    /// This is a pure function so it can be unit-tested independently of playback state.
+    /// Forwarding alias to `Scrobbler.shouldSubmit(elapsed:duration:)`.
     /// `nonisolated` so tests can call it without a MainActor context.
     nonisolated static func scrobbleShouldSubmit(elapsed: Double, duration: Double?) -> Bool {
-        if elapsed >= 240 { return true }           // ≥ 4 minutes
-        guard let dur = duration, dur > 0 else { return false }
-        return elapsed >= dur * 0.5                 // ≥ 50 % of duration
+        Scrobbler.shouldSubmit(elapsed: elapsed, duration: duration)
     }
 
-    /// Fires a now-playing (`submission=false`) scrobble for the given track.
-    /// Fire-and-forget: errors are logged at debug level and swallowed so they
-    /// can never disrupt or stop playback.
     private func fireNowPlayingScrobble(trackID: String, via api: NavidromeAPI) {
-        Task {
-            do {
-                try await api.scrobble(id: trackID, submission: false)
-                DebugLogger.shared.log("Scrobble now-playing sent: trackID=\(trackID)", category: .player)
-            } catch {
-                DebugLogger.shared.log("Scrobble now-playing FAILED (swallowed): \(error.localizedDescription)", category: .player)
-            }
-        }
+        scrobbler.fireNowPlaying(trackID: trackID, via: api)
     }
 
-    /// Fires a submission (`submission=true`) scrobble for the given track, once.
-    ///
-    /// Guards on `scrobbleSubmissionSent` to ensure exactly one submission per
-    /// track play.  Marks the guard immediately before the async call so a second
-    /// tick of `syncState` arriving before the network round-trip completes cannot
-    /// enqueue a duplicate.
     private func fireSubmissionScrobbleIfNeeded(trackID: String, via api: NavidromeAPI) {
-        guard !scrobbleSubmissionSent else { return }
-        scrobbleSubmissionSent = true
-        let timeMs = Int64(Date().timeIntervalSince1970 * 1000)
-        Task {
-            do {
-                try await api.scrobble(id: trackID, submission: true, time: timeMs)
-                DebugLogger.shared.log("Scrobble submission sent: trackID=\(trackID)", category: .player)
-            } catch {
-                DebugLogger.shared.log("Scrobble submission FAILED (swallowed): \(error.localizedDescription)", category: .player)
-            }
-        }
+        scrobbler.fireSubmissionIfNeeded(trackID: trackID, via: api)
     }
 
     /// Internal worker: tears down any active stream and starts playing a
@@ -1923,7 +1889,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         playbackSource = .library(queue: queue, index: index)
 
         // 65x.1: Reset the per-track submission guard and fire the now-playing scrobble.
-        scrobbleSubmissionSent = false
+        scrobbler.reset()
         fireNowPlayingScrobble(trackID: track.id, via: api)
         // d6q.5: enable scrubber + ensure next/prev are on for library mode.
         updateRemoteCommandsForSource(playbackSource)
@@ -3204,7 +3170,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
         // 65x.1: Scrobble submission threshold check — library only.
         // Runs every timer tick so even a final tick just before .ended can
-        // satisfy the threshold.  The `scrobbleSubmissionSent` flag ensures
+        // satisfy the threshold.  The `scrobbler.submissionSent` guard ensures
         // exactly one submission per track play.
         if case .library = playbackSource,
            let track = currentTrack,
