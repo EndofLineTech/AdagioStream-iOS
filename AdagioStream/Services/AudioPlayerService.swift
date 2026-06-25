@@ -557,6 +557,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 self.interruptionBeganCount += 1
                 self.log.log("Interruption BEGAN: isActive=\(self.isActiveSession), channel=\"\(self.currentChannel?.name ?? "nil")\", vlcState=\(self.mediaPlayer.state.rawValue), beganCount=\(self.interruptionBeganCount), endedCount=\(self.interruptionEndedCount)", category: .interruption)
                 self.logAudioSessionSnapshot("interruption.began")
+                // 46u: suppress AVAudioEngine restart during ride-out so a
+                // route/format change fired by Siri does not leak audio.
+                AudioOutput.shared.noteInterruptionBegan()
 
                 // Keep VLC alive during short interruptions — its internal
                 // network-caching buffer (typically 8s) bridges the gap
@@ -657,6 +660,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
             case .ended:
                 self.interruptionEndedCount += 1
+                // 46u: clear interruption gate so the engine can restart.
+                AudioOutput.shared.noteInterruptionEnded()
                 let options = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
                 let shouldResume = AVAudioSession.InterruptionOptions(rawValue: options).contains(.shouldResume)
                 // beganCount > endedCount means a prior .began has not yet been
@@ -2109,6 +2114,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private func assertSessionOwnership(context: String) -> Bool {
         let session = AVAudioSession.sharedInstance()
         let otherPlaying = session.isOtherAudioPlaying
+        // 46u: stuck-flag safety — every deliberate-play path that comes
+        // through here must be allowed to start the engine regardless of
+        // notification balance (unmatched .began with no .ended).
+        AudioOutput.shared.clearInterruptionGateForDeliberatePlay()
         do {
             if otherPlaying {
                 try session.setActive(false, options: .notifyOthersOnDeactivation)

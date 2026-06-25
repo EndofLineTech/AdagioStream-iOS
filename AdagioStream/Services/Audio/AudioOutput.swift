@@ -40,6 +40,21 @@ public final class AudioOutput {
     /// session never ended".  Set true by start(), cleared by stop().
     private var intendedToRun = false
 
+    /// Whether an AVAudioSession interruption (e.g. Siri reading a text) is
+    /// currently in effect.  Set TRUE by `noteInterruptionBegan()`, cleared
+    /// to FALSE by `noteInterruptionEnded()`.
+    ///
+    /// The config-change handler MUST NOT restart the engine while this is
+    /// true: during ride-out the app keeps VLC running with `intendedToRun`
+    /// still set, so the only additional gate between a harmless config-change
+    /// and ~2 s of audible audio leak over Siri is this flag.
+    ///
+    /// Stuck-flag safety: every deliberate-play path (reactivateAndPlay,
+    /// play(channel:), startLibraryTrack, assertSessionOwnership) also
+    /// clears this flag so that an unbalanced began/ended sequence can never
+    /// permanently block the engine.
+    private var isInterrupted = false
+
     /// Number of consecutive engine.start() failures since the last success.
     /// A sustained streak means the engine is wedged (iOS won't let us bind
     /// the route) — the signature of the unrecoverable CarPlay/Siri wedge.
@@ -117,11 +132,17 @@ public final class AudioOutput {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            // Only resurrect the engine if the app still intends to play.
-            // After a genuine stop (user stop / CarPlay disconnect) the route
-            // change must NOT restart us, or the engine runs idle forever.
-            guard self.intendedToRun else {
-                self.log.log("AudioOutput: configuration changed while idle — not restarting (intendedToRun=false)", category: .audioSession)
+            // Use the pure predicate so the restart decision is testable
+            // independently of the live engine/session.
+            guard AudioOutput.shouldRestartEngineOnConfigChange(
+                intendedToRun: self.intendedToRun,
+                isInterrupted: self.isInterrupted
+            ) else {
+                if self.isInterrupted {
+                    self.log.log("AudioOutput: configuration changed while interrupted — not restarting (intendedToRun=\(self.intendedToRun), isInterrupted=true)", category: .audioSession)
+                } else {
+                    self.log.log("AudioOutput: configuration changed while idle — not restarting (intendedToRun=false)", category: .audioSession)
+                }
                 return
             }
             self.log.log("AudioOutput: engine configuration changed (route/format) — restarting engine", category: .audioSession)
@@ -183,5 +204,52 @@ public final class AudioOutput {
         guard engine.isRunning else { return }
         engine.stop()
         log.log("AudioOutput: engine stopped", category: .audioSession)
+    }
+
+    // MARK: - Interruption gate (46u)
+
+    /// Called by AudioPlayerService when AVAudioSession interruption .began
+    /// fires.  Suppresses any engine restart triggered by the route/format
+    /// change that Siri or a phone call fires while it takes over the session.
+    public func noteInterruptionBegan() {
+        isInterrupted = true
+        log.log("AudioOutput: interruption began — engine restart suppressed during ride-out", category: .audioSession)
+    }
+
+    /// Called by AudioPlayerService when AVAudioSession interruption .ended
+    /// fires.  Clears the gate so the engine can restart on the next
+    /// config-change or deliberate start.
+    public func noteInterruptionEnded() {
+        isInterrupted = false
+        log.log("AudioOutput: interruption ended — engine restart gate cleared", category: .audioSession)
+    }
+
+    /// Called by every deliberate-play path (assertSessionOwnership,
+    /// play(channel:), startLibraryTrack) as a stuck-flag safety net.
+    ///
+    /// The field log shows `unmatchedBegans` up to 3: if an `.ended`
+    /// notification is never delivered, `isInterrupted` would remain true
+    /// forever and the engine would never restart.  This override guarantees
+    /// that any intentional user/app-initiated play clears the gate
+    /// unconditionally.  Only logs when the flag was actually set (no noise
+    /// on the normal path).
+    public func clearInterruptionGateForDeliberatePlay() {
+        guard isInterrupted else { return }
+        isInterrupted = false
+        log.log("AudioOutput: interruption gate cleared by deliberate-play path (was stuck from unmatched .began)", category: .audioSession)
+    }
+
+    // MARK: - Pure restart predicate (testable)
+
+    /// Returns `true` when the AVAudioEngineConfigurationChange handler should
+    /// restart the engine.  Extracted as a static pure function so unit tests
+    /// can cover every combination without instantiating AudioOutput or
+    /// touching the live AVAudioEngine / AVAudioSession.
+    ///
+    /// Contract: restart only when the app intends to play AND no interruption
+    /// is currently in effect.  The idle guard (`intendedToRun == false`) was
+    /// already present before this change; the interruption guard is new (46u).
+    static func shouldRestartEngineOnConfigChange(intendedToRun: Bool, isInterrupted: Bool) -> Bool {
+        return intendedToRun && !isInterrupted
     }
 }

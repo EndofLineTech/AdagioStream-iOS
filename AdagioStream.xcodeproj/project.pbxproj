@@ -182,6 +182,7 @@
 		E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */; };
 		E0581AB56C0A01DA4AA36FE5 /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAEC5D3D42331FF6DBC36DA /* AudioOutput.swift */; };
 		E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */; };
+		E48AEF35EE680D18631E4571 /* AudioOutputRestartPredicateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A307E5EA37C9E962AF478812 /* AudioOutputRestartPredicateTests.swift */; };
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
 		E5FD11CBC01B3A045B7273B7 /* TrackDownloadButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0F8559DFD52269DF97E1E63 /* TrackDownloadButton.swift */; };
 		E60AF4EE2F52234311F791E2 /* NowPlayingQueueUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8290153DA6AE230673CBD774 /* NowPlayingQueueUITests.swift */; };
@@ -334,6 +335,7 @@
 		9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPITests.swift; sourceTree = "<group>"; };
 		A1CF4778448EC75225E98912 /* EPGParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParserTests.swift; sourceTree = "<group>"; };
 		A2013365DBCBEF09EA300767 /* LocalFirstPlaybackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFirstPlaybackTests.swift; sourceTree = "<group>"; };
+		A307E5EA37C9E962AF478812 /* AudioOutputRestartPredicateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOutputRestartPredicateTests.swift; sourceTree = "<group>"; };
 		A3FA365F7131A727DB1A7C79 /* AirPlayRoutePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPlayRoutePickerView.swift; sourceTree = "<group>"; };
 		A49B5499FEB06793F277174C /* ProviderManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderManagementView.swift; sourceTree = "<group>"; };
 		A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = VLCAudioCallbackBridge.m; sourceTree = "<group>"; };
@@ -438,6 +440,7 @@
 		1787FE82B04EA5A83B5335BC /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A307E5EA37C9E962AF478812 /* AudioOutputRestartPredicateTests.swift */,
 				654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */,
 				275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */,
 				B3CB98C2E33D8E9EADE59EF0 /* DownloadManagerTests.swift */,
@@ -1022,6 +1025,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E48AEF35EE680D18631E4571 /* AudioOutputRestartPredicateTests.swift in Sources */,
 				C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */,
 				8432DCB7AEC1149AD0CE3B16 /* CarPlayMusicBrowseTests.swift in Sources */,
 				C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */,
