@@ -1902,10 +1902,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Transition state: track mode sets currentChannel to nil.
         currentChannel = nil
         currentTrack = track
-        // Artist for now-playing: prefer per-track value once tracks carry their
-        // own denormalised name; fall back to the queue-level display artist.
-        currentTrackArtistName = queueDisplayArtistName
-        nowPlayingSubtitle = queueDisplayArtistName   // bug hzl: in-app player subtitle
+        // Artist for now-playing: prefer the track's own denormalised name (c2o,
+        // works for every playback source); fall back to the queue-level display
+        // artist threaded in from the album screen for older cached rows.
+        let resolvedArtist = track.artist ?? queueDisplayArtistName
+        currentTrackArtistName = resolvedArtist
+        nowPlayingSubtitle = resolvedArtist           // in-app player subtitle (hzl)
         currentTrackArtwork = nil
         // In-app player artwork: resolve the authed cover-art URL up front so the
         // mini/full player can render it (Track.artworkURL is nil on its own).

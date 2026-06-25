@@ -21,12 +21,13 @@ final class PlaybackSourceTests: XCTestCase {
         )
     }
 
-    private func makeTrack(id: String = "trk-1", title: String = "Pyramid Song", artistId: String = "art-radiohead") -> Track {
+    private func makeTrack(id: String = "trk-1", title: String = "Pyramid Song", artistId: String = "art-radiohead", artist: String? = nil) -> Track {
         Track(
             id: id,
             albumId: "alb-1",
             artistId: artistId,
             title: title,
+            artist: artist,
             updatedAt: 1_700_000_000
         )
     }
@@ -79,11 +80,16 @@ final class PlaybackSourceTests: XCTestCase {
         XCTAssertEqual(trk.displayTitle, "Pyramid Song")
     }
 
-    func testTrackDisplaySubtitle() {
-        let trk = makeTrack(artistId: "art-radiohead")
-        // bug hzl: Track has no denormalised artist name, so it exposes no
-        // subtitle — the raw artistId must never leak into the UI. The human
-        // artist name is supplied separately via AudioPlayerService.nowPlayingSubtitle.
+    func testTrackDisplaySubtitleIsArtistName() {
+        // c2o: the denormalised artist name is the subtitle.
+        let trk = makeTrack(artistId: "art-radiohead", artist: "Radiohead")
+        XCTAssertEqual(trk.displaySubtitle, "Radiohead")
+    }
+
+    func testTrackDisplaySubtitleNilWhenNoArtistName() {
+        // No denormalised name (e.g. a row cached before the c2o column existed):
+        // the raw artistId must never leak into the UI (bug hzl).
+        let trk = makeTrack(artistId: "art-radiohead", artist: nil)
         XCTAssertNil(trk.displaySubtitle)
     }
 
@@ -150,11 +156,10 @@ final class PlaybackSourceTests: XCTestCase {
         XCTAssertEqual(trk.displayTitle, "Everything in Its Right Place")
     }
 
-    /// bug hzl: Track.displaySubtitle is always nil — it never exposes the
-    /// opaque artistId. The artist name reaches the player via the threaded
-    /// AudioPlayerService.nowPlayingSubtitle instead.
-    func testTrackDisplaySubtitleIsNilEvenWhenArtistIdPresent() {
-        let trk = makeTrack(artistId: "ar-radiohead")
+    /// bug hzl: Track.displaySubtitle never exposes the opaque artistId — only
+    /// the denormalised artist name (c2o) or nil.
+    func testTrackDisplaySubtitleIsNilWhenOnlyArtistIdPresent() {
+        let trk = makeTrack(artistId: "ar-radiohead", artist: nil)
         XCTAssertNil(trk.displaySubtitle)
     }
 

@@ -31,13 +31,13 @@ extension Channel: NowPlayingItem {
 
 extension Track: NowPlayingItem {
     public var displayTitle: String    { title }
-    /// Track carries no denormalised artist-name string (only `artistId`), so it
-    /// has no meaningful subtitle of its own.  Returning the raw `artistId` here
-    /// leaked an opaque id into the mini/full player and lock screen (bug hzl), so
-    /// we return nil.  The human artist name is supplied separately by the player
-    /// via `AudioPlayerService.nowPlayingSubtitle` (threaded from the album
-    /// context); a per-track name awaits a denormalised `artist` field on Track.
-    public var displaySubtitle: String? { nil }
+    /// The denormalised artist name (`Track.artist`, c2o), or nil when absent
+    /// (e.g. rows cached before the column existed).  Never the raw `artistId` —
+    /// that opaque id must not surface in the UI (bug hzl).
+    public var displaySubtitle: String? {
+        guard let artist, !artist.isEmpty else { return nil }
+        return artist
+    }
     /// Phase 1: Track artwork is resolved via a Navidrome cover-art URL that
     /// requires a base URL the model does not own.  Return nil here; d6q.2 will
     /// provide a proper resolved URL.

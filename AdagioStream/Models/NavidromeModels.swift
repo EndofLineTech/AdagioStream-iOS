@@ -101,6 +101,11 @@ public struct Track: Codable, FetchableRecord, PersistableRecord {
     public var albumId: String
     public var artistId: String
     public var title: String
+    /// Human-readable artist display name from the Subsonic `"artist"` field
+    /// (v3 column).  Nil for rows cached before the column existed; backfills on
+    /// the next library fetch.  Drives the now-playing / queue / lock-screen
+    /// subtitle so the opaque artistId never surfaces (bug c2o).
+    public var artist: String?
     public var trackNumber: Int?
     public var discNumber: Int
     public var duration: Int?
@@ -117,6 +122,7 @@ public struct Track: Codable, FetchableRecord, PersistableRecord {
         albumId: String,
         artistId: String,
         title: String,
+        artist: String? = nil,
         trackNumber: Int? = nil,
         discNumber: Int = 1,
         duration: Int? = nil,
@@ -132,6 +138,7 @@ public struct Track: Codable, FetchableRecord, PersistableRecord {
         self.albumId = albumId
         self.artistId = artistId
         self.title = title
+        self.artist = artist
         self.trackNumber = trackNumber
         self.discNumber = discNumber
         self.duration = duration
@@ -401,7 +408,7 @@ public struct SubsonicAlbumDTO: Decodable {
 /// Key mismatches handled:
 ///   • `track` → `trackNumber`
 ///   • `duration` is passed through as-is (seconds, Int)
-///   • `artist` (name string) is discarded — `artistId` is used
+///   • `artist` (name string) → `artistName`, persisted to Track.artist (c2o)
 ///   • `album` (name string) is discarded — `albumId` is used
 ///
 /// `starred`, `userRating`, and `playCount` are transient display fields — not
@@ -411,6 +418,8 @@ public struct SubsonicTrackDTO: Decodable {
     public let albumId: String
     public let artistId: String
     public let title: String
+    /// Human-readable artist display name from the Subsonic `"artist"` field.
+    public let artistName: String?
     let trackField: Int?
     public let discNumber: Int?
     public let duration: Int?
@@ -437,6 +446,7 @@ public struct SubsonicTrackDTO: Decodable {
         case albumId
         case artistId
         case title
+        case artistName  = "artist"
         case trackField  = "track"
         case discNumber
         case duration
@@ -458,6 +468,7 @@ public struct SubsonicTrackDTO: Decodable {
         albumId     = try c.decode(String.self, forKey: .albumId)
         artistId    = try c.decode(String.self, forKey: .artistId)
         title       = try c.decode(String.self, forKey: .title)
+        artistName  = try? c.decodeIfPresent(String.self, forKey: .artistName)
         trackField  = try? c.decodeIfPresent(Int.self,    forKey: .trackField)
         discNumber  = try? c.decodeIfPresent(Int.self,    forKey: .discNumber)
         duration    = try? c.decodeIfPresent(Int.self,    forKey: .duration)
@@ -481,6 +492,7 @@ public struct SubsonicTrackDTO: Decodable {
             albumId: albumId,
             artistId: artistId,
             title: title,
+            artist: artistName,
             trackNumber: trackField,
             discNumber: discNumber ?? 1,
             duration: duration,

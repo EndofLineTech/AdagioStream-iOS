@@ -235,6 +235,17 @@ public final class NavidromeStore {
                 """)
         }
 
+        // ── v3: denormalised artist name on tracks ───────────────────────────
+        // The Subsonic song payload carries a human-readable `artist` string that
+        // we previously discarded (only artistId was kept).  Storing it lets the
+        // now-playing UI, queue list, and lock screen show the real artist for any
+        // playback source — not just album playback where the name was threaded
+        // in from the artist screen (bug c2o).  Nullable: pre-existing cached rows
+        // backfill on the next library fetch.
+        m.registerMigration("addTrackArtistName") { db in
+            try db.execute(sql: "ALTER TABLE tracks ADD COLUMN artist TEXT")
+        }
+
         return m
     }()
 }
