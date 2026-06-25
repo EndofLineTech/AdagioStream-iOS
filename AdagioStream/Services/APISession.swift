@@ -1,10 +1,12 @@
 import Foundation
 
-/// Provides pre-configured URLSessions for API domains.
+/// Provides pre-configured URLSessions for the app's hardcoded API domains.
 ///
-/// ATS (App Transport Security) enforces TLS certificate validation.
-/// These sessions add domain-specific configuration (timeouts, headers).
-public enum PinnedURLSession {
+/// TLS enforcement is handled by ATS (App Transport Security) via the
+/// NSExceptionDomains entries in Info.plist; this type does NOT perform
+/// certificate pinning. Each static property returns a URLSession with
+/// domain-specific configuration (timeout, custom headers).
+public enum APISession {
     /// Session for xmplaylist.com API calls.
     public static let xmplaylist: URLSession = {
         let config = URLSessionConfiguration.default

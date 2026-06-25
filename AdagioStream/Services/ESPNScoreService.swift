@@ -9,7 +9,7 @@ public final class ESPNScoreService: ObservableObject {
     @Published public var gamesByChannel: [String: ESPNGameInfo] = [:]
 
     private let log = DebugLogger.shared
-    private let session = PinnedURLSession.espn
+    private let session = APISession.espn
     private var livePollInterval: TimeInterval = 15
     private let idlePollInterval: TimeInterval = 60
 

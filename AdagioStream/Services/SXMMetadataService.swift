@@ -28,7 +28,7 @@ public final class SXMMetadataService: ObservableObject {
     /// When true, polls continue but currentTrack is driven by showTrack(at:) instead of live data.
     private var isDisplaySuspended = false
 
-    private let session = PinnedURLSession.xmplaylist
+    private let session = APISession.xmplaylist
 
     private init() {}
 
