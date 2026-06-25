@@ -59,7 +59,8 @@ struct NowPlayingView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
-                        if let subtitle = item.displaySubtitle {
+                        // bug hzl: threaded artist name, not the opaque artistId.
+                        if let subtitle = audioPlayer.nowPlayingSubtitle, !subtitle.isEmpty {
                             Text(subtitle)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)

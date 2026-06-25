@@ -73,10 +73,17 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private let scrobbler = Scrobbler()
 
     /// Human-readable artist display name threaded in from the album context
-    /// by `play(track:displayArtistName:via:)`.  Overrides `Track.displaySubtitle`
-    /// (which falls back to `artistId`) in `updateNowPlayingInfoForTrack`.
+    /// by `play(track:displayArtistName:via:)`.  Used to build the lock-screen
+    /// now-playing info (`updateNowPlayingInfoForTrack`).
     /// Cleared each time a new track starts so stale names never bleed through.
     private var currentTrackArtistName: String?
+
+    /// Published mirror of `currentTrackArtistName` for the in-app mini/full
+    /// player subtitle (bug hzl).  `Track.displaySubtitle` is nil (it only knows
+    /// `artistId`), so the player reads this for the library subtitle instead of
+    /// the now-playing item.  Nil when nothing is playing, in radio mode, or when
+    /// no display artist was threaded (e.g. playlist/search playback).
+    @Published public private(set) var nowPlayingSubtitle: String?
     /// Artwork loaded for the currently-playing track (cover art from Navidrome).
     private var currentTrackArtwork: MPMediaItemArtwork?
 
@@ -1230,7 +1237,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     ///   - track: The `Track` to play.
     ///   - displayArtistName: Human-readable artist name from the album context.
     ///     When provided, shown as the now-playing / mini-player subtitle.
-    ///     Pass `nil` to fall back to `Track.displaySubtitle` (which returns `artistId`).
+    ///     Pass `nil` for no subtitle (Track has no denormalised artist name).
     ///   - api: A configured `NavidromeAPI` instance for URL building.
     public func play(track: Track, displayArtistName: String? = nil, via api: NavidromeAPI) {
         setQueue([track], startIndex: 0, displayArtistName: displayArtistName, via: api)
@@ -1890,6 +1897,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Artist for now-playing: prefer per-track value once tracks carry their
         // own denormalised name; fall back to the queue-level display artist.
         currentTrackArtistName = queueDisplayArtistName
+        nowPlayingSubtitle = queueDisplayArtistName   // bug hzl: in-app player subtitle
         currentTrackArtwork = nil
         playbackSource = .library(queue: queue, index: index)
 
@@ -2015,11 +2023,11 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         guard let track = currentTrack else { return }
 
         let title = track.title
-        // Prefer the artist display name threaded in from the album context
-        // (via play(track:displayArtistName:via:)).  Fall back to
-        // track.displaySubtitle — which returns artistId — when no name was
-        // supplied (e.g. direct calls without album context).
-        let artist = currentTrackArtistName ?? track.displaySubtitle ?? ""
+        // Artist for the lock screen: the display name threaded in from the album
+        // context (via play(track:displayArtistName:via:)).  When none was supplied
+        // (e.g. playlist/search playback) we show an empty string rather than the
+        // opaque artistId — Track has no denormalised artist name (bug hzl).
+        let artist = currentTrackArtistName ?? ""
         let artwork = currentTrackArtwork
         let isLive = false
         // Rate: 1.0 while playing or buffering (iOS interpolates); 0.0 when paused.
@@ -2729,6 +2737,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentTrack = nil                 // d6q.2: clear track state on stop
         currentTrackArtwork = nil
         currentTrackArtistName = nil
+        nowPlayingSubtitle = nil           // bug hzl: clear in-app player subtitle
         currentQueueIndex = nil            // d6q.1: clear queue index on stop
         queueAPI = nil
         queueDisplayArtistName = nil

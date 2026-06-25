@@ -51,9 +51,9 @@ struct MiniPlayerView: View {
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        // Library track: show subtitle (artistId until d6q.3 threads name).
+                        // Library track: show the threaded artist name (bug hzl).
                         if let item = audioPlayer.nowPlaying, !item.isLiveStream {
-                            if let subtitle = item.displaySubtitle {
+                            if let subtitle = audioPlayer.nowPlayingSubtitle, !subtitle.isEmpty {
                                 Text(subtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)

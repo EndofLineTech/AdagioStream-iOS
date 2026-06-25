@@ -113,16 +113,15 @@ struct AlbumDetailView: View {
                 ForEach(viewModel.albumTracks, id: \.id) { track in
                     TrackRowView(
                         track: track,
-                        artistName: viewModel.selectedAlbumArtistName,
-                        onPlay: { play(track: track) },
-                        api: api,
-                        starred: viewModel.albumTrackStarStates[track.id]?.starred,
-                        onToggleStar: {
-                            Task { await viewModel.toggleStar(id: track.id) }
-                        }
+                        artistName: nil,   // bug sbx: artist is in the header
+                        onPlay: { play(track: track) }
                     )
                     .accessibilityLabel(trackAccessibilityLabel(track))
                     .accessibilityHint("Tap to play")
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        loveButton(for: track)
+                        downloadSwipeButton(for: track)
+                    }
                     .contextMenu {
                         Button {
                             trackForAddToPlaylist = track
@@ -130,6 +129,7 @@ struct AlbumDetailView: View {
                             Label("Add to Playlist…", systemImage: "music.note.list")
                         }
                         .accessibilityLabel("Add \(track.title) to a playlist")
+                        loveButton(for: track)
                         downloadContextMenuItem(for: track)
                     }
                 }
@@ -232,6 +232,53 @@ struct AlbumDetailView: View {
         }
     }
 
+    /// Love (star) toggle used in both the swipe action and the long-press menu
+    /// (bug sbx — moved off the row to free title width).
+    @ViewBuilder
+    private func loveButton(for track: Track) -> some View {
+        let starred = viewModel.albumTrackStarStates[track.id]?.starred ?? false
+        Button {
+            Task { await viewModel.toggleStar(id: track.id) }
+        } label: {
+            Label(starred ? "Unlove" : "Love",
+                  systemImage: starred ? "heart.slash" : "heart")
+        }
+        .tint(.pink)
+        .accessibilityLabel(starred ? "Unlove \(track.title)" : "Love \(track.title)")
+    }
+
+    /// Download affordance for the swipe action — mirrors `downloadContextMenuItem`
+    /// but with swipe tints (bug sbx).
+    @ViewBuilder
+    private func downloadSwipeButton(for track: Track) -> some View {
+        let record = downloadManager.downloads.first { $0.id == track.id }
+        switch record?.status {
+        case .none, .failed, .paused:
+            Button {
+                downloadManager.download(track: track, via: api)
+            } label: {
+                Label("Download", systemImage: "arrow.down.circle")
+            }
+            .tint(.blue)
+            .accessibilityLabel("Download \(track.title)")
+        case .queued, .downloading:
+            Button {
+                downloadManager.cancelDownload(trackID: track.id)
+            } label: {
+                Label("Cancel", systemImage: "xmark.circle")
+            }
+            .tint(.orange)
+            .accessibilityLabel("Cancel download of \(track.title)")
+        case .completed:
+            Button(role: .destructive) {
+                downloadManager.deleteDownload(trackID: track.id)
+            } label: {
+                Label("Remove", systemImage: "trash")
+            }
+            .accessibilityLabel("Remove downloaded \(track.title)")
+        }
+    }
+
     private func trackAccessibilityLabel(_ track: Track) -> String {
         var parts: [String] = []
         if let number = track.trackNumber {
@@ -315,16 +362,15 @@ struct AlbumDownloadAllButton: View {
 
 struct TrackRowView: View {
     let track: Track
+    /// Optional secondary line.  The album view passes `nil` (the artist is in the
+    /// header — redundant per row, bug sbx); other contexts may pass a name.
     let artistName: String?
     let onPlay: () -> Void
-    /// l31.2: When non-nil, a download button is shown for this track.
-    var api: NavidromeAPI? = nil
-    /// 65x.2: When non-nil the row shows a heart button reflecting starred state.
-    var starred: Bool? = nil
-    /// 65x.2: Called when the heart button is tapped.
-    var onToggleStar: (() -> Void)? = nil
 
     var body: some View {
+        // Apple Music style (bug sbx): number · title · duration; tap to play.
+        // Love + Download live in the row's swipe action + long-press menu so the
+        // title gets the full width instead of fighting inline buttons.
         HStack(spacing: 12) {
             // Track number badge
             Group {
@@ -340,7 +386,7 @@ struct TrackRowView: View {
             }
             .accessibilityHidden(true)
 
-            // Title + subtitle
+            // Title + optional subtitle
             VStack(alignment: .leading, spacing: 2) {
                 Text(track.title)
                     .font(.body)
@@ -365,32 +411,6 @@ struct TrackRowView: View {
                     .monospacedDigit()
                     .accessibilityHidden(true)
             }
-
-            // 65x.2: Star toggle — shown when star state is available
-            if let isStarred = starred, let toggle = onToggleStar {
-                NavidromeStarButton(
-                    starred: isStarred,
-                    accessibilityLabel: isStarred ? "Unstar \(track.title)" : "Star \(track.title)",
-                    onToggle: toggle
-                )
-            }
-
-            // l31.2: Download button — shown when an API context is available
-            if let resolvedAPI = api {
-                TrackDownloadButton(track: track, api: resolvedAPI)
-            }
-
-            // Play button
-            Button {
-                onPlay()
-            } label: {
-                Image(systemName: "play.circle")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play \(track.title)")
         }
         .contentShape(Rectangle())
         .onTapGesture {

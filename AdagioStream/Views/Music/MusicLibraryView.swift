@@ -232,7 +232,7 @@ public struct MusicLibraryView: View {
     private func libraryBrowser(vm: NavidromeLibraryViewModel, api: NavidromeAPI) -> some View {
         switch browseMode {
         case .artists:
-            artistBrowser(vm: vm, api: api)
+            ArtistBrowserView(viewModel: vm, api: api)
         case .albums:
             BrowseAlbumsView(viewModel: vm, api: api)
         case .genres:
@@ -241,12 +241,23 @@ public struct MusicLibraryView: View {
             PlaylistListView(viewModel: vm, api: api)
         }
     }
+}
 
-    // MARK: - Artist browser (0xy.3, unchanged)
+// MARK: - Artist browser (0xy.3)
 
-    @ViewBuilder
-    private func artistBrowser(vm: NavidromeLibraryViewModel, api: NavidromeAPI) -> some View {
-        switch vm.artistsState {
+/// Artist list for the Music tab.  Declared as a standalone view with an
+/// `@ObservedObject` view model so it re-renders when `artistsState` changes.
+///
+/// (Previously inlined in `MusicLibraryView` as a method, where the view model
+/// was held in plain `@State` and therefore not observed — the list spinner
+/// never resolved until an unrelated `@State` change forced a body recompute.
+/// bug juv.)
+struct ArtistBrowserView: View {
+    @ObservedObject var viewModel: NavidromeLibraryViewModel
+    let api: NavidromeAPI
+
+    var body: some View {
+        switch viewModel.artistsState {
         case .idle, .loading:
             VStack(spacing: 12) {
                 ProgressView()
@@ -276,7 +287,7 @@ public struct MusicLibraryView: View {
                         description: message
                     )
                     Button {
-                        Task { await vm.loadArtists() }
+                        Task { await viewModel.loadArtists() }
                     } label: {
                         Label("Retry", systemImage: "arrow.clockwise")
                     }
@@ -286,9 +297,9 @@ public struct MusicLibraryView: View {
             }
 
         case .loaded:
-            List(vm.artists, id: \.id) { artist in
+            List(viewModel.artists, id: \.id) { artist in
                 NavigationLink {
-                    ArtistDetailView(viewModel: vm, artist: artist, api: api)
+                    ArtistDetailView(viewModel: viewModel, artist: artist, api: api)
                 } label: {
                     ArtistRowView(artist: artist, api: api)
                 }
@@ -297,7 +308,7 @@ public struct MusicLibraryView: View {
             }
             .listStyle(.plain)
             .refreshable {
-                await vm.loadArtists()
+                await viewModel.loadArtists()
             }
         }
     }

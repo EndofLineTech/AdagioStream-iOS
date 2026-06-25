@@ -31,10 +31,13 @@ extension Channel: NowPlayingItem {
 
 extension Track: NowPlayingItem {
     public var displayTitle: String    { title }
-    /// Phase 1: Track does not carry a denormalised artist-name string; the
-    /// artistId is the best available subtitle until d6q.2 wires up the full
-    /// library-playback path.
-    public var displaySubtitle: String? { artistId.isEmpty ? nil : artistId }
+    /// Track carries no denormalised artist-name string (only `artistId`), so it
+    /// has no meaningful subtitle of its own.  Returning the raw `artistId` here
+    /// leaked an opaque id into the mini/full player and lock screen (bug hzl), so
+    /// we return nil.  The human artist name is supplied separately by the player
+    /// via `AudioPlayerService.nowPlayingSubtitle` (threaded from the album
+    /// context); a per-track name awaits a denormalised `artist` field on Track.
+    public var displaySubtitle: String? { nil }
     /// Phase 1: Track artwork is resolved via a Navidrome cover-art URL that
     /// requires a base URL the model does not own.  Return nil here; d6q.2 will
     /// provide a proper resolved URL.
