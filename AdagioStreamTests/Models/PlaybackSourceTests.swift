@@ -81,8 +81,10 @@ final class PlaybackSourceTests: XCTestCase {
 
     func testTrackDisplaySubtitle() {
         let trk = makeTrack(artistId: "art-radiohead")
-        // Phase 1: subtitle is the artistId until d6q.2 wires the artist name
-        XCTAssertEqual(trk.displaySubtitle, "art-radiohead")
+        // bug hzl: Track has no denormalised artist name, so it exposes no
+        // subtitle — the raw artistId must never leak into the UI. The human
+        // artist name is supplied separately via AudioPlayerService.nowPlayingSubtitle.
+        XCTAssertNil(trk.displaySubtitle)
     }
 
     func testTrackDisplaySubtitleNilWhenArtistIdEmpty() {
@@ -148,10 +150,12 @@ final class PlaybackSourceTests: XCTestCase {
         XCTAssertEqual(trk.displayTitle, "Everything in Its Right Place")
     }
 
-    /// Track.displaySubtitle carries artistId as a stand-in until d6q.3 threads the artist name.
-    func testTrackDisplaySubtitleIsArtistIdWhenPresent() {
+    /// bug hzl: Track.displaySubtitle is always nil — it never exposes the
+    /// opaque artistId. The artist name reaches the player via the threaded
+    /// AudioPlayerService.nowPlayingSubtitle instead.
+    func testTrackDisplaySubtitleIsNilEvenWhenArtistIdPresent() {
         let trk = makeTrack(artistId: "ar-radiohead")
-        XCTAssertEqual(trk.displaySubtitle, "ar-radiohead")
+        XCTAssertNil(trk.displaySubtitle)
     }
 
     /// Track without an artistId produces nil subtitle (no empty string shown in UI).
