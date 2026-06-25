@@ -2,6 +2,10 @@
 
 **Status:** Proposed (spike outcome — implementation deferred)
 
+**Full implementation design:** [docs/design/gapless-playback.md](../design/gapless-playback.md)
+— this ADR is the decision record (why we defer); the design doc is the
+implementation-ready plan (how to build it when prioritized).
+
 ---
 
 ## Context
@@ -167,55 +171,23 @@ for a perceptual improvement that most users won't notice is not the right trade
 
 ## What Would Need to Change for a Future Implementation
 
-A future implementation would require these steps, in order:
+A future implementation requires four phases, in order:
 
-### Step 1: Per-player ring buffer in VLCAudioCallbackBridge
+1. **Per-player ring** — convert the global `adg_ring_*` statics in
+   `VLCAudioCallbackBridge` to a heap `AdgRing` struct carried in the `void *`
+   opaque user pointer of `libvlc_audio_set_callbacks` (currently NULL).
+2. **A/B ring slots in AudioOutput** — two registered rings + a lock-free
+   `_Atomic int` active-slot index read in the render block.
+3. **GaplessPrewarmController** — prewarm the next track's player into ring B,
+   arm when buffered, flip the atomic at `.ended`, retire player A through the
+   existing background-dispose path.
+4. **Edge-case wiring + feature flag** (`AppSettings.gaplessEnabled`, default off).
 
-Convert the global `adg_ring_*` statics to a heap-allocated struct (`AdgRing`)
-with its own buffer + head/tail atomics.  `attachAudioCallbacksToPlayer:` would
-allocate an `AdgRing`, store it in the `void *data` pointer of
-`libvlc_audio_set_callbacks` (the user-data argument currently passed as NULL), and
-free it in a cleanup callback or when the player is retired.
+The full, implementation-ready design — component sketches, the complete state
+machine and edge-case matrix, real-time-safety rules, the session-safety argument,
+phased rollout, test plan, risk table, and open questions for the PO — lives in:
 
-The play callback would cast `data` back to `AdgRing *` and write to that ring
-instead of the global static.
-
-### Step 2: A/B ring slot in AudioOutput / AVAudioSourceNode
-
-`AudioOutput` would hold two ring slots (A and B).  An `_Atomic int` switch would
-select which slot the render block drains.  The switch must be written
-atomically and must be checked on the audio I/O thread without locks.
-
-### Step 3: Pre-warm controller in AudioPlayerService
-
-A `GaplessPrewarmController` would:
-- Monitor `trackElapsed` against `trackDuration`.
-- When `timeRemaining <= threshold` (e.g. 3 s), start the next-track VLC instance,
-  attach it to ring B.
-- When B has enough frames buffered (e.g. 0.5 s of frames), arm the crossover
-  point.
-- At the crossover: flush ring A, set the ring-select atomic to B, call
-  `retirePlayer` for the old player (background dispose — same as today).
-
-### Step 4: Edge case handling
-
-- User skips before crossover: cancel the pre-warm, dispose the prewarm player,
-  run the normal `startLibraryTrack` path.
-- Duration unknown or unreliable: fall back to the current tear-down-and-restart
-  path.
-- Seek during pre-warm: cancel pre-warm.
-- Interruption during pre-warm: cancel pre-warm, dispose pre-warm player.
-- Radio playback: no change — radio has no track boundary, pre-warm never activates.
-
-### Effort and risk profile
-
-- Files to change: `VLCAudioCallbackBridge.{h,m}`, `AudioOutput.swift`,
-  `AudioPlayerService.swift` (new controller logic + edge case wiring).
-- Real-time thread risk: ring-select atomic must be written only once per crossover
-  and read lock-free; the render block must handle a partial-fill from ring A
-  immediately before the switch.
-- Test coverage: unit tests for ring per-player isolation; simulator tests for the
-  crossover; field validation on a real device with local and network tracks.
+**[docs/design/gapless-playback.md](../design/gapless-playback.md)**
 
 This is appropriate for a dedicated follow-on epic once the library queue is
 further field-proven.
