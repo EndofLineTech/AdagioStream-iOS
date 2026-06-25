@@ -23,7 +23,7 @@ struct MiniPlayerView: View {
                         // (populated by the track's cover-art fetch in play(track:via:)).
                         // For radio, keep existing SXM cover-art → channel logo priority.
                         if let item = audioPlayer.nowPlaying, !item.isLiveStream,
-                           let artworkURL = item.artworkURL {
+                           let artworkURL = audioPlayer.nowPlayingArtworkURL {
                             RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
                         } else if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                            let track = sxmService.currentTrack, let artworkURL = track.artworkURL {

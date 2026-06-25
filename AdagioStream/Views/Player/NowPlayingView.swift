@@ -31,13 +31,18 @@ struct NowPlayingView: View {
             VStack(spacing: 32) {
                 Spacer()
 
-                // Artwork — d6q.2: library tracks render from nowPlaying.artworkURL;
-                // radio keeps the existing SXM cover-art → channel-logo priority.
-                if let item = audioPlayer.nowPlaying, !item.isLiveStream,
-                   let artworkURL = item.artworkURL {
-                    RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
-                        .shadow(radius: 10)
-                        .id(item.displayTitle)
+                // Artwork — library tracks render from nowPlayingArtworkURL (the
+                // authed cover-art URL resolved at track start), with a music-note
+                // placeholder when the track has none — never the radio icon.
+                // Radio keeps the existing SXM cover-art → channel-logo priority.
+                if let item = audioPlayer.nowPlaying, !item.isLiveStream {
+                    if let artworkURL = audioPlayer.nowPlayingArtworkURL {
+                        RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
+                            .shadow(radius: 10)
+                            .id(item.displayTitle)
+                    } else {
+                        trackPlaceholder
+                    }
                 } else if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                    let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
                     RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
@@ -448,6 +453,19 @@ struct NowPlayingView: View {
             .frame(width: artworkSize, height: artworkSize)
             .overlay {
                 Image(systemName: "radio")
+                    .font(.system(size: artworkSize * 0.3))
+                    .foregroundStyle(.secondary)
+            }
+    }
+
+    /// Placeholder for a library track with no cover art — a music note rather
+    /// than the radio icon used for channels.
+    private var trackPlaceholder: some View {
+        RoundedRectangle(cornerRadius: artworkRadius)
+            .fill(.quaternary)
+            .frame(width: artworkSize, height: artworkSize)
+            .overlay {
+                Image(systemName: "music.note")
                     .font(.system(size: artworkSize * 0.3))
                     .foregroundStyle(.secondary)
             }

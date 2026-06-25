@@ -84,6 +84,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// the now-playing item.  Nil when nothing is playing, in radio mode, or when
     /// no display artist was threaded (e.g. playlist/search playback).
     @Published public private(set) var nowPlayingSubtitle: String?
+
+    /// Resolved cover-art URL for the currently-playing library track, for the
+    /// in-app mini/full player artwork (bug rendering).  `Track.artworkURL` is nil
+    /// (the model can't build an authed getCoverArt URL without an API context),
+    /// so the player reads this instead.  Built from `track.coverArt` via the
+    /// queue API at track start; nil in radio mode or when the track has no art.
+    @Published public private(set) var nowPlayingArtworkURL: URL?
+
     /// Artwork loaded for the currently-playing track (cover art from Navidrome).
     private var currentTrackArtwork: MPMediaItemArtwork?
 
@@ -1899,6 +1907,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentTrackArtistName = queueDisplayArtistName
         nowPlayingSubtitle = queueDisplayArtistName   // bug hzl: in-app player subtitle
         currentTrackArtwork = nil
+        // In-app player artwork: resolve the authed cover-art URL up front so the
+        // mini/full player can render it (Track.artworkURL is nil on its own).
+        nowPlayingArtworkURL = track.coverArt.flatMap { api.coverArtURL(id: $0, size: 600) }
         playbackSource = .library(queue: queue, index: index)
 
         // 65x.1: Reset the per-track submission guard and fire the now-playing scrobble.
@@ -2738,6 +2749,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         currentTrackArtwork = nil
         currentTrackArtistName = nil
         nowPlayingSubtitle = nil           // bug hzl: clear in-app player subtitle
+        nowPlayingArtworkURL = nil         // clear in-app player artwork on stop
         currentQueueIndex = nil            // d6q.1: clear queue index on stop
         queueAPI = nil
         queueDisplayArtistName = nil
