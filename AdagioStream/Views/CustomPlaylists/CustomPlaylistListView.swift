@@ -61,6 +61,7 @@ struct CustomPlaylistListView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("New playlist")
                 }
             }
             .alert("New Playlist", isPresented: $showingCreateAlert) {

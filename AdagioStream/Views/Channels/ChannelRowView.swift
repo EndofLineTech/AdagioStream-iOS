@@ -60,6 +60,8 @@ struct ChannelRowView: View {
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(channel.isFavorite ? "Remove \(channel.name) from favorites" : "Add \(channel.name) to favorites")
+            .accessibilityValue(channel.isFavorite ? "Favorited" : "Not favorited")
         }
         .contentShape(Rectangle())
         .hoverEffect(.highlight)

@@ -201,6 +201,8 @@ struct NowPlayingView: View {
                             Image(systemName: savedSongsManager.isSaved(trackID: track.id) ? "heart.fill" : "heart")
                                 .foregroundStyle(savedSongsManager.isSaved(trackID: track.id) ? .red : .secondary)
                         }
+                        .accessibilityLabel(savedSongsManager.isSaved(trackID: track.id) ? "Remove from Loved" : "Add to Loved")
+                        .accessibilityValue(savedSongsManager.isSaved(trackID: track.id) ? "Loved" : "Not loved")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -359,18 +361,21 @@ struct NowPlayingView: View {
                     .font(.title)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Previous channel")
 
             Button { audioPlayer.togglePlayPause() } label: {
                 Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: playButtonSize))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
 
             Button { audioPlayer.playNext() } label: {
                 Image(systemName: "forward.fill")
                     .font(.title)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Next channel")
         }
         .foregroundStyle(.primary)
         .glassContainer()

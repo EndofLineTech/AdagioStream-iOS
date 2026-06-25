@@ -81,6 +81,7 @@ struct WelcomeSetupView: View {
             } label: {
                 Image(systemName: "chevron.backward")
             }
+            .accessibilityLabel("Back")
         case .credentials:
             Button {
                 error = nil
@@ -88,6 +89,7 @@ struct WelcomeSetupView: View {
             } label: {
                 Image(systemName: "chevron.backward")
             }
+            .accessibilityLabel("Back")
         case .groupSelection:
             EmptyView()
         }

@@ -135,6 +135,7 @@ struct ChannelListView: View {
                                 Image(systemName: "star.fill")
                                     .font(.caption)
                                     .foregroundStyle(.yellow)
+                                    .accessibilityHidden(true)
                             }
                             Text(group.name)
                                 .font(.subheadline)
@@ -147,10 +148,15 @@ struct ChannelListView: View {
                             Image(systemName: providerManager.collapsedGroups.contains(group.name) ? "chevron.right" : "chevron.down")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(group.name)
+                    .accessibilityValue(providerManager.collapsedGroups.contains(group.name) ? "Collapsed" : "Expanded")
+                    .accessibilityHint("Double tap to \(providerManager.collapsedGroups.contains(group.name) ? "expand" : "collapse")")
+                    .accessibilityAddTraits(.isHeader)
                     .contextMenu {
                         Button {
                             Task { await providerManager.toggleGroupFavorite(group.name) }

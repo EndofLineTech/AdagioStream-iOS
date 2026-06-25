@@ -136,6 +136,7 @@ struct MiniPlayerView: View {
                     .frame(width: buttonSize, height: buttonSize)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
 
             // Stop button
             Button {
@@ -147,6 +148,7 @@ struct MiniPlayerView: View {
                     .frame(width: buttonSize, height: buttonSize)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Stop")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)

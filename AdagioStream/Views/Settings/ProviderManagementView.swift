@@ -48,6 +48,7 @@ struct ProviderManagementView: View {
                 } label: {
                     Image(systemName: "plus")
                 }
+                .accessibilityLabel("Add account")
             }
         }
         .sheet(isPresented: $showAddProvider) {

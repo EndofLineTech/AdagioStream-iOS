@@ -63,12 +63,14 @@ struct CustomPlaylistDetailView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .accessibilityLabel("Add entry")
                     Button {
                         newGroupName = ""
                         showingAddGroup = true
                     } label: {
                         Image(systemName: "folder.badge.plus")
                     }
+                    .accessibilityLabel("Add group")
                     EditButton()
                 }
             }

@@ -68,6 +68,7 @@ struct GroupManagementView: View {
                                     .foregroundStyle(.red)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Remove \(group.name) from favorites")
                             Toggle("", isOn: Binding(
                                 get: { providerManager.isGroupEnabled(group.name) },
                                 set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
@@ -99,6 +100,7 @@ struct GroupManagementView: View {
                                 .foregroundStyle(.green)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(group.name) to favorites")
                         Toggle("", isOn: Binding(
                             get: { providerManager.isGroupEnabled(group.name) },
                             set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
