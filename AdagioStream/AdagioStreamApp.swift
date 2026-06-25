@@ -25,6 +25,28 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let config = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
         return config
     }
+
+    /// Called by the system when a background URLSession (e.g. the download
+    /// manager's `com.adagiostream.downloads` session) finishes delivering
+    /// events while the app was suspended.  Store the completion handler on
+    /// `DownloadManager.shared` so the session delegate can call it from
+    /// `urlSessionDidFinishEvents(forBackgroundURLSession:)` once all
+    /// in-process handling is complete.
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        if identifier == DownloadManager.backgroundSessionIdentifier {
+            Task { @MainActor in
+                DownloadManager.shared.backgroundCompletionHandler = completionHandler
+            }
+        } else {
+            // Unknown session — call the handler immediately so the system is
+            // not left waiting.
+            completionHandler()
+        }
+    }
 }
 
 @main

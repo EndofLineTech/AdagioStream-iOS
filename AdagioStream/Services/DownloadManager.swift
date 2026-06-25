@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // MARK: - DownloadProgress
 
@@ -22,31 +25,50 @@ public struct DownloadProgress: Sendable {
 /// disk under `<Application Support>/Adagio Stream/Downloads/`, and tracks
 /// lifecycle state in the GRDB `downloads` table.
 ///
-/// **Concurrency model** — matches `ProviderManager`: `@MainActor`
-/// `ObservableObject` so SwiftUI views can observe `@Published` properties
-/// directly.  Heavy work (URLSession, file I/O) is dispatched onto the
-/// cooperative thread pool via `Task.detached`; only state mutations run on
-/// the main actor.
+/// **Concurrency model** — `@MainActor` `ObservableObject` so SwiftUI views
+/// can observe `@Published` properties directly.  The background URLSession
+/// delegate callbacks arrive on `delegateQueue` (a serial background queue)
+/// and hop onto the main actor via `Task { @MainActor in … }` for all state
+/// mutations.
 ///
-/// **Concurrency limit** — at most `maxConcurrentDownloads` transfers run
-/// simultaneously.  Additional calls to `download(track:via:)` while the
-/// limit is reached are queued as `.queued` rows and will be started
-/// automatically when a slot frees up.
+/// **Background URLSession** — uses
+/// `URLSessionConfiguration.background(withIdentifier:)` so in-flight
+/// downloads continue when the app is backgrounded or suspended by iOS.
+/// The session identifier is `com.adagiostream.downloads`.
 ///
-/// **Background downloads** — this bead uses standard `async/await` download
-/// tasks (not `URLSessionConfiguration.background`).  Background-session
-/// downloads continue when the app is suspended and are the gold standard
-/// for a production download manager; that work is tracked as a follow-up
-/// (l31-bg: background-session downloads).  For this cut the download will
-/// be paused if the app is killed; partially-received bytes are NOT resumed
-/// (resumeData support is also a follow-up).
+/// **Task ↔ trackId mapping** — each `URLSessionDownloadTask` has its
+/// `taskDescription` set to the Navidrome track ID.  This survives across
+/// app restarts: on relaunch `reconcileBackgroundSession()` iterates the
+/// session's existing tasks and reconciles them with the GRDB row for each
+/// `taskDescription`.
 ///
-/// **Resume** — `resumeOffset` is stored in the row but full byte-range
-/// resume (via `URLSession` `resumeData`) is deferred.  On failure the
-/// status is set to `.failed`; a retry calls `download(track:via:)` again
-/// which starts a fresh download from byte 0.
+/// **Concurrency cap** — the background session handles its own scheduling.
+/// We still gate `download()` with an in-memory `enqueued` set so we do not
+/// accidentally create duplicate tasks if `download()` is called twice before
+/// a relaunch reconciliation completes.
+///
+/// **Byte-range resume** — when a task fails or is cancelled, `resumeData`
+/// (an opaque blob) is persisted to
+/// `<AppSupport>/Adagio Stream/ResumeData/<trackId>.resumedata`.  On the
+/// next call to `download()` the data is read back and the task is created
+/// via `downloadTask(withResumeData:)`.  If the resume data is stale or
+/// unavailable, a fresh download is started from byte 0.
+///
+/// **Launch reconciliation** — on init the manager queries the background
+/// session's running tasks.  Tasks that are still running are left alone
+/// (their GRDB row stays `.downloading`).  Rows stuck in `.downloading`
+/// with NO corresponding live task are marked `.failed` so the UI shows a
+/// retry prompt.
+///
+/// **tvOS** — `URLSession(configuration: .background(…))` exists on tvOS;
+/// the `handleEventsForBackgroundURLSession` app-delegate callback is
+/// iOS-only and is guarded with `#if os(iOS)`.
 @MainActor
-public final class DownloadManager: ObservableObject {
+public final class DownloadManager: NSObject, ObservableObject {
+
+    // MARK: - Background session identifier
+
+    public static let backgroundSessionIdentifier = "com.adagiostream.downloads"
 
     // MARK: - Singleton
 
@@ -54,8 +76,8 @@ public final class DownloadManager: ObservableObject {
 
     // MARK: - Max concurrent downloads
 
-    /// Maximum number of simultaneous URLSession download tasks.
-    /// Increasing this too high hammers the server and saturates the network.
+    /// The background URLSession manages its own scheduling.  This constant
+    /// is kept for API compatibility and informational purposes.
     public let maxConcurrentDownloads = 3
 
     // MARK: - Observable state
@@ -71,13 +93,56 @@ public final class DownloadManager: ObservableObject {
     private let store: NavidromeStore
     private let downloadsDirectory: URL
 
-    /// Active download tasks keyed by track ID.
-    private var activeTasks: [String: Task<Void, Never>] = [:]
+    /// The background URLSession.  `self` is the delegate.
+    private lazy var backgroundSession: URLSession = {
+        let config = URLSessionConfiguration.background(
+            withIdentifier: Self.backgroundSessionIdentifier
+        )
+        config.isDiscretionary = false
+        config.sessionSendsLaunchEvents = true
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
+
+    /// Tracks IDs of tasks we have enqueued in the current process so we can
+    /// avoid creating duplicate tasks if download() is called twice quickly.
+    private var enqueuedTrackIDs: Set<String> = []
+
+    // MARK: - Static path helpers (nonisolated — safe to call from delegates)
+
+    /// Derives the resume-data directory path without accessing any
+    /// actor-isolated state.  Safe to call from `nonisolated` delegate methods.
+    nonisolated static func resumeDataDirectory() -> URL {
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+        return appSupport
+            .appendingPathComponent(Constants.appName, isDirectory: true)
+            .appendingPathComponent("ResumeData", isDirectory: true)
+    }
+
+    /// Returns the on-disk URL for resume data keyed by track ID.
+    /// Safe to call from `nonisolated` contexts.
+    nonisolated static func resumeDataURL(forTrackID trackID: String) -> URL {
+        resumeDataDirectory().appendingPathComponent("\(trackID).resumedata")
+    }
+
+    /// Derives the downloads directory path without accessing any
+    /// actor-isolated state.  Safe to call from `nonisolated` delegate methods.
+    nonisolated static func downloadsDirectory() -> URL {
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first!
+        return appSupport
+            .appendingPathComponent(Constants.appName, isDirectory: true)
+            .appendingPathComponent("Downloads", isDirectory: true)
+    }
 
     // MARK: - Init
 
     /// Production initialiser — uses the shared GRDB store.
-    public convenience init() {
+    public convenience override init() {
         self.init(store: NavidromeStore.shared)
     }
 
@@ -89,23 +154,27 @@ public final class DownloadManager: ObservableObject {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         ).first!
-        downloadsDirectory = appSupport
-            .appendingPathComponent(Constants.appName, isDirectory: true)
-            .appendingPathComponent("Downloads", isDirectory: true)
+        let appDir = appSupport.appendingPathComponent(Constants.appName, isDirectory: true)
+        downloadsDirectory = appDir.appendingPathComponent("Downloads", isDirectory: true)
 
         try? FileManager.default.createDirectory(
             at: downloadsDirectory,
             withIntermediateDirectories: true
         )
+        try? FileManager.default.createDirectory(
+            at: Self.resumeDataDirectory(),
+            withIntermediateDirectories: true
+        )
+
+        super.init()
 
         // Hydrate the observable snapshot on init.
         refreshDownloads()
 
-        // Any rows stuck in `.downloading` from a previous run never completed
-        // (process was killed mid-download).  Mark them `.failed` so the UI
-        // does not show phantom "downloading" indicators.
+        // Reconcile the background session with the DB — running tasks are
+        // left alive; stuck rows (no live task) are marked .failed.
         Task { @MainActor [weak self] in
-            self?.markStuckDownloadsFailed()
+            await self?.reconcileBackgroundSession()
         }
     }
 
@@ -119,7 +188,8 @@ public final class DownloadManager: ObservableObject {
     ///
     /// If a completed download already exists for the track ID this method is
     /// a no-op.  If a previous failed/paused row exists it is reset to queued
-    /// and re-enqueued.
+    /// and re-enqueued.  Byte-range resume is attempted automatically when
+    /// persisted resume data exists for the track.
     public func download(track: Track, via api: NavidromeAPI) {
         let trackID = track.id
 
@@ -128,6 +198,9 @@ public final class DownloadManager: ObservableObject {
            existing.status == .completed {
             return
         }
+
+        // Don't create a duplicate task if one is already enqueued or running.
+        if enqueuedTrackIDs.contains(trackID) { return }
 
         let now = Int(Date().timeIntervalSince1970)
         let suffix = track.suffix ?? "audio"
@@ -148,15 +221,28 @@ public final class DownloadManager: ObservableObject {
         try? store.upsert(download: record)
         refreshDownloads()
 
-        drainQueue(api: api)
+        startBackgroundTask(trackID: trackID, api: api)
     }
 
-    /// Cancels an in-flight or queued download.  The GRDB row is left with
-    /// status `.failed` so the UI can show "cancelled".
+    /// Cancels an in-flight or queued download, capturing resumeData for
+    /// later byte-range resume.  The GRDB row is left with status `.failed`.
     public func cancelDownload(trackID: String) {
-        activeTasks[trackID]?.cancel()
-        activeTasks.removeValue(forKey: trackID)
         progress.removeValue(forKey: trackID)
+        enqueuedTrackIDs.remove(trackID)
+
+        // Find the live task and cancel it, requesting resume data.
+        backgroundSession.getAllTasks { tasks in
+            let matchingTask = tasks.first { $0.taskDescription == trackID }
+            if let downloadTask = matchingTask as? URLSessionDownloadTask {
+                downloadTask.cancel(byProducingResumeData: { data in
+                    if let data {
+                        Self.persistResumeData(data, forTrackID: trackID)
+                    }
+                })
+            } else {
+                matchingTask?.cancel()
+            }
+        }
 
         try? store.updateDownload(
             trackID: trackID,
@@ -166,18 +252,24 @@ public final class DownloadManager: ObservableObject {
         refreshDownloads()
     }
 
-    /// Deletes the download row and any associated on-disk file.
+    /// Deletes the download row and any associated on-disk file and resume data.
     public func deleteDownload(trackID: String) {
-        // Cancel first if active.
-        activeTasks[trackID]?.cancel()
-        activeTasks.removeValue(forKey: trackID)
         progress.removeValue(forKey: trackID)
+        enqueuedTrackIDs.remove(trackID)
+
+        // Cancel the task if it is running.
+        backgroundSession.getAllTasks { tasks in
+            tasks.first(where: { $0.taskDescription == trackID })?.cancel()
+        }
 
         // Remove the file if it exists.
         if let record = try? store.download(forTrackID: trackID),
            let path = record.localPath {
             try? FileManager.default.removeItem(atPath: path)
         }
+
+        // Remove persisted resume data.
+        Self.clearResumeData(forTrackID: trackID)
 
         try? store.deleteDownload(forTrackID: trackID)
         refreshDownloads()
@@ -210,121 +302,141 @@ public final class DownloadManager: ObservableObject {
         (try? store.totalDownloadedBytes()) ?? 0
     }
 
-    /// Deletes all download rows and their on-disk files.
+    /// Deletes all download rows, on-disk files, and resume data blobs.
     public func clearAllDownloads() {
-        for (_, task) in activeTasks { task.cancel() }
-        activeTasks.removeAll()
+        enqueuedTrackIDs.removeAll()
         progress.removeAll()
+
+        backgroundSession.getAllTasks { tasks in
+            tasks.forEach { $0.cancel() }
+        }
+
+        // Clear all persisted resume data files.
+        let rdDir = Self.resumeDataDirectory()
+        if let files = try? FileManager.default.contentsOfDirectory(
+            at: rdDir,
+            includingPropertiesForKeys: nil
+        ) {
+            files.forEach { try? FileManager.default.removeItem(at: $0) }
+        }
 
         try? store.deleteAllDownloads()
         refreshDownloads()
     }
 
-    // MARK: - Queue drain
+    // MARK: - Background completion handler (iOS only)
 
-    /// Starts queued downloads up to `maxConcurrentDownloads`.
-    private func drainQueue(api: NavidromeAPI) {
-        guard activeTasks.count < maxConcurrentDownloads else { return }
+    #if os(iOS)
+    /// The system-provided completion handler for the background session.
+    /// Set by `AppDelegate.application(_:handleEventsForBackgroundURLSession:completionHandler:)`
+    /// and called from `urlSessionDidFinishEvents(forBackgroundURLSession:)`.
+    var backgroundCompletionHandler: (() -> Void)?
+    #endif
 
-        let queuedRows = (try? store.downloads(withStatus: .queued)) ?? []
+    // MARK: - Resume data helpers (nonisolated static — callable from delegate methods)
 
-        for record in queuedRows {
-            guard activeTasks.count < maxConcurrentDownloads else { break }
-            guard activeTasks[record.id] == nil else { continue }
-
-            let trackID = record.id
-            let task = Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.executeDownload(trackID: trackID, api: api)
-            }
-            activeTasks[trackID] = task
-        }
+    /// Persists resume data to disk for future byte-range resume.
+    nonisolated static func persistResumeData(_ data: Data, forTrackID trackID: String) {
+        let url = resumeDataURL(forTrackID: trackID)
+        // Ensure the directory exists (may not on first launch after update).
+        try? FileManager.default.createDirectory(
+            at: resumeDataDirectory(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: url)
     }
 
-    // MARK: - Core download execution
+    /// Loads persisted resume data for a track without removing it.
+    /// Returns nil when no resume data exists.
+    nonisolated static func loadResumeData(forTrackID trackID: String) -> Data? {
+        let url = resumeDataURL(forTrackID: trackID)
+        return try? Data(contentsOf: url)
+    }
 
-    /// Runs a single URLSession download task for `trackID`, writing the result
-    /// to the pre-determined local path.  Transitions status through
-    /// queued → downloading → completed (or failed).
-    private func executeDownload(trackID: String, api: NavidromeAPI) async {
-        guard let url = api.downloadURL(trackID: trackID) else {
-            try? store.updateDownload(
-                trackID: trackID,
-                status: .failed,
-                error: "Could not build download URL"
-            )
-            refreshDownloads()
-            activeTasks.removeValue(forKey: trackID)
-            return
+    /// Removes any persisted resume data file for a track.
+    nonisolated static func clearResumeData(forTrackID trackID: String) {
+        let url = resumeDataURL(forTrackID: trackID)
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Task creation
+
+    /// Creates and resumes a background download task for `trackID`.
+    /// Uses persisted resume data for byte-range continuation when available.
+    private func startBackgroundTask(trackID: String, api: NavidromeAPI) {
+        // Consume (load + delete) the resume data atomically.
+        let resumeDataURL = Self.resumeDataURL(forTrackID: trackID)
+        let resumeData = (try? Data(contentsOf: resumeDataURL))
+        if resumeData != nil {
+            try? FileManager.default.removeItem(at: resumeDataURL)
         }
 
-        // Fetch the destination path from the record.
-        guard let record = try? store.download(forTrackID: trackID),
-              let localPath = record.localPath
-        else {
-            activeTasks.removeValue(forKey: trackID)
-            return
+        let task: URLSessionDownloadTask
+        if let resumeData {
+            task = backgroundSession.downloadTask(withResumeData: resumeData)
+        } else {
+            guard let url = api.downloadURL(trackID: trackID) else {
+                try? store.updateDownload(
+                    trackID: trackID,
+                    status: .failed,
+                    error: "Could not build download URL"
+                )
+                refreshDownloads()
+                return
+            }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 300
+            task = backgroundSession.downloadTask(with: request)
         }
+        task.taskDescription = trackID
+        enqueuedTrackIDs.insert(trackID)
 
-        let destinationURL = URL(fileURLWithPath: localPath)
-
-        // Mark as .downloading.
         try? store.updateDownload(trackID: trackID, status: .downloading)
         refreshDownloads()
 
-        do {
-            let session = URLSession.shared
-            let (tempURL, response) = try await session.download(from: url)
+        task.resume()
+    }
 
-            // Guard against task cancellation.
-            if Task.isCancelled {
-                try? FileManager.default.removeItem(at: tempURL)
-                activeTasks.removeValue(forKey: trackID)
-                return
+    // MARK: - Launch reconciliation
+
+    /// Re-attaches to the background session and reconciles in-flight tasks
+    /// with the GRDB `downloads` table.
+    ///
+    /// Logic:
+    /// - Tasks still running in the background session → leave them running;
+    ///   ensure their DB row is `.downloading` and add their IDs to
+    ///   `enqueuedTrackIDs`.
+    /// - DB rows in `.downloading` with no corresponding live task → the
+    ///   download was genuinely killed (not just backgrounded); mark `.failed`.
+    func reconcileBackgroundSession() async {
+        let tasks = await withCheckedContinuation { continuation in
+            backgroundSession.getAllTasks { tasks in
+                continuation.resume(returning: tasks)
             }
-
-            // Check HTTP status.
-            if let http = response as? HTTPURLResponse,
-               !(200...299).contains(http.statusCode) {
-                try? FileManager.default.removeItem(at: tempURL)
-                throw URLError(.badServerResponse)
-            }
-
-            // Move temp file to the final path.
-            // Remove any stale file at the destination first.
-            try? FileManager.default.removeItem(at: destinationURL)
-            try FileManager.default.moveItem(at: tempURL, to: destinationURL)
-
-            // Apply file protection so the file is accessible after first unlock
-            // and survives background finalization.
-            let attrs: [FileAttributeKey: Any] = [
-                .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
-            ]
-            try? FileManager.default.setAttributes(attrs, ofItemAtPath: localPath)
-
-            // Retrieve file size for resumeOffset / storage accounting.
-            let fileSize = (try? FileManager.default.attributesOfItem(
-                atPath: localPath
-            ))?[.size] as? Int ?? 0
-
-            try? store.updateDownload(
-                trackID: trackID,
-                status: .completed,
-                localPath: localPath,
-                resumeOffset: fileSize
-            )
-        } catch {
-            if Task.isCancelled { return }
-            try? store.updateDownload(
-                trackID: trackID,
-                status: .failed,
-                error: error.localizedDescription
-            )
         }
 
-        activeTasks.removeValue(forKey: trackID)
-        progress.removeValue(forKey: trackID)
-        refreshDownloads()
+        let liveTaskTrackIDs: Set<String> = Set(
+            tasks.compactMap { $0.taskDescription }
+        )
+
+        // Register live tasks in the in-memory enqueued set.
+        for id in liveTaskTrackIDs {
+            enqueuedTrackIDs.insert(id)
+        }
+
+        // Mark stuck rows (downloading with no live task) as failed.
+        let stuck = (try? store.downloads(withStatus: .downloading)) ?? []
+        var didChange = false
+        for record in stuck {
+            guard !liveTaskTrackIDs.contains(record.id) else { continue }
+            try? store.updateDownload(
+                trackID: record.id,
+                status: .failed,
+                error: "Interrupted — tap to retry"
+            )
+            didChange = true
+        }
+        if didChange { refreshDownloads() }
     }
 
     // MARK: - Helpers
@@ -333,20 +445,174 @@ public final class DownloadManager: ObservableObject {
     private func refreshDownloads() {
         downloads = (try? store.allDownloads()) ?? []
     }
+}
 
-    /// Marks rows that are stuck in `.downloading` (from a prior killed process)
-    /// as `.failed` so they can be retried.
-    private func markStuckDownloadsFailed() {
-        let stuck = (try? store.downloads(withStatus: .downloading)) ?? []
-        for record in stuck {
-            // Only mark stuck if there is no active task for this ID.
-            guard activeTasks[record.id] == nil else { continue }
-            try? store.updateDownload(
-                trackID: record.id,
-                status: .failed,
-                error: "Interrupted — tap to retry"
-            )
+// MARK: - URLSessionDownloadDelegate
+
+extension DownloadManager: URLSessionDownloadDelegate {
+
+    /// Called when a download task finishes successfully.
+    public nonisolated func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        guard let trackID = downloadTask.taskDescription else { return }
+
+        // Derive the destination path from the DB record (contains the
+        // correct extension from the original Track.suffix).
+        let localPath: String
+        if let record = try? NavidromeStore.shared.download(forTrackID: trackID),
+           let path = record.localPath {
+            localPath = path
+        } else {
+            // Fallback: infer path from the track ID and a generic extension.
+            localPath = Self.downloadsDirectory()
+                .appendingPathComponent("\(trackID).audio")
+                .path
         }
-        if !stuck.isEmpty { refreshDownloads() }
+
+        let destinationURL = URL(fileURLWithPath: localPath)
+
+        // Check HTTP status.
+        if let http = downloadTask.response as? HTTPURLResponse,
+           !(200...299).contains(http.statusCode) {
+            try? FileManager.default.removeItem(at: location)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.enqueuedTrackIDs.remove(trackID)
+                self.progress.removeValue(forKey: trackID)
+                try? self.store.updateDownload(
+                    trackID: trackID,
+                    status: .failed,
+                    error: "HTTP \(http.statusCode)"
+                )
+                self.refreshDownloads()
+            }
+            return
+        }
+
+        // Move the temp file to the final destination.
+        try? FileManager.default.removeItem(at: destinationURL)
+        do {
+            try FileManager.default.moveItem(at: location, to: destinationURL)
+        } catch {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.enqueuedTrackIDs.remove(trackID)
+                self.progress.removeValue(forKey: trackID)
+                try? self.store.updateDownload(
+                    trackID: trackID,
+                    status: .failed,
+                    error: error.localizedDescription
+                )
+                self.refreshDownloads()
+            }
+            return
+        }
+
+        // Apply CPUFA file protection.
+        let attrs: [FileAttributeKey: Any] = [
+            .protectionKey: FileProtectionType.completeUntilFirstUserAuthentication
+        ]
+        try? FileManager.default.setAttributes(attrs, ofItemAtPath: localPath)
+
+        // File size for resumeOffset / storage accounting.
+        let fileSize = (try? FileManager.default.attributesOfItem(
+            atPath: localPath
+        ))?[.size] as? Int ?? 0
+
+        // Clear any stale resume data since the download succeeded.
+        Self.clearResumeData(forTrackID: trackID)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.enqueuedTrackIDs.remove(trackID)
+            self.progress.removeValue(forKey: trackID)
+            try? self.store.updateDownload(
+                trackID: trackID,
+                status: .completed,
+                localPath: localPath,
+                resumeOffset: fileSize
+            )
+            self.refreshDownloads()
+        }
+    }
+
+    /// Called periodically as bytes arrive — drives the `@Published progress` dictionary.
+    public nonisolated func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard let trackID = downloadTask.taskDescription else { return }
+        let snapshot = DownloadProgress(
+            bytesReceived: totalBytesWritten,
+            totalBytes: totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil
+        )
+        Task { @MainActor [weak self] in
+            self?.progress[trackID] = snapshot
+        }
+    }
+
+    /// Called when a task completes — either successfully (handled above) or
+    /// with an error.  Successful completion calls `didFinishDownloadingTo`
+    /// first, so by the time this fires for a success case the row is already
+    /// `.completed`; we only need to handle the error path here.
+    public nonisolated func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        guard let error else { return }   // success handled in didFinishDownloadingTo
+        guard let trackID = task.taskDescription else { return }
+
+        // Attempt to capture resume data from the error userInfo.
+        let resumeData = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+
+        if let resumeData {
+            Self.persistResumeData(resumeData, forTrackID: trackID)
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.enqueuedTrackIDs.remove(trackID)
+            self.progress.removeValue(forKey: trackID)
+
+            // Don't overwrite a .completed row — the success delegate was
+            // called first.
+            if let existing = try? self.store.download(forTrackID: trackID),
+               existing.status == .completed {
+                return
+            }
+
+            // Don't mark cancelled tasks as failed with a confusing message —
+            // cancelDownload() already sets the error.
+            let nsErr = error as NSError
+            let isCancelled = nsErr.domain == NSURLErrorDomain &&
+                              nsErr.code == NSURLErrorCancelled
+            if !isCancelled {
+                try? self.store.updateDownload(
+                    trackID: trackID,
+                    status: .failed,
+                    error: error.localizedDescription
+                )
+                self.refreshDownloads()
+            }
+        }
+    }
+
+    /// Called when ALL events for a background session have been delivered.
+    /// Invoke the stored iOS completion handler to tell the system the app is
+    /// done processing and the snapshot can be taken.
+    public nonisolated func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        #if os(iOS)
+        Task { @MainActor [weak self] in
+            self?.backgroundCompletionHandler?()
+            self?.backgroundCompletionHandler = nil
+        }
+        #endif
     }
 }
