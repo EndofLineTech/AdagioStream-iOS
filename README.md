@@ -1,21 +1,38 @@
 # Adagio Stream
 
-A feature-rich IPTV audio streaming app for iOS. Manage multiple streaming providers, browse channels by group, and listen with CarPlay, AirPlay, and background playback support.
+A feature-rich audio streaming app for iOS. Connect IPTV providers and Navidrome music
+libraries, browse and search your content, and listen with CarPlay, AirPlay, and
+background playback support.
 
 ## Features
 
+### IPTV streaming (M3U / Xtream Codes)
+
 - **Multi-Provider Support** — Connect M3U playlists and Xtream Codes providers simultaneously
-- **CarPlay** — Full channel browsing and playback in your car
-- **AirPlay** — Stream to any AirPlay-compatible device
-- **Time-Shift Buffer** — Seamless audio continuity during phone calls and interruptions with skip-to-live
-- **Favorites** — Mark channels as favorites for quick access
 - **Channel Groups** — Organize, enable/disable, and favorite groups with custom sort order
 - **EPG** — Electronic program guide integration for both M3U and Xtream Codes
 - **SiriusXM Metadata** — Automatic track detection with song title, artist, and artwork via xmplaylist.com
 - **Live Sports Scores** — Real-time NFL, MLB, NBA, and NHL scores from ESPN on matched channels
 - **Saved Songs** — Save tracks you hear on SiriusXM channels to your library
 - **Custom Playlists** — Create and share custom channel playlists
-- **Widgets** — Lock screen and Dynamic Island now-playing widgets via Live Activities
+
+### Navidrome music library (Subsonic API)
+
+- **Music Library** — Browse artists, albums, and genres with cover art from a Navidrome server
+- **Search** — Full-text search across artists, albums, and songs
+- **Queue Playback** — Next/previous, auto-advance, shuffle, and repeat; lock-screen scrubber
+- **Playlists** — Browse, play, create, rename, delete, and edit track lists
+- **Scrobble** — Automatically report plays to the Navidrome server
+- **Stars and Ratings** — Star/unstar tracks and set ratings; starred indicator in browse rows
+- **Offline Downloads** — Background downloads with byte-range resume; local-first playback
+- **Offline Mode** — Falls back to downloaded library when the server is unreachable
+
+### Platform
+
+- **CarPlay** — Full channel and music library browsing, now-playing controls, Up Next queue
+- **AirPlay** — Stream to any AirPlay-compatible device
+- **Time-Shift Buffer** — Seamless audio continuity during phone calls and interruptions with skip-to-live
+- **Favorites** — Mark channels as favorites for quick access
 - **Share Extension** — Import provider URLs directly from the share sheet
 - **Privacy First** — Zero analytics, zero tracking, all data stored locally on device
 - **GDPR Compliant** — Export your data, delete all data, in-app privacy policy
@@ -74,11 +91,19 @@ xcodegen generate
 
 ```
 AdagioStream/
-├── Models/           Data structures (Provider, Channel, AppSettings, etc.)
-├── Services/         Business logic (AudioPlayer, ProviderManager, ESPN, SXM, etc.)
+├── Models/           Data structures (Provider, Channel, NavidromeModels, etc.)
+├── Services/         Business logic
+│   ├── Audio/        AVAudioEngine + VLCAudioCallbackBridge (amem PCM pipeline)
+│   ├── AudioPlayerService.swift
+│   ├── NavidromeAPI.swift      Subsonic REST client
+│   ├── NavidromeStore.swift    GRDB SQLite library + download index
+│   ├── SubsonicAuth.swift      Token + salt MD5 authentication
+│   ├── DownloadManager.swift   Background URLSession downloads + byte-range resume
+│   └── ...                     ProviderManager, ESPN, SXM, EPG, etc.
 ├── ViewModels/       MVVM view state management
 ├── Views/            SwiftUI interface
-│   ├── Channels/     Channel browsing and search
+│   ├── Channels/     IPTV channel browsing and search
+│   ├── Music/        Navidrome library browse, search, queue, playlists
 │   ├── Player/       Now playing and mini player
 │   ├── Favorites/    Favorite channels
 │   ├── SavedSongs/   Saved track library
@@ -91,13 +116,15 @@ AdagioStream/
 ├── CarPlay/          CarPlay scene and template manager
 ├── Utilities/        Constants, extensions, helpers
 └── Resources/        Licenses, assets
+docs/adr/             Architecture Decision Records
 AdagioStreamWidget/   Lock screen and Live Activity widget
 ShareExtension/       URL share sheet handler
 ```
 
 ## Dependencies
 
-- **[VLCKitSPM](https://github.com/tylerjonesio/vlckit-spm)** v3.6.0 — LibVLC-based audio playback
+- **[VLCKitSPM](https://github.com/tylerjonesio/vlckit-spm)** v3.6.0 — LibVLC-based audio playback (see [ADR 0002](docs/adr/0002-vlckitspm-single-vendor-dependency.md))
+- **[GRDB.swift](https://github.com/groue/GRDB.swift)** v6.29.3 — SQLite persistence for the Navidrome library and download index
 
 No third-party analytics, crash reporting, or advertising SDKs.
 
