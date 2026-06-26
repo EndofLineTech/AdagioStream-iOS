@@ -155,6 +155,22 @@ public enum ChannelSortOrder: String, Codable, CaseIterable {
     }
 }
 
+/// Ordering of the Navidrome music entries relative to streaming channel
+/// groups in the CarPlay root list. Only meaningful when a Subsonic provider
+/// is configured. `streamingFirst` preserves the historical layout (channels
+/// above music).
+public enum CarPlaySourceOrder: String, Codable, CaseIterable {
+    case streamingFirst
+    case navidromeFirst
+
+    public var label: String {
+        switch self {
+        case .streamingFirst: "Streaming First"
+        case .navidromeFirst: "Music First"
+        }
+    }
+}
+
 /// Polling cadence for the ESPN scoreboard overlay.
 public enum ESPNLivePollInterval: Int, Codable, CaseIterable {
     case off = 0
@@ -196,6 +212,9 @@ public struct AppSettings: Codable {
     /// downloaded tracks only and no network browse/search calls are made.
     /// Default false (tolerant decodeIfPresent so old on-disk data loads safely).
     public var offlineMode: Bool
+    /// CarPlay root ordering of Navidrome music vs streaming channel groups
+    /// (fnv.8). Default streamingFirst preserves the historical layout.
+    public var carPlaySourceOrder: CarPlaySourceOrder
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -213,7 +232,8 @@ public struct AppSettings: Codable {
         hasSeenTabReorgTip: Bool = false,
         repeatMode: RepeatMode = .off,
         shuffleEnabled: Bool = false,
-        offlineMode: Bool = false
+        offlineMode: Bool = false,
+        carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -231,6 +251,7 @@ public struct AppSettings: Codable {
         self.repeatMode = repeatMode
         self.shuffleEnabled = shuffleEnabled
         self.offlineMode = offlineMode
+        self.carPlaySourceOrder = carPlaySourceOrder
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -254,6 +275,7 @@ public struct AppSettings: Codable {
         repeatMode = try container.decodeIfPresent(RepeatMode.self, forKey: .repeatMode) ?? .off
         shuffleEnabled = try container.decodeIfPresent(Bool.self, forKey: .shuffleEnabled) ?? false
         offlineMode = try container.decodeIfPresent(Bool.self, forKey: .offlineMode) ?? false
+        carPlaySourceOrder = try container.decodeIfPresent(CarPlaySourceOrder.self, forKey: .carPlaySourceOrder) ?? .streamingFirst
     }
 }
 

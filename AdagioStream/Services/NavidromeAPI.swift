@@ -598,6 +598,18 @@ public struct NavidromeAPI {
         return payload.songsByGenre.song.map { $0.toRecord(updatedAt: now) }
     }
 
+    /// Fetches a random page of songs from `getRandomSongs.view` (fnv.11).
+    ///
+    /// Backs the CarPlay "Songs" browse: a flat, no-text-input song list the
+    /// user can tap to start playback with the rest of the page queued.
+    /// Subsonic caps `size` at 500.
+    public func getRandomSongs(size: Int = 100) async throws -> [Track] {
+        let now = Int(Date().timeIntervalSince1970)
+        let params: [String: String] = ["size": String(min(max(size, 1), 500))]
+        let payload = try await fetch("getRandomSongs", params: params, as: GetRandomSongsPayload.self)
+        return payload.randomSongs.song.map { $0.toRecord(updatedAt: now) }
+    }
+
     // MARK: - Search
 
     /// Result of a `search3` call — artists, albums, and songs that match the query.
@@ -1018,6 +1030,22 @@ public struct NavidromeAPI {
         let songsByGenre: SongsByGenreWrapper
 
         struct SongsByGenreWrapper: Decodable {
+            let song: [SubsonicTrackDTO]
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                song  = (try? c.decode([SubsonicTrackDTO].self, forKey: .song)) ?? []
+            }
+
+            enum CodingKeys: String, CodingKey { case song }
+        }
+    }
+
+    // getRandomSongs
+    private struct GetRandomSongsPayload: Decodable {
+        let randomSongs: RandomSongsWrapper
+
+        struct RandomSongsWrapper: Decodable {
             let song: [SubsonicTrackDTO]
 
             init(from decoder: Decoder) throws {

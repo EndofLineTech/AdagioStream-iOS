@@ -92,6 +92,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             }
             .store(in: &groupSortCancellables)
 
+        providerManager.$carPlaySourceOrder
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+            .store(in: &groupSortCancellables)
+
         channelCancellable = audioPlayer.$currentChannel
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -374,16 +383,18 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
 
     private func buildRootSections() -> [CPListSection] {
         var items: [CPListItem] = []
+        var nowPlayingItem: CPListItem?
 
         // Now Playing row at top if something is playing
         if audioPlayer.currentChannel != nil {
-            let nowPlayingItem = CPListItem(text: "Now Playing", detailText: audioPlayer.currentChannel?.name)
-            nowPlayingItem.accessoryType = .disclosureIndicator
-            nowPlayingItem.handler = { [weak self] _, completion in
+            let item = CPListItem(text: "Now Playing", detailText: audioPlayer.currentChannel?.name)
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
                 self?.pushNowPlaying()
                 completion()
             }
-            items.append(nowPlayingItem)
+            items.append(item)
+            nowPlayingItem = item
         }
 
         let favorites = providerManager.favoriteChannels
@@ -453,18 +464,48 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             items.append(item)
         }
 
-        // Music library entry — only when a Subsonic provider is configured.
-        if providerManager.subsonicAPI != nil {
-            items.append(makeMusicRootItem())
+        // Navidrome music categories (Artists/Albums/Songs/Playlists) — only
+        // when a Subsonic provider is configured. Hoisted to the root (fnv.12)
+        // so the deepest browse path (Artists → albums → tracks → NowPlaying)
+        // stays within CarPlay's 5-template push limit. Each category is a
+        // static item that fetches lazily on tap, so a transient fetch failure
+        // can never hide a category the way the old eager-section build could.
+        let musicItems = providerManager.subsonicAPI != nil ? makeMusicCategoryItems() : []
+
+        // No Navidrome: preserve the historical single, header-less section so
+        // channel-only users see no visual change.
+        if musicItems.isEmpty {
+            if items.isEmpty {
+                let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
+                placeholder.handler = { _, completion in completion() }
+                items.append(placeholder)
+            }
+            return [CPListSection(items: items)]
         }
 
-        if items.isEmpty {
-            let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
-            placeholder.handler = { _, completion in completion() }
-            items.append(placeholder)
+        // Navidrome present: split into ordered, labeled sections. Now Playing
+        // is pulled out into its own leading section so it stays pinned at the
+        // top regardless of the streaming/music order.
+        var sections: [CPListSection] = []
+        if let firstNowPlaying = nowPlayingItem, items.first === firstNowPlaying {
+            items.removeFirst()
+            sections.append(CPListSection(items: [firstNowPlaying]))
         }
 
-        return [CPListSection(items: items)]
+        let streamingSection = items.isEmpty
+            ? nil
+            : CPListSection(items: items, header: "Channels", sectionIndexTitle: nil)
+        let musicSection = CPListSection(items: musicItems, header: "Music", sectionIndexTitle: nil)
+
+        switch providerManager.carPlaySourceOrder {
+        case .streamingFirst:
+            if let streamingSection { sections.append(streamingSection) }
+            sections.append(musicSection)
+        case .navidromeFirst:
+            sections.append(musicSection)
+            if let streamingSection { sections.append(streamingSection) }
+        }
+        return sections
     }
 
     private func setRootTemplate() {
@@ -698,61 +739,122 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
 
     // MARK: - Music Library Browse (8rg.1)
 
-    /// Adds a "Music" entry to the root item list when a Subsonic provider is configured.
-    /// Called from `buildRootSections()` only when `providerManager.subsonicAPI != nil`.
-    private func makeMusicRootItem() -> CPListItem {
-        let item = CPListItem(text: "Music", detailText: "Navidrome library")
+    /// Builds the four Navidrome category root items (Artists / Albums / Songs
+    /// / Playlists). Hoisted to the CarPlay root (fnv.12) instead of nesting
+    /// behind a single "Music" entry: removing that intermediate level keeps
+    /// the deepest browse path within CarPlay's 5-template push limit while
+    /// preserving per-track selection.
+    ///
+    /// Depth budgets (NowPlaying is a pushed template):
+    ///   Artists(1) → artist albums(2) → album tracks(3) → NowPlaying(4)
+    ///   Albums(1)  → album tracks(2)  → NowPlaying(3)
+    ///   Songs(1)   → NowPlaying(2)
+    ///   Playlists(1) → playlist tracks(2) → NowPlaying(3)
+    /// Each is counted from the root list (push depth 1) → all ≤ 5.
+    private func makeMusicCategoryItems() -> [CPListItem] {
+        [
+            musicCategoryItem(title: "Artists",   subtitle: "Browse by artist")   { $0.pushArtistsList(api: $1) },
+            musicCategoryItem(title: "Albums",    subtitle: "Browse albums")      { $0.pushAlbumsList(api: $1) },
+            musicCategoryItem(title: "Songs",     subtitle: "Random songs")       { $0.pushSongsList(api: $1) },
+            musicCategoryItem(title: "Playlists", subtitle: "Browse playlists")   { $0.pushPlaylistsList(api: $1) },
+        ]
+    }
+
+    /// Makes one Navidrome category root item. The Subsonic API is resolved at
+    /// tap time (not capture time) so the item survives provider changes, and
+    /// the list it pushes fetches lazily — a transient failure shows an empty
+    /// list rather than hiding the whole category.
+    private func musicCategoryItem(
+        title: String,
+        subtitle: String,
+        action: @escaping (CarPlayTemplateManager, NavidromeAPI) -> Void
+    ) -> CPListItem {
+        let item = CPListItem(text: title, detailText: subtitle)
         item.accessoryType = .disclosureIndicator
+        item.setImage(musicNoteImage())
         item.handler = { [weak self] _, completion in
-            self?.pushMusicBrowse()
+            guard let self, let api = self.providerManager.subsonicAPI else { completion(); return }
+            action(self, api)
             completion()
         }
         return item
     }
 
-    /// Pushes the Music browse template: a single CPListTemplate with three
-    /// sections (Artists / Albums / Playlists) so we don't consume an extra
-    /// level of template-stack depth for a bare category menu.
-    ///
-    /// Depth budget:
-    ///   Root (1) → Music (2) → Artist/Album/Playlist list (3)
-    ///   → Album tracks (4) → tap = play + NowPlaying singleton (5)
-    ///   Total push depth ≤ 5 (CarPlay limit).
-    private func pushMusicBrowse() {
-        guard let api = providerManager.subsonicAPI else { return }
-        log.log("Music: pushMusicBrowse", category: .carplay)
-
-        // Build a loading placeholder — sections will be updated once async fetches return.
+    /// Loading-placeholder template shared by the category list pushers.
+    private func makeMusicLoadingTemplate(title: String) -> CPListTemplate {
         let loadingItem = CPListItem(text: "Loading…", detailText: nil)
         loadingItem.handler = { _, completion in completion() }
-        let loadingSection = CPListSection(items: [loadingItem])
-        let template = CPListTemplate(title: "Music", sections: [loadingSection])
-        interfaceController.pushTemplate(template, animated: true, completion: nil)
+        return CPListTemplate(title: title, sections: [CPListSection(items: [loadingItem])])
+    }
 
+    private func pushArtistsList(api: NavidromeAPI) {
+        log.log("Music: pushArtistsList", category: .carplay)
+        let template = makeMusicLoadingTemplate(title: "Artists")
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task { @MainActor [weak self] in
             guard let self else { return }
-            async let artistsResult   = self.fetchArtistItems(api: api)
-            async let albumsResult    = self.fetchAlbumItems(api: api)
-            async let playlistsResult = self.fetchPlaylistItems(api: api)
+            let items = await self.fetchArtistItems(api: api)
+            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No artists")] : items)])
+        }
+    }
 
-            let (artistItems, albumItems, playlistItems) = await (artistsResult, albumsResult, playlistsResult)
+    private func pushAlbumsList(api: NavidromeAPI) {
+        log.log("Music: pushAlbumsList", category: .carplay)
+        let template = makeMusicLoadingTemplate(title: "Albums")
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let items = await self.fetchAlbumItems(api: api)
+            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No albums")] : items)])
+        }
+    }
 
-            var sections: [CPListSection] = []
-            if !artistItems.isEmpty {
-                sections.append(CPListSection(items: artistItems, header: "Artists", sectionIndexTitle: nil))
+    private func pushPlaylistsList(api: NavidromeAPI) {
+        log.log("Music: pushPlaylistsList", category: .carplay)
+        let template = makeMusicLoadingTemplate(title: "Playlists")
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let items = await self.fetchPlaylistItems(api: api)
+            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No playlists")] : items)])
+        }
+    }
+
+    private func pushSongsList(api: NavidromeAPI) {
+        log.log("Music: pushSongsList", category: .carplay)
+        let template = makeMusicLoadingTemplate(title: "Songs")
+        interfaceController.pushTemplate(template, animated: true, completion: nil)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let items = await self.fetchSongItems(api: api)
+            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No songs")] : items)])
+        }
+    }
+
+    // MARK: Songs (random page → play)
+
+    private func fetchSongItems(api: NavidromeAPI) async -> [CPListItem] {
+        do {
+            let songs = try await api.getRandomSongs(size: 100)
+            return songs.enumerated().map { (index, track) in
+                let item = CPListItem(text: track.title, detailText: track.artist)
+                item.handler = { [weak self] _, completion in
+                    guard let self else { completion(); return }
+                    self.log.log("Music: play random song \(index) \"\(track.title)\"", category: .carplay)
+                    self.audioPlayer.setQueue(songs, startIndex: index, via: api)
+                    self.pushNowPlaying()
+                    completion()
+                }
+                if let coverArtID = track.coverArt {
+                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
+                } else {
+                    item.setImage(musicNoteImage())
+                }
+                return item
             }
-            if !albumItems.isEmpty {
-                sections.append(CPListSection(items: albumItems, header: "Albums", sectionIndexTitle: nil))
-            }
-            if !playlistItems.isEmpty {
-                sections.append(CPListSection(items: playlistItems, header: "Playlists", sectionIndexTitle: nil))
-            }
-            if sections.isEmpty {
-                let empty = CPListItem(text: "No music found", detailText: "Add music to your Navidrome library")
-                empty.handler = { _, c in c() }
-                sections = [CPListSection(items: [empty])]
-            }
-            template.updateSections(sections)
+        } catch {
+            log.log("Music: getRandomSongs failed — \(error)", category: .carplay)
+            return []
         }
     }
 

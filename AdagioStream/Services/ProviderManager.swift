@@ -35,6 +35,10 @@ public final class ProviderManager: ObservableObject {
     @Published public var channelSortOrder: ChannelSortOrder = .providerOrder
     @Published public var groupSortOrder: ChannelSortOrder = .providerOrder
     @Published public var channelGroupingMode: ChannelGroupingMode = .allGroups
+    /// CarPlay root ordering of Navidrome music vs streaming channel groups
+    /// (fnv.9). Mirrors AppSettings.carPlaySourceOrder; CarPlayTemplateManager
+    /// observes this to rebuild the root list when it changes.
+    @Published public var carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst
     private var rawChannels: [Channel] = []
     private var providerRawChannels: [Channel] = []
     private var hasInitializedCollapsedGroups = false
@@ -74,6 +78,7 @@ public final class ProviderManager: ObservableObject {
             channelSortOrder = settings.channelSortOrder
             groupSortOrder = settings.groupSortOrder
             channelGroupingMode = settings.channelGroupingMode
+            carPlaySourceOrder = settings.carPlaySourceOrder
             await loadProviders()
             if !providers.isEmpty {
                 await loadChannels()

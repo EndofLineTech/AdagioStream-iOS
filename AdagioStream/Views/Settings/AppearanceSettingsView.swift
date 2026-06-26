@@ -76,6 +76,21 @@ struct AppearanceSettingsView: View {
                 Text("Controls the order groups appear in your channel list. Favorite groups always appear first.")
             }
 
+            if providerManager.subsonicAPI != nil {
+                Section {
+                    Picker("CarPlay Source Order", selection: carPlaySourceOrderBinding) {
+                        ForEach(CarPlaySourceOrder.allCases, id: \.self) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("CarPlay Source Order")
+                } footer: {
+                    Text("Controls whether your Navidrome music (Artists, Albums, Songs, Playlists) appears above or below streaming channel groups in the CarPlay menu.")
+                }
+            }
+
             Section {
                 ForEach(viewModel.settings.sortPrefixes, id: \.self) { prefix in
                     Text(prefix)
@@ -122,6 +137,15 @@ struct AppearanceSettingsView: View {
             get: { viewModel.settings.groupSortOrder },
             set: { newValue in
                 Task { await viewModel.updateGroupSortOrder(newValue, providerManager: providerManager) }
+            }
+        )
+    }
+
+    private var carPlaySourceOrderBinding: Binding<CarPlaySourceOrder> {
+        Binding(
+            get: { viewModel.settings.carPlaySourceOrder },
+            set: { newValue in
+                Task { await viewModel.updateCarPlaySourceOrder(newValue, providerManager: providerManager) }
             }
         )
     }

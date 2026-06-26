@@ -165,6 +165,15 @@ public final class SettingsViewModel: ObservableObject {
         providerManager.rebuildVisibleGroups()
     }
 
+    /// fnv.9: CarPlay-only ordering of Navidrome music vs streaming channel
+    /// groups. Does not affect the in-app channel list, so no rebuild is
+    /// needed — CarPlayTemplateManager observes providerManager.carPlaySourceOrder.
+    public func updateCarPlaySourceOrder(_ order: CarPlaySourceOrder, providerManager: ProviderManager) async {
+        settings.carPlaySourceOrder = order
+        await saveSettings()
+        providerManager.carPlaySourceOrder = order
+    }
+
     public func updateArtworkDisplayMode(_ mode: ArtworkDisplayMode) async {
         settings.artworkDisplayMode = mode
         audioPlayer.artworkDisplayMode = mode
