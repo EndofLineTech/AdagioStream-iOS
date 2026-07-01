@@ -320,15 +320,6 @@ struct PlaylistDetailView: View {
             }
         }
 
-        // l31.2: Download All in secondary actions menu
-        if case .loaded = viewModel.playlistTracksState,
-           !viewModel.playlistTracks.isEmpty,
-           !isEditingTracks {
-            ToolbarItemGroup(placement: .secondaryAction) {
-                playlistDownloadAllButton
-            }
-        }
-
         ToolbarItemGroup(placement: .secondaryAction) {
             Button {
                 renameText = viewModel.selectedPlaylist?.name ?? playlist.name
@@ -463,6 +454,11 @@ struct PlaylistDetailView: View {
 
     private var playlistHeader: some View {
         VStack(spacing: 12) {
+            // 15c: Download All above the art, matching the album screen.
+            if case .loaded = viewModel.playlistTracksState, !viewModel.playlistTracks.isEmpty {
+                playlistDownloadAllButton
+            }
+
             SubsonicCoverArt(
                 api: api,
                 coverArtID: playlist.coverArt,

@@ -140,6 +140,23 @@ struct AlbumDetailView: View {
 
     private var albumHeader: some View {
         VStack(spacing: 12) {
+            // 15c: Star toggle + Download All on one row, above the art.
+            HStack(spacing: 16) {
+                NavidromeStarButton(
+                    starred: viewModel.selectedAlbumStarState?.starred ?? false,
+                    accessibilityLabel: "Star \(album.title)"
+                ) {
+                    Task { await viewModel.toggleStar(id: album.id) }
+                }
+
+                if !viewModel.albumTracks.isEmpty {
+                    AlbumDownloadAllButton(
+                        tracks: viewModel.albumTracks,
+                        api: api
+                    )
+                }
+            }
+
             SubsonicCoverArt(
                 api: api,
                 coverArtID: album.coverArt,
@@ -166,24 +183,6 @@ struct AlbumDetailView: View {
                     Text(String(year))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
-                }
-
-                // 65x.2: Album star toggle
-                NavidromeStarButton(
-                    starred: viewModel.selectedAlbumStarState?.starred ?? false,
-                    accessibilityLabel: "Star \(album.title)"
-                ) {
-                    Task { await viewModel.toggleStar(id: album.id) }
-                }
-                .padding(.top, 4)
-
-                // l31.2: Download All button
-                if !viewModel.albumTracks.isEmpty {
-                    AlbumDownloadAllButton(
-                        tracks: viewModel.albumTracks,
-                        api: api
-                    )
-                    .padding(.top, 4)
                 }
             }
         }

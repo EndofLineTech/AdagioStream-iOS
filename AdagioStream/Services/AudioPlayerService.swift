@@ -2828,6 +2828,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 self.logVLCTransition(from: oldState, to: newState)
             }
             self.syncState()
+
+            // bug w6n: MobileVLCKit disables the idle timer internally on
+            // play (it's built for video playback) and doesn't reliably
+            // restore it for audio-only streams, since no drawable is ever
+            // attached here — audio routes through an amem callback into
+            // AVAudioEngine. This app is audio-only, so re-assert on every
+            // VLC state change that the idle timer stays enabled.
+            #if os(iOS)
+            UIApplication.shared.isIdleTimerDisabled = false
+            #endif
         }
     }
 
