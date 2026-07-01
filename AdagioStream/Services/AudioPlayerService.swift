@@ -2669,6 +2669,20 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     public func resume() {
+        // bug 9nf: pause() leaves playbackSource/queueAPI untouched (only
+        // stop() clears them), so a paused library track is still
+        // identifiable here. Without this check resume() fell through to
+        // currentChannel ?? lastPlayedChannel — always nil/stale radio state
+        // while a library track is paused — and restarted the last radio
+        // station instead of the track.
+        if case .library(let queue, let index) = playbackSource,
+           let api = queueAPI, index < queue.count {
+            let track = queue[index]
+            log.log("resume() library track=\"\(track.title)\" index=\(index)", category: .player)
+            reactivateAndPlayLibraryTrack(track, inQueue: queue, at: index, via: api, seekTo: trackElapsed)
+            return
+        }
+
         let channelName = (currentChannel ?? lastPlayedChannel)?.name ?? "nil"
         log.log("resume() channel=\"\(channelName)\"", category: .player)
         guard let channel = currentChannel ?? lastPlayedChannel else {
