@@ -206,6 +206,16 @@ public final class AudioOutput {
         log.log("AudioOutput: engine stopped", category: .audioSession)
     }
 
+    // MARK: - Mute (bug 8jq)
+
+    /// Silences/restores the mixer output without touching engine or session
+    /// state. Used to hide the brief "plays from position 0" blip while a
+    /// library-track resume seeks to its saved position — see
+    /// `reactivateAndPlayLibraryTrack` in AudioPlayerService.
+    public func setMuted(_ muted: Bool) {
+        engine.mainMixerNode.outputVolume = muted ? 0 : 1
+    }
+
     // MARK: - Interruption gate (46u)
 
     /// Called by AudioPlayerService when AVAudioSession interruption .began

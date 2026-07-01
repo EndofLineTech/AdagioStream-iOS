@@ -1047,6 +1047,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("reactivateAndPlayLibraryTrack: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
         }
         assertSessionOwnership(context: "reactivateAndPlayLibraryTrack")
+
+        // bug 8jq: startLibraryTrack() below plays from position 0 immediately;
+        // the seek to the saved position only lands after the heuristic delay
+        // below, so real audio flows from the track's start in the meantime.
+        // Mute across that window so the listener only hears the seeked-to
+        // position, not a blip of the intro.
+        let hasSeek = (elapsedSeconds ?? 0) > 0
+        if hasSeek {
+            AudioOutput.shared.setMuted(true)
+        }
         startLibraryTrack(track, inQueue: queue, at: index, via: api)
         // Seek to saved position after VLC has had time to buffer.
         // A 1-second delay is heuristic; VLC needs to parse the media
@@ -1056,7 +1066,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                 guard let self else { return }
                 let ms = Int32(exactly: max(0, elapsed * 1000).rounded()) ?? Int32(max(0, elapsed * 1000))
                 self.mediaPlayer.time = VLCTime(int: ms)
+                // Drop any pre-seek samples already sitting in the ring buffer
+                // so the render thread doesn't play a stray frame from position 0.
+                VLCAudioCallbackBridge.flushBuffer()
                 self.log.log("Library interruption resume: seeked to \(String(format: "%.1f", elapsed))s after restart", category: .interruption)
+                // Give the buffer a brief moment to refill from the new
+                // position before unmuting.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    AudioOutput.shared.setMuted(false)
+                }
             }
         }
     }
