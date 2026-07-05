@@ -83,6 +83,25 @@ struct ChannelListView: View {
 
     private var channelList: some View {
         List {
+            if !providerManager.favoriteChannels.isEmpty && searchText.isEmpty {
+                Section("Favorites") {
+                    ForEach(providerManager.favoriteChannels) { channel in
+                        ChannelRowView(
+                            channel: channel,
+                            nowPlayingTrack: sxmService.feedTracks[channel.id],
+                            espnGame: espnService.gamesByChannel[channel.id]
+                        ) {
+                            audioPlayer.channels = providerManager.favoriteChannels
+                            audioPlayer.play(channel: channel)
+                        } onToggleFavorite: {
+                            Task { await providerManager.toggleFavorite(channel) }
+                        } onAddToPlaylist: {
+                            channelToAdd = channel
+                        }
+                    }
+                }
+            }
+
             if let error = providerManager.error {
                 Section {
                     HStack(spacing: 8) {

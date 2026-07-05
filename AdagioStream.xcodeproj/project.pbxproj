@@ -167,7 +167,6 @@
 		C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */; };
 		CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */; };
 		CB5A676A08CF467E5A9F5776 /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
-		CF865ECD832DFF39D8D5C8FA /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9476852B5E296954656D6FA /* LibraryView.swift */; };
 		D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A879148E50912620B26D03 /* ProviderManagerTests.swift */; };
 		D1C6975823782DAB7458EB59 /* CustomPlaylistGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */; };
 		D1C76F1CD2D28EE66E9402CB /* APISession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB841CFC2467C1D28656B19 /* APISession.swift */; };
@@ -200,7 +199,6 @@
 		F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
 		F895F24EFAD016A036FD6A50 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */; };
 		FB623925315D5AAE757A30EE /* CustomPlaylistManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 820BB33ADA594E58199964A9 /* CustomPlaylistManager.swift */; };
-		FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5186F218805196281702F1A /* FavoritesView.swift */; };
 		FE7BEB23314503599322A8EC /* M3UExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */; };
 		FEAA16B8A3ABF58137633631 /* SubsonicAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B04F3504B6EB6AAE7863CE0 /* SubsonicAuth.swift */; };
 		FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = E480C8AB7E4CA4DEA484E968 /* SharedURLSheet.swift */; };
@@ -368,7 +366,6 @@
 		D663E9B0E8D477B2AB96374E /* BrowseAlbumsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseAlbumsView.swift; sourceTree = "<group>"; };
 		D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		D903CA55661DD9736AA33128 /* AddManualEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddManualEntryView.swift; sourceTree = "<group>"; };
-		D9476852B5E296954656D6FA /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UParser.swift; sourceTree = "<group>"; };
 		DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeShiftBufferService.swift; sourceTree = "<group>"; };
 		DC965CA67735F73D26E34C17 /* NoProvidersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoProvidersView.swift; sourceTree = "<group>"; };
@@ -389,7 +386,6 @@
 		F32076461D1698393DE4F46B /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		F3B7EAC9EEC3720784F5BFDF /* NowPlayingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingView.swift; sourceTree = "<group>"; };
 		F4729A79B034622C234D80D6 /* ShuffleRepeatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShuffleRepeatTests.swift; sourceTree = "<group>"; };
-		F5186F218805196281702F1A /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
 		F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGView.swift; sourceTree = "<group>"; };
 		F74CB1E2C668FF92DFBBB68B /* SubsonicAuthTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsonicAuthTests.swift; sourceTree = "<group>"; };
 		F8C3BD180713EE2506F860EF /* AdagioStream.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AdagioStream.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -605,14 +601,6 @@
 			path = Player;
 			sourceTree = "<group>";
 		};
-		6FBC5F09C97033D356ED66F5 /* Favorites */ = {
-			isa = PBXGroup;
-			children = (
-				F5186F218805196281702F1A /* FavoritesView.swift */,
-			);
-			path = Favorites;
-			sourceTree = "<group>";
-		};
 		75BE1873D061710449343AC8 = {
 			isa = PBXGroup;
 			children = (
@@ -696,8 +684,6 @@
 				3B92C5C143BE91606CF31288 /* Components */,
 				A97EE5CFDF1DFF2BB9D2E698 /* CustomPlaylists */,
 				A2A244448F29868096069FC2 /* EPG */,
-				6FBC5F09C97033D356ED66F5 /* Favorites */,
-				C9DE8084A97AE8031B28FF14 /* Library */,
 				3934901030B551CF06A6A537 /* Music */,
 				2A145E596DEF592D695C7EDE /* Player */,
 				D59910D0C5EDB56EBE3B834E /* Provider */,
@@ -772,14 +758,6 @@
 				A6F69CDDC9AE4D176E8B131E /* Views */,
 			);
 			path = AdagioStream;
-			sourceTree = "<group>";
-		};
-		C9DE8084A97AE8031B28FF14 /* Library */ = {
-			isa = PBXGroup;
-			children = (
-				D9476852B5E296954656D6FA /* LibraryView.swift */,
-			);
-			path = Library;
 			sourceTree = "<group>";
 		};
 		D59910D0C5EDB56EBE3B834E /* Provider */ = {
@@ -1106,7 +1084,6 @@
 				ABEB92C01CFFEC132D0C965B /* ESPNScoreService.swift in Sources */,
 				E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */,
 				77F34E2524DD6C89196F2C6D /* Extensions.swift in Sources */,
-				FC1D7B8859598B5F134199CD /* FavoritesView.swift in Sources */,
 				E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */,
 				54AB1825056C07973DE9C9A8 /* GenreBrowseView.swift in Sources */,
 				4639618DDCB6535986BBBA36 /* GlassEffect+Helpers.swift in Sources */,
@@ -1114,7 +1091,6 @@
 				BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */,
 				F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */,
 				B45A9541815DECB5D20BC5E8 /* KeychainSyncMigrator.swift in Sources */,
-				CF865ECD832DFF39D8D5C8FA /* LibraryView.swift in Sources */,
 				652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */,
 				F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */,
 				BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */,
@@ -1270,7 +1246,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 175;
+				CURRENT_PROJECT_VERSION = 176;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1301,7 +1277,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 175;
+				CURRENT_PROJECT_VERSION = 176;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1399,7 +1375,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 175;
+				CURRENT_PROJECT_VERSION = 176;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1429,7 +1405,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 175;
+				CURRENT_PROJECT_VERSION = 176;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1457,7 +1433,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 175;
+				CURRENT_PROJECT_VERSION = 176;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1479,7 +1455,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 175;
+				CURRENT_PROJECT_VERSION = 176;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
