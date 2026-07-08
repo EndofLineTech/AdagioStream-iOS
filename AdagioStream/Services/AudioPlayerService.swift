@@ -289,6 +289,21 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// release before giving up (leaving the channel set for manual resume).
     private let deferredReconnectMaxAttempts = 90
 
+    /// beads_mobilemusic-t96.4: shared in-flight guard across the four
+    /// independent reconnect/retry paths (path-monitor force-play, deferred
+    /// reconnect, probe-and-retry, watchdog restart) — generalizes
+    /// `pathReconnectCooldown` so only one path owns a reconnect attempt at a
+    /// time and they don't tear down/rebuild the VLC player concurrently.
+    /// Set when a path claims an attempt; cleared on that attempt's
+    /// completion, failure, or timeout. `reconnectGuardStaleAfter` is a
+    /// staleness escape so a bug that forgets to clear the flag can't wedge
+    /// recovery forever.
+    private var reconnectInFlightSince: Date?
+    /// Longest bound of any single retry path (deferred reconnect polls for
+    /// up to `deferredReconnectMaxAttempts` seconds) plus margin. A guard
+    /// older than this is treated as stale/abandoned and ignored.
+    private let reconnectGuardStaleAfter: TimeInterval = 120
+
     public var channels: [Channel] = []
     public var bufferDuration: TimeInterval = Constants.defaultBufferDuration
     public var artworkDisplayMode: ArtworkDisplayMode = .coverArt
@@ -844,6 +859,41 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
 
+    // MARK: - Reconnect Coordination Guard (beads_mobilemusic-t96.4)
+
+    /// Pure decision: may a reconnect path claim the shared in-flight guard
+    /// right now? Extracted from instance state so it's testable without a
+    /// live player. `nil` means no attempt is currently claimed. A non-nil
+    /// `claimedAt` older than `staleAfter` is treated as an abandoned guard
+    /// (e.g. a path that crashed/was deallocated before clearing it) and no
+    /// longer blocks new attempts.
+    nonisolated static func canClaimReconnectGuard(
+        claimedAt: Date?,
+        now: Date,
+        staleAfter: TimeInterval
+    ) -> Bool {
+        guard let claimedAt else { return true }
+        return now.timeIntervalSince(claimedAt) > staleAfter
+    }
+
+    /// Attempts to claim the shared reconnect guard for `path`. Returns
+    /// `false` (and logs) if another path already owns an in-flight attempt.
+    /// Callers must call `releaseReconnectGuard()` when their attempt
+    /// completes, fails, or times out.
+    private func claimReconnectGuard(path: String) -> Bool {
+        let now = Date()
+        guard Self.canClaimReconnectGuard(claimedAt: reconnectInFlightSince, now: now, staleAfter: reconnectGuardStaleAfter) else {
+            log.log("Reconnect guard held — \(path) suppressed (in flight since \(reconnectInFlightSince.map { String(format: "%.0f", now.timeIntervalSince($0)) } ?? "?")s ago)", category: .player)
+            return false
+        }
+        reconnectInFlightSince = now
+        return true
+    }
+
+    private func releaseReconnectGuard() {
+        reconnectInFlightSince = nil
+    }
+
     // MARK: - Network Path Monitor
 
     /// Human-readable summary of the last observed network path, for debug
@@ -909,6 +959,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             log.log("Path-driven reconnect suppressed — \(String(format: "%.1f", elapsed))s since last (cooldown \(Int(pathReconnectCooldown))s)", category: .player)
             return
         }
+
+        guard claimReconnectGuard(path: "path-monitor") else { return }
+        defer { releaseReconnectGuard() }
 
         log.log("Path-driven reconnect for \"\(channel.name)\" — \(reason)", category: .player)
         lastPathReconnectTime = Date()
@@ -2199,22 +2252,30 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// `deferredReconnectMaxAttempts` seconds (channel stays set for a manual
     /// resume).  Aborts if the user has since moved to a different channel.
     private func scheduleDeferredReconnect(for channel: Channel, attempt: Int = 0) {
+        // Claim the shared guard once, at the start of the poll chain — the
+        // recursive re-schedule below (attempt + 1) already holds it.
+        if attempt == 0 {
+            guard claimReconnectGuard(path: "deferred-reconnect") else { return }
+        }
         deferredReconnectWorkItem?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             guard self.currentChannel?.id == channel.id else {
                 self.log.log("Deferred reconnect aborted — channel changed from \"\(channel.name)\"", category: .player)
+                self.releaseReconnectGuard()
                 return
             }
             if AVAudioSession.sharedInstance().isOtherAudioPlaying {
                 if attempt >= self.deferredReconnectMaxAttempts {
                     self.log.log("Deferred reconnect gave up for \"\(channel.name)\" — other audio still active after \(self.deferredReconnectMaxAttempts)s", category: .audioSession)
+                    self.releaseReconnectGuard()
                     return
                 }
                 self.scheduleDeferredReconnect(for: channel, attempt: attempt + 1)
                 return
             }
             self.log.log("Deferred reconnect firing for \"\(channel.name)\" — other audio released", category: .audioSession)
+            self.releaseReconnectGuard()
             self.play(channel: channel, userInitiated: false)
         }
         deferredReconnectWorkItem = work
@@ -2368,7 +2429,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// (probeTimeout) elapses.  Only starts VLC once the server is reachable,
     /// avoiding wasted player tear-down/create cycles on a dead network.
     private func probeAndRetryStream(for channel: Channel) {
-        guard currentChannel?.id == channel.id else { return }
+        guard currentChannel?.id == channel.id else {
+            releaseReconnectGuard()
+            return
+        }
 
         let elapsed = Date().timeIntervalSince(probeStartTime ?? Date())
         if elapsed > probeTimeout {
@@ -2378,6 +2442,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             lastProbeHTTPStatus = nil
             isBuffering = false
             error = "Unable to connect — check your network connection."
+            releaseReconnectGuard()
             return
         }
 
@@ -2392,6 +2457,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             lastProbeHTTPStatus = nil
             isBuffering = false
             error = userError
+            releaseReconnectGuard()
             return
         }
 
@@ -2405,7 +2471,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
         streamProbeTask = URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
             Task { @MainActor in
-                guard let self, self.currentChannel?.id == channel.id else { return }
+                guard let self, self.currentChannel?.id == channel.id else {
+                    self?.releaseReconnectGuard()
+                    return
+                }
                 if let error {
                     // Server unreachable — wait and probe again
                     self.log.log("Stream probe failed: \(error.localizedDescription)", category: .player)
@@ -2425,6 +2494,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                         self.lastProbeHTTPStatus = nil
                         self.isBuffering = false
                         self.error = "Authentication failed — check your provider credentials."
+                        self.releaseReconnectGuard()
                         return
                     }
 
@@ -2436,9 +2506,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                     let totalElapsed = Date().timeIntervalSince(self.probeStartTime ?? Date())
                     self.log.log("Stream server reachable\(statusTag) after \(String(format: "%.0f", totalElapsed))s, retrying VLC in \(String(format: "%.0f", backoff))s (attempt \(self.vlcZeroByteRetryCount)/\(self.maxVLCZeroByteRetries)), channel=\"\(channel.name)\"", category: .player)
                     DispatchQueue.main.asyncAfter(deadline: .now() + backoff) { [weak self] in
-                        guard let self, self.currentChannel?.id == channel.id else { return }
+                        guard let self, self.currentChannel?.id == channel.id else {
+                            self?.releaseReconnectGuard()
+                            return
+                        }
                         self.probeStartTime = nil
                         self.lastLoggedVLCState = nil
+                        self.releaseReconnectGuard()
                         self.startStream(for: channel, userInitiated: false)
                     }
                 }
@@ -3112,20 +3186,26 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                    let lastFlow = lastDataFlowTime,
                    Date().timeIntervalSince(lastFlow) > dataFlowStaleTimeout,
                    let channel = currentChannel {
-                    log.log("Silent dropout detected — no data flow for \(Int(dataFlowStaleTimeout))s after \(lastActiveDecodedAudio) decoded frames, reconnecting channel=\"\(channel.name)\"", category: .player)
-                    lastLoggedVLCState = nil
-                    isReducedBufferRetry = false
-                    startStream(for: channel, userInitiated: false)
+                    if claimReconnectGuard(path: "watchdog-silent-dropout") {
+                        log.log("Silent dropout detected — no data flow for \(Int(dataFlowStaleTimeout))s after \(lastActiveDecodedAudio) decoded frames, reconnecting channel=\"\(channel.name)\"", category: .player)
+                        lastLoggedVLCState = nil
+                        isReducedBufferRetry = false
+                        startStream(for: channel, userInitiated: false)
+                        releaseReconnectGuard()
+                    }
                 }
                 // Timeout: if buffering too long with no meaningful data, retry with smaller buffer
                 else if let start = streamStartTime, !hasReceivedData,
                    Date().timeIntervalSince(start) > bufferingTimeoutInterval,
                    !isReducedBufferRetry,
                    let channel = currentChannel {
-                    log.log("Buffering timeout (\(Int(bufferingTimeoutInterval))s with no data) — retrying with reduced buffer (\(Int(reducedBufferDuration))s), channel=\"\(channel.name)\"", category: .player)
-                    isReducedBufferRetry = true
-                    lastLoggedVLCState = nil
-                    startStream(for: channel, userInitiated: false)
+                    if claimReconnectGuard(path: "watchdog-buffering-timeout") {
+                        log.log("Buffering timeout (\(Int(bufferingTimeoutInterval))s with no data) — retrying with reduced buffer (\(Int(reducedBufferDuration))s), channel=\"\(channel.name)\"", category: .player)
+                        isReducedBufferRetry = true
+                        lastLoggedVLCState = nil
+                        startStream(for: channel, userInitiated: false)
+                        releaseReconnectGuard()
+                    }
                 } else if let start = streamStartTime, !hasReceivedData,
                           isReducedBufferRetry,
                           Date().timeIntervalSince(start) > bufferingTimeoutInterval,
@@ -3159,11 +3239,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                             stateTimer?.invalidate()
                             stateTimer = nil
                             isBuffering = true
-                            if probeStartTime == nil {
+                            // Claim the guard once, at the true start of a probe chain
+                            // (probeStartTime nil). Recursive re-probes inside
+                            // probeAndRetryStream already hold it.
+                            if probeStartTime == nil, claimReconnectGuard(path: "probe-and-retry") {
                                 probeStartTime = Date()
-                            }
-                            if let channel = currentChannel {
-                                probeAndRetryStream(for: channel)
+                                if let channel = currentChannel {
+                                    probeAndRetryStream(for: channel)
+                                }
                             }
                         } else {
                             isBuffering = false
