@@ -26,6 +26,9 @@ public struct NavidromeAPI {
     /// The default session uses a 15-second request timeout.
     public let session: URLSession
 
+    /// Delay before the single 5xx retry. Tests pass `.zero` to avoid real sleeps.
+    private let retryDelay: Duration
+
     // MARK: - Init
 
     /// - Parameters:
@@ -35,16 +38,19 @@ public struct NavidromeAPI {
     ///   - session: `URLSession` to use for all requests.  Pass `nil` (the default)
     ///     to use a session configured with a 15-second `timeoutIntervalForRequest`.
     ///     Pass an explicit session in tests to inject a `URLProtocol` stub.
+    ///   - retryDelay: Delay before the single 5xx retry. Tests pass `.zero`.
     public init(
         host: URL,
         username: String,
         password: String,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        retryDelay: Duration = .seconds(2)
     ) {
         self.host = host
         self.username = username
         self.password = password
         self.session = session ?? NavidromeAPI.makeDefaultSession()
+        self.retryDelay = retryDelay
     }
 
     // MARK: - Typed errors
@@ -1209,9 +1215,8 @@ public struct NavidromeAPI {
 
         if let http = response as? HTTPURLResponse,
            !(200...299).contains(http.statusCode) {
-            // Retry once on 5xx with a 2-second backoff.
-            if attempt == 1, (500...599).contains(http.statusCode) {
-                try? await Task.sleep(for: .seconds(2))
+            if RetryOnServerError.shouldRetry(attempt: attempt, statusCode: http.statusCode) {
+                await RetryOnServerError.wait(retryDelay)
                 return try await fetchRawData(from: url, attempt: 2)
             }
             throw APIError.serverError(statusCode: http.statusCode)

@@ -1,5 +1,26 @@
 import Foundation
 
+// MARK: - Networking
+
+/// Shared retry-once-on-5xx-with-delay helper used by `XtreamCodesAPI` and
+/// `NavidromeAPI`. Both clients hand-rolled the identical "sleep then retry
+/// once" gate for transient server errors (beads_mobilemusic-t96.5); this is
+/// only the byte-identical intent — each client still owns its own request
+/// plumbing and error types.
+enum RetryOnServerError {
+    /// Returns `true` if the caller should retry: this is the first attempt
+    /// and the status code is a 5xx. Callers are responsible for sleeping
+    /// `delay` themselves before retrying (see `wait(_:)`).
+    static func shouldRetry(attempt: Int, statusCode: Int) -> Bool {
+        attempt == 1 && (500...599).contains(statusCode)
+    }
+
+    /// Sleeps for `delay` before a retry. Tests pass `.zero` to skip the wait.
+    static func wait(_ delay: Duration) async {
+        try? await Task.sleep(for: delay)
+    }
+}
+
 // MARK: - Int (duration)
 
 extension Int {

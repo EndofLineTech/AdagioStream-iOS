@@ -128,7 +128,8 @@ final class NavidromeAPITests: XCTestCase {
             host: URL(string: "http://navidrome.example.com")!,
             username: "alice",
             password: "sesame",
-            session: session
+            session: session,
+            retryDelay: .zero
         )
     }
 

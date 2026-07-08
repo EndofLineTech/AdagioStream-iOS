@@ -5,10 +5,23 @@ public struct XtreamCodesAPI {
     public let username: String
     public let password: String
 
-    public init(host: URL, username: String, password: String) {
+    /// Injected session — callers pass a stub in tests (mirrors `NavidromeAPI`).
+    public let session: URLSession
+    /// Delay before the single retry (5xx or decode error). Tests pass `.zero`.
+    private let retryDelay: Duration
+
+    public init(
+        host: URL,
+        username: String,
+        password: String,
+        session: URLSession? = nil,
+        retryDelay: Duration = .seconds(2)
+    ) {
         self.host = host
         self.username = username
         self.password = password
+        self.session = session ?? URLSession.shared
+        self.retryDelay = retryDelay
     }
 
     public enum APIError: Error, LocalizedError {
@@ -184,13 +197,12 @@ public struct XtreamCodesAPI {
 
     private func fetch<T: Codable>(_ url: URL, attempt: Int = 1) async throws -> T {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await session.data(from: url)
 
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
-                // Retry once on server errors (5xx)
-                if attempt == 1, (500...599).contains(httpResponse.statusCode) {
-                    try? await Task.sleep(for: .seconds(2))
+                if RetryOnServerError.shouldRetry(attempt: attempt, statusCode: httpResponse.statusCode) {
+                    await RetryOnServerError.wait(retryDelay)
                     return try await fetch(url, attempt: 2)
                 }
                 throw APIError.serverError(statusCode: httpResponse.statusCode)
@@ -201,9 +213,10 @@ public struct XtreamCodesAPI {
         } catch let error as APIError {
             throw error
         } catch let error as DecodingError {
-            // Retry once on decoding errors (server may have returned transient garbage)
+            // Retry once on decoding errors (server may have returned transient garbage).
+            // Xtream-specific: Navidrome's fetch does not retry decode errors.
             if attempt == 1 {
-                try? await Task.sleep(for: .seconds(2))
+                await RetryOnServerError.wait(retryDelay)
                 return try await fetch(url, attempt: 2)
             }
             throw APIError.decodingError(error)
