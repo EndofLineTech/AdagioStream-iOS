@@ -54,46 +54,15 @@ struct AlbumDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.tracksState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading tracks…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Tracks",
-                    systemImage: "music.note",
-                    description: "\(album.title) has no tracks in your library."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Tracks",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await viewModel.loadTracks(for: album) }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.tracksState,
+            loadingText: "Loading tracks…",
+            emptyTitle: "No Tracks",
+            emptySystemImage: "music.note",
+            emptyDescription: "\(album.title) has no tracks in your library.",
+            errorTitle: "Couldn't Load Tracks",
+            retry: { Task { await viewModel.loadTracks(for: album) } }
+        ) {
             trackList
         }
     }

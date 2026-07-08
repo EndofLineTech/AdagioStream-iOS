@@ -35,46 +35,15 @@ struct GenreListView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.genresState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading genres…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Genres",
-                    systemImage: "music.quarternote.3",
-                    description: "Your Navidrome library has no genre tags yet."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Genres",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await viewModel.loadGenres() }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.genresState,
+            loadingText: "Loading genres…",
+            emptyTitle: "No Genres",
+            emptySystemImage: "music.quarternote.3",
+            emptyDescription: "Your Navidrome library has no genre tags yet.",
+            errorTitle: "Couldn't Load Genres",
+            retry: { Task { await viewModel.loadGenres() } }
+        ) {
             genreList
         }
     }
@@ -162,46 +131,15 @@ struct GenreDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.genreTracksState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading songs…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Songs",
-                    systemImage: "music.note",
-                    description: "No songs found for the \"\(genre.name)\" genre."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Songs",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await viewModel.loadTracks(forGenre: genre) }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.genreTracksState,
+            loadingText: "Loading songs…",
+            emptyTitle: "No Songs",
+            emptySystemImage: "music.note",
+            emptyDescription: "No songs found for the \"\(genre.name)\" genre.",
+            errorTitle: "Couldn't Load Songs",
+            retry: { Task { await viewModel.loadTracks(forGenre: genre) } }
+        ) {
             trackList
         }
     }

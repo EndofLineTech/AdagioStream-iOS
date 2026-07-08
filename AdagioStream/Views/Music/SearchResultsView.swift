@@ -44,51 +44,18 @@ struct SearchResultsView: View {
 
     @ViewBuilder
     private var stateContent: some View {
-        switch viewModel.searchState {
-        case .idle:
-            // Non-empty query debouncing — show a spinner while we wait.
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Searching…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Results",
-                    systemImage: "magnifyingglass",
-                    description: "No results for \"\(viewModel.searchQuery)\""
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Search Failed",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        viewModel.updateSearch(query: viewModel.searchQuery)
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.searchState,
+            loadingText: "Searching…",
+            emptyTitle: "No Results",
+            emptySystemImage: "magnifyingglass",
+            emptyDescription: "No results for \"\(viewModel.searchQuery)\"",
+            errorTitle: "Search Failed",
+            retry: { viewModel.updateSearch(query: viewModel.searchQuery) },
+            // Non-empty query debouncing — show a blank view while we wait,
+            // not the "Searching…" spinner (that's reserved for .loading).
+            idle: AnyView(Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity))
+        ) {
             resultsList
         }
     }

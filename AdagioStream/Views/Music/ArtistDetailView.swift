@@ -56,46 +56,15 @@ struct ArtistDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.albumsState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading albums…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Albums",
-                    systemImage: "square.stack",
-                    description: "\(artist.name) has no albums in your library."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Albums",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await viewModel.loadAlbums(for: artist) }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.albumsState,
+            loadingText: "Loading albums…",
+            emptyTitle: "No Albums",
+            emptySystemImage: "square.stack",
+            emptyDescription: "\(artist.name) has no albums in your library.",
+            errorTitle: "Couldn't Load Albums",
+            retry: { Task { await viewModel.loadAlbums(for: artist) } }
+        ) {
             albumGrid
         }
     }

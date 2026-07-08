@@ -66,46 +66,15 @@ struct BrowseAlbumsView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.browseAlbumsState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading albums…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Albums",
-                    systemImage: "square.stack",
-                    description: "No albums found for \"\(selectedType.displayName)\"."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Albums",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await loadForCurrentType() }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.browseAlbumsState,
+            loadingText: "Loading albums…",
+            emptyTitle: "No Albums",
+            emptySystemImage: "square.stack",
+            emptyDescription: "No albums found for \"\(selectedType.displayName)\".",
+            errorTitle: "Couldn't Load Albums",
+            retry: { Task { await loadForCurrentType() } }
+        ) {
             albumGrid
         }
     }

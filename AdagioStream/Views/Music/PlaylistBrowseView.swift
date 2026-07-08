@@ -112,46 +112,15 @@ struct PlaylistListView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.playlistsState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading playlists…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "No Playlists",
-                    systemImage: "music.note.list",
-                    description: "Tap + to create your first playlist."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Playlists",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await viewModel.loadPlaylists() }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.playlistsState,
+            loadingText: "Loading playlists…",
+            emptyTitle: "No Playlists",
+            emptySystemImage: "music.note.list",
+            emptyDescription: "Tap + to create your first playlist.",
+            errorTitle: "Couldn't Load Playlists",
+            retry: { Task { await viewModel.loadPlaylists() } }
+        ) {
             playlistList
         }
     }
@@ -346,46 +315,15 @@ struct PlaylistDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch viewModel.playlistTracksState {
-        case .idle, .loading:
-            VStack(spacing: 12) {
-                ProgressView()
-                    .controlSize(.large)
-                Text("Loading tracks…")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .empty:
-            ScrollView {
-                EmptyStateView(
-                    title: "Empty Playlist",
-                    systemImage: "music.note.list",
-                    description: "\"\(playlist.name)\" has no tracks yet."
-                )
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .error(let message):
-            ScrollView {
-                VStack(spacing: 16) {
-                    EmptyStateView(
-                        title: "Couldn't Load Tracks",
-                        systemImage: "exclamationmark.triangle",
-                        description: message
-                    )
-                    Button {
-                        Task { await viewModel.loadPlaylist(id: playlist.id) }
-                    } label: {
-                        Label("Retry", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                }
-                .containerRelativeFrame([.horizontal, .vertical])
-            }
-
-        case .loaded:
+        LoadableContent(
+            state: viewModel.playlistTracksState,
+            loadingText: "Loading tracks…",
+            emptyTitle: "Empty Playlist",
+            emptySystemImage: "music.note.list",
+            emptyDescription: "\"\(playlist.name)\" has no tracks yet.",
+            errorTitle: "Couldn't Load Tracks",
+            retry: { Task { await viewModel.loadPlaylist(id: playlist.id) } }
+        ) {
             trackList
         }
     }
