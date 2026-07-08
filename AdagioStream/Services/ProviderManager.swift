@@ -110,16 +110,16 @@ public final class ProviderManager: ObservableObject {
         }
     }
 
-    public func addProvider(_ provider: Provider, enableAllGroups: Bool = false) async {
-        // Pre-validate the candidate provider before touching the persisted
-        // provider list.  Subsonic providers are validated via ping.view (not
-        // channel count — a fresh library has 0 songs and that's valid).
-        // M3U/XC providers are validated by loading channels and rejecting
-        // empty results.  loadChannels(from:) may set self.error as a
-        // non-fatal EPG warning during validation; reset to a known state on
-        // entry and let the full refresh below repopulate it.
-        error = nil
-
+    /// Validates a candidate provider's credentials/connectivity before it is
+    /// persisted.  Subsonic providers are validated via `ping.view` (not
+    /// channel count — a fresh library has 0 songs and that's valid). M3U/XC
+    /// providers are validated by loading channels and rejecting empty
+    /// results.  Sets `self.error` and returns `false` on failure; the caller
+    /// is responsible for not persisting the candidate in that case.
+    ///
+    /// `context` is only used to prefix debug log lines (`"addProvider"` /
+    /// `"updateProvider"`) — shared by both call sites (beads_mobilemusic-t96.9).
+    private func validateProvider(_ provider: Provider, context: String) async -> Bool {
         if case .subsonic(let host, let username, let password) = provider.type {
             // Subsonic: validate connectivity + auth via ping.view.
             // 0 channels is NOT an error for Subsonic (library loading is E2).
@@ -128,23 +128,23 @@ public final class ProviderManager: ObservableObject {
             do {
                 try await pingFn(host, username, password)
                 DebugLogger.shared.log(
-                    "addProvider[\(provider.name)]: Subsonic ping OK",
+                    "\(context)[\(provider.name)]: Subsonic ping OK",
                     category: .providers
                 )
             } catch let apiError as NavidromeAPI.APIError {
                 error = apiError.errorDescription ?? "Connection failed."
                 DebugLogger.shared.log(
-                    "addProvider[\(provider.name)]: REJECTED — Subsonic ping failed: \(String(describing: apiError))",
+                    "\(context)[\(provider.name)]: REJECTED — Subsonic ping failed: \(String(describing: apiError))",
                     category: .providers
                 )
-                return
+                return false
             } catch {
                 self.error = error.localizedDescription
                 DebugLogger.shared.log(
-                    "addProvider[\(provider.name)]: REJECTED — Subsonic ping failed: \(String(describing: error))",
+                    "\(context)[\(provider.name)]: REJECTED — Subsonic ping failed: \(String(describing: error))",
                     category: .providers
                 )
-                return
+                return false
             }
         } else {
             // M3U / XC: validate by loading channels; reject if empty.
@@ -153,20 +153,31 @@ public final class ProviderManager: ObservableObject {
                 if validated.isEmpty {
                     error = "\(provider.name): playlist returned no channels"
                     DebugLogger.shared.log(
-                        "addProvider[\(provider.name)]: REJECTED — 0 channels from validation",
+                        "\(context)[\(provider.name)]: REJECTED — 0 channels from validation",
                         category: .providers
                     )
-                    return
+                    return false
                 }
             } catch let validationError {
                 error = "\(provider.name): \(validationError.localizedDescription)"
                 DebugLogger.shared.log(
-                    "addProvider[\(provider.name)]: REJECTED — \(String(describing: validationError))",
+                    "\(context)[\(provider.name)]: REJECTED — \(String(describing: validationError))",
                     category: .providers
                 )
-                return
+                return false
             }
         }
+        return true
+    }
+
+    public func addProvider(_ provider: Provider, enableAllGroups: Bool = false) async {
+        // Pre-validate the candidate provider before touching the persisted
+        // provider list.  loadChannels(from:) may set self.error as a
+        // non-fatal EPG warning during validation; reset to a known state on
+        // entry and let the full refresh below repopulate it.
+        error = nil
+
+        guard await validateProvider(provider, context: "addProvider") else { return }
 
         // Discard any EPG warning set during validation; the full refresh
         // below re-runs the EPG fetch and will set this if it's still true.
@@ -232,52 +243,8 @@ public final class ProviderManager: ObservableObject {
         // in providers / on disk.
         error = nil
 
-        if case .subsonic(let host, let username, let password) = provider.type {
-            // Subsonic: validate via ping.view (same as addProvider).
-            let pingFn = subsonicPingValidator
-                ?? { h, u, p in try await NavidromeAPI(host: h, username: u, password: p).ping() }
-            do {
-                try await pingFn(host, username, password)
-                DebugLogger.shared.log(
-                    "updateProvider[\(provider.name)]: Subsonic ping OK",
-                    category: .providers
-                )
-            } catch let apiError as NavidromeAPI.APIError {
-                error = apiError.errorDescription ?? "Connection failed."
-                DebugLogger.shared.log(
-                    "updateProvider[\(provider.name)]: REJECTED — Subsonic ping failed: \(String(describing: apiError))",
-                    category: .providers
-                )
-                return
-            } catch {
-                self.error = error.localizedDescription
-                DebugLogger.shared.log(
-                    "updateProvider[\(provider.name)]: REJECTED — Subsonic ping failed: \(String(describing: error))",
-                    category: .providers
-                )
-                return
-            }
-        } else {
-            // M3U / XC: validate by loading channels; reject if empty.
-            do {
-                let validated = try await loadChannelsWithRetry(from: provider, attempts: 2)
-                if validated.isEmpty {
-                    error = "\(provider.name): playlist returned no channels"
-                    DebugLogger.shared.log(
-                        "updateProvider[\(provider.name)]: REJECTED — 0 channels from validation",
-                        category: .providers
-                    )
-                    return
-                }
-            } catch let validationError {
-                error = "\(provider.name): \(validationError.localizedDescription)"
-                DebugLogger.shared.log(
-                    "updateProvider[\(provider.name)]: REJECTED — \(String(describing: validationError))",
-                    category: .providers
-                )
-                return
-            }
-        }
+        guard await validateProvider(provider, context: "updateProvider") else { return }
+
         error = nil
 
         providers[index] = provider
