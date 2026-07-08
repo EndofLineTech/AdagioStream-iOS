@@ -32,7 +32,7 @@ background playback support.
 - **CarPlay** — Full channel and music library browsing, now-playing controls, Up Next queue
 - **AirPlay** — Stream to any AirPlay-compatible device
 - **Time-Shift Buffer** — Seamless audio continuity during phone calls and interruptions with skip-to-live
-- **Favorites** — Mark channels as favorites for quick access
+- **Favorites** — Favorited channels pin to the top of the Live tab for quick access
 - **Share Extension** — Import provider URLs directly from the share sheet
 - **Privacy First** — Zero analytics, zero tracking, all data stored locally on device
 - **GDPR Compliant** — Export your data, delete all data, in-app privacy policy
@@ -101,18 +101,8 @@ AdagioStream/
 │   ├── DownloadManager.swift   Background URLSession downloads + byte-range resume
 │   └── ...                     ProviderManager, ESPN, SXM, EPG, etc.
 ├── ViewModels/       MVVM view state management
-├── Views/            SwiftUI interface
-│   ├── Channels/     IPTV channel browsing and search
-│   ├── Music/        Navidrome library browse, search, queue, playlists
-│   ├── Player/       Now playing and mini player
-│   ├── Favorites/    Favorite channels
-│   ├── SavedSongs/   Saved track library
-│   ├── CustomPlaylists/  Custom playlist management
-│   ├── EPG/          Electronic program guide
-│   ├── Provider/     Provider add/edit
-│   ├── Settings/     All settings sub-views
-│   ├── Setup/        First-time setup flow
-│   └── Components/   Shared UI components
+├── Views/            SwiftUI interface (Channels, Music, Player, SavedSongs,
+│                     CustomPlaylists, EPG, Provider, Settings, Setup, Components)
 ├── CarPlay/          CarPlay scene and template manager
 ├── Utilities/        Constants, extensions, helpers
 └── Resources/        Licenses, assets

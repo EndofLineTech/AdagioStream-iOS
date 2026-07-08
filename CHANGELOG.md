@@ -26,7 +26,7 @@ large jumps that delay ASC processing.
 - **Navidrome music library** — Connect a Navidrome (or any Subsonic-compatible)
   server as a music provider alongside existing M3U and Xtream Codes providers.
   - Browse artists, albums, and genres with cover art.
-  - Music tab added to the main interface (Live / Music / Library / Playlists / Settings).
+  - Library tab added to the main interface (Live / Library / Loved / Custom M3Us / Settings).
   - Full-text search across artists, albums, and songs.
   - Playlist browsing, playback as a queue, and full playlist editing
     (create, rename, delete, add/remove tracks).
@@ -52,6 +52,8 @@ large jumps that delay ASC processing.
   music playback (IPTV radio controls unchanged).
 - `PinnedURLSession` renamed to `APISession` — the class does not pin
   certificates; the old name was misleading (ATS hygiene).
+- Internal redundancy cleanup across views and services (no user-visible
+  change).
 
 ### Fixed
 
@@ -61,6 +63,10 @@ large jumps that delay ASC processing.
 - CI test destination updated from iPhone 16 Pro to iPhone 17 Pro —
   the 16 Pro image is absent from the `macos-26` GitHub Actions runner,
   which caused all unit-test runs to fail.
+- Track durations over an hour now display as `h:mm:ss` in album, genre,
+  search, and playlist lists (previously overflowed as `m:ss`, e.g. `125:30`).
+- CarPlay music lists now show "Failed to load" on network errors instead
+  of silently appearing empty.
 
 ---
 
