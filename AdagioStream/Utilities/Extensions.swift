@@ -78,7 +78,9 @@ extension String {
 extension URL {
     /// Returns a redacted version of this URL safe for logging.
     /// Strips Xtream Codes credentials from both path
-    /// (`/live/user/pass/`) and query parameters.
+    /// (`/live/user/pass/`) and query parameters, plus Subsonic's
+    /// `u`/`p`/`t`/`s` auth query params — one helper covers both
+    /// credential schemes (beads_mobilemusic-t96.6).
     public var redactedForLog: String {
         guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
             return "***"
@@ -95,9 +97,10 @@ extension URL {
             components.host = "***"
         }
 
-        // Redact query params
+        // Redact query params (Xtream: username/password; Subsonic: u/p/t/s)
+        let redactedParamNames: Set<String> = ["username", "password", "u", "p", "t", "s"]
         components.queryItems = components.queryItems?.map { item in
-            if item.name == "username" || item.name == "password" {
+            if redactedParamNames.contains(item.name) {
                 return URLQueryItem(name: item.name, value: "***")
             }
             return item

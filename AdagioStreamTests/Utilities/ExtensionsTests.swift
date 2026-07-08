@@ -81,4 +81,33 @@ final class ExtensionsTests: XCTestCase {
         XCTAssertEqual(7530.durationString, "2:05:30")
         XCTAssertEqual(3600.durationString, "1:00:00")
     }
+
+    // MARK: - URL.redactedForLog
+
+    func testRedactedForLogRedactsXtreamPathCredentials() {
+        let url = URL(string: "http://example.com/live/alice/sesame/123.ts")!
+        XCTAssertEqual(url.redactedForLog, "http://example.com/live/***/***/123.ts")
+    }
+
+    func testRedactedForLogRedactsXtreamQueryCredentials() {
+        let url = URL(string: "http://example.com/player_api.php?username=alice&password=sesame&action=get_live_streams")!
+        let redacted = url.redactedForLog
+        XCTAssertFalse(redacted.contains("alice"))
+        XCTAssertFalse(redacted.contains("sesame"))
+        XCTAssertTrue(redacted.contains("username=%2A%2A%2A") || redacted.contains("username=***"))
+    }
+
+    func testRedactedForLogRedactsSubsonicQueryCredentials() {
+        // beads_mobilemusic-t96.6: Subsonic auth uses u/p/t/s query params
+        // instead of Xtream's username/password.
+        let url = URL(string: "http://navidrome.example.com/rest/ping.view?u=alice&p=sesame&t=abcdef&s=salt123&v=1.16.1&c=AdagioStream&f=json")!
+        let redacted = url.redactedForLog
+        XCTAssertFalse(redacted.contains("alice"))
+        XCTAssertFalse(redacted.contains("sesame"))
+        XCTAssertFalse(redacted.contains("abcdef"))
+        XCTAssertFalse(redacted.contains("salt123"))
+        // Non-credential params survive untouched.
+        XCTAssertTrue(redacted.contains("v=1.16.1"))
+        XCTAssertTrue(redacted.contains("c=AdagioStream"))
+    }
 }
