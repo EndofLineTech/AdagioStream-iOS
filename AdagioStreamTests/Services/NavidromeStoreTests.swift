@@ -13,7 +13,7 @@ final class NavidromeStoreTests: XCTestCase {
 
     /// Returns a fresh in-memory NavidromeStore with all migrations applied.
     private func makeStore() throws -> NavidromeStore {
-        try NavidromeStore(writer: try DatabaseQueue())
+        try makeInMemoryNavidromeStore()
     }
 
     // MARK: - Migration completeness

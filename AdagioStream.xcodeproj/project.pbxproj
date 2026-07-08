@@ -83,10 +83,12 @@
 		5E2A02718BBDEFC7DC04DEA7 /* ScrobbleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8F08F1BAA1F85655407A272 /* ScrobbleTests.swift */; };
 		5FE9B30F9278ECEC73760044 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 4A8EA6B740258F38380CBFB8 /* GRDB */; };
 		61CE33A905A8833C68EFF09F /* NowPlayingInfoBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B632288DF472949A8C596C7 /* NowPlayingInfoBuilderTests.swift */; };
+		6264C9210FBB43F11223820E /* TrackFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7AF6FF3A50B6779F3EF4D9 /* TrackFixtures.swift */; };
 		64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D292EB2856F819A576B56777 /* NavidromeModels.swift */; };
 		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
 		652F0E6ADB07B4CF2DDD8E7F /* LicensesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9593372A158F40D59BB914AC /* LicensesView.swift */; };
 		685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */; };
+		68793F4B1C104F6CFE875053 /* MockURLProtocolHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFCCBCFDD95C526D43C1208 /* MockURLProtocolHandler.swift */; };
 		694351B24146B906309C2780 /* Scrobbler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC54664D9F017B59C920FEC /* Scrobbler.swift */; };
 		698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */; };
 		69F087A3002E8C7101C7BF2D /* NavidromeStarButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */; };
@@ -293,6 +295,7 @@
 		5007C81620324434051842F8 /* AdagioStartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStartupView.swift; sourceTree = "<group>"; };
 		5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3UExporter.swift; sourceTree = "<group>"; };
 		5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataDeletionService.swift; sourceTree = "<group>"; };
+		5CFCCBCFDD95C526D43C1208 /* MockURLProtocolHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocolHandler.swift; sourceTree = "<group>"; };
 		5D4EB311F106E7633D4C135D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayMusicBrowseTests.swift; sourceTree = "<group>"; };
 		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
@@ -330,6 +333,7 @@
 		99A135BC9837A3E2B0F7B223 /* EPGEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGEntryTests.swift; sourceTree = "<group>"; };
 		9ABFBEA3069FEFB81E33B4DF /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
 		9B7473223A3E7D4A8A7C63A3 /* CrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrashReporter.swift; sourceTree = "<group>"; };
+		9C7AF6FF3A50B6779F3EF4D9 /* TrackFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackFixtures.swift; sourceTree = "<group>"; };
 		9CCAE274A593BD7364C5F6FD /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		9DCB0C46B512BF4D2919E11A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -570,6 +574,7 @@
 			children = (
 				C76C9EDDA0BC084E53537EC3 /* Models */,
 				1787FE82B04EA5A83B5335BC /* Services */,
+				F79282C5F2AE80031B9A8564 /* TestSupport */,
 				9E85522650FFA4CE86645183 /* Utilities */,
 				98EB142BA3F8BF5E15169E69 /* ViewModels */,
 			);
@@ -846,6 +851,15 @@
 			path = "AdagioStream-tvOS";
 			sourceTree = "<group>";
 		};
+		F79282C5F2AE80031B9A8564 /* TestSupport */ = {
+			isa = PBXGroup;
+			children = (
+				5CFCCBCFDD95C526D43C1208 /* MockURLProtocolHandler.swift */,
+				9C7AF6FF3A50B6779F3EF4D9 /* TrackFixtures.swift */,
+			);
+			path = TestSupport;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1027,6 +1041,7 @@
 				BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */,
 				32AE6256E2119A2EBE65F266 /* LocalFirstPlaybackTests.swift in Sources */,
 				9FFB4202AD0D0777D1F2278F /* M3UParserTests.swift in Sources */,
+				68793F4B1C104F6CFE875053 /* MockURLProtocolHandler.swift in Sources */,
 				5125632E411DA909494556AB /* NavidromeAPITests.swift in Sources */,
 				FF6D13D430C7F9050B72EBE0 /* NavidromeLibraryViewModelTests.swift in Sources */,
 				8A6DE48A3E9BDB70FFD4F13A /* NavidromeModelsTests.swift in Sources */,
@@ -1041,6 +1056,7 @@
 				5E2A02718BBDEFC7DC04DEA7 /* ScrobbleTests.swift in Sources */,
 				F22EC7EEB33BD50D037EBC95 /* ShuffleRepeatTests.swift in Sources */,
 				ACD0D3D11F441CE56CC8982A /* SubsonicAuthTests.swift in Sources */,
+				6264C9210FBB43F11223820E /* TrackFixtures.swift in Sources */,
 				1B7FBCE2515815B7E0C64087 /* XtreamCodesAPITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

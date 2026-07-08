@@ -10,7 +10,7 @@ final class NavidromeModelsTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeStore() throws -> NavidromeStore {
-        try NavidromeStore(writer: try DatabaseQueue())
+        try makeInMemoryNavidromeStore()
     }
 
     /// A fixed "now" timestamp used across tests so assertions are deterministic.

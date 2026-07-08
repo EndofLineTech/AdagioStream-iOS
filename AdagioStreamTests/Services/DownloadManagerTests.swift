@@ -9,7 +9,7 @@ final class DownloadRecordStoreTests: XCTestCase {
     // MARK: Helpers
 
     private func makeStore() throws -> NavidromeStore {
-        try NavidromeStore(writer: try DatabaseQueue())
+        try makeInMemoryNavidromeStore()
     }
 
     private func makeRecord(

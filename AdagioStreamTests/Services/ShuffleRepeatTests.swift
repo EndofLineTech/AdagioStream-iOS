@@ -116,10 +116,6 @@ final class AppSettingsQueuePreferencesTests: XCTestCase {
 /// and `playNextInQueue()` compute — without invoking VLC or AudioPlayerService.
 final class RepeatModeDecisionTests: XCTestCase {
 
-    private func makeTrack(id: String, title: String) -> Track {
-        Track(id: id, albumId: "alb-1", artistId: "art-1", title: title, updatedAt: 0)
-    }
-
     private func makeTracks(count: Int) -> [Track] {
         (0..<count).map { makeTrack(id: "t-\($0)", title: "Track \($0 + 1)") }
     }

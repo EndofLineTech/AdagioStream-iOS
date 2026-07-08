@@ -589,17 +589,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     }
 
     private func trackDetailText(for channel: Channel) -> String? {
-        if let track = SXMMetadataService.shared.feedTracks[channel.id] {
-            return "\(track.artistDisplay) — \(track.title)"
-        }
-        if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
-            return game.displayText
-        }
-        if let epgID = channel.epgChannelID,
-           let program = providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring) {
-            return program.title
-        }
-        return nil
+        trackDetailTextByID(channel.id)
     }
 
     private func pushFavorites() {

@@ -13,21 +13,6 @@ struct GlassBackgroundModifier: ViewModifier {
     }
 }
 
-// MARK: - Interactive Glass Button Style
-
-/// Uses `.glass` button style on iOS 26+, subtle scale fallback on older.
-struct InteractiveGlassButtonStyle: PrimitiveButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        if #available(iOS 26, tvOS 26, *) {
-            Button(configuration)
-                .buttonStyle(.glass)
-        } else {
-            Button(configuration)
-                .buttonStyle(.plain)
-        }
-    }
-}
-
 // MARK: - Glass Container Modifier
 
 /// Wraps content in `GlassEffectContainer` on iOS 26+ for grouped glass effects.

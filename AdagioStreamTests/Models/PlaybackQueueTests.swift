@@ -18,23 +18,9 @@ final class PlaybackQueueTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeTrack(
-        id: String,
-        title: String,
-        artistId: String = "art-1"
-    ) -> Track {
-        Track(
-            id: id,
-            albumId: "alb-1",
-            artistId: artistId,
-            title: title,
-            updatedAt: 1_700_000_000
-        )
-    }
-
     private func makeTracks(count: Int) -> [Track] {
         (0..<count).map { i in
-            makeTrack(id: "t-\(i)", title: "Track \(i + 1)")
+            makeTrack(id: "t-\(i)", title: "Track \(i + 1)", updatedAt: 1_700_000_000)
         }
     }
 
@@ -262,10 +248,6 @@ final class PlaybackQueueTests: XCTestCase {
 final class AutoAdvanceDecisionTests: XCTestCase {
 
     // MARK: - Helpers
-
-    private func makeTrack(id: String, title: String) -> Track {
-        Track(id: id, albumId: "alb-1", artistId: "art-1", title: title, updatedAt: 0)
-    }
 
     private func makeTracks(count: Int) -> [Track] {
         (0..<count).map { makeTrack(id: "t-\($0)", title: "Track \($0 + 1)") }
