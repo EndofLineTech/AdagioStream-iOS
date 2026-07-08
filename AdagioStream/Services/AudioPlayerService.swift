@@ -2100,11 +2100,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         log.log("startTrackStream started: playerState=\(vlcStateName(mediaPlayer.state)), willPlay=\(mediaPlayer.willPlay)", category: .player)
 
         currentPollInterval = fastPollInterval
-        stateTimer = Timer.scheduledTimer(withTimeInterval: fastPollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.syncState()
-            }
-        }
+        startStateTimer(interval: fastPollInterval)
     }
 
     /// Fetches track artwork through ImageCacheService using the stable cover-art
@@ -2444,11 +2440,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // Poll state as a reliable fallback since VLC delegate
         // fires on a background thread that can miss MainActor updates
         currentPollInterval = fastPollInterval
-        stateTimer = Timer.scheduledTimer(withTimeInterval: fastPollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.syncState()
-            }
-        }
+        startStateTimer(interval: fastPollInterval)
     }
 
     /// Probes the stream server with a HEAD request before retrying VLC.
@@ -2664,6 +2656,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private func adjustPollRate(to interval: TimeInterval) {
         guard abs(currentPollInterval - interval) > 0.1 else { return }
         currentPollInterval = interval
+        startStateTimer(interval: interval)
+    }
+
+    /// (Re)starts the polling fallback timer that calls `syncState()` — VLC's
+    /// delegate fires on a background thread that can miss MainActor updates.
+    /// Invalidates any existing timer first.
+    private func startStateTimer(interval: TimeInterval) {
         stateTimer?.invalidate()
         stateTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -2722,11 +2721,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         timeShiftBuffer.startCapture(for: channel, estimatedBitrateKbps: streamBitrateKbps)
 
         currentPollInterval = fastPollInterval
-        stateTimer = Timer.scheduledTimer(withTimeInterval: fastPollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.syncState()
-            }
-        }
+        startStateTimer(interval: fastPollInterval)
     }
 
     /// Skip buffered content and rejoin the live stream immediately.
