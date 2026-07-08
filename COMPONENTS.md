@@ -15,8 +15,8 @@ revenue/churn metrics, solo dev) — recorded here so the trade-off stays visibl
 `startup`.
 
 At `startup` tier, the baseline expectations that are currently **unmet** (tracked as beads):
-- Tests execute in CI (today CI only builds via CodeQL).
-- Lint/format gate before new code lands.
+- Tests and lint run in CI (`tests.yml`, `lint.yml`) but don't block merges — `main` has
+  no branch protection, so a red check can still be merged.
 - Migration safety for persisted user data.
 - Accessibility labels on user-facing interactive controls.
 - CHANGELOG + release tagging.
@@ -33,6 +33,6 @@ At `startup` tier, the baseline expectations that are currently **unmet** (track
 | Credential storage | `KeychainService.swift` + iOS Keychain | startup | Stores provider credentials (Xtream user/pass, planned Navidrome). Security-critical. |
 | Local persistence | `PersistenceService.swift` + App Support JSON | startup | Non-secret app data (settings, favorites, groups, saved songs, custom playlists). |
 | Navidrome / Subsonic (planned) | new `NavidromeAPI` + new local music store | startup | On-demand music library + queue + offline downloads. Epics `a6f, 0xy, d6q, 1x1, msl, 65x, l31, 8rg`. |
-| CI/CD | `.github/workflows/codeql.yml`, `ci_scripts/` | startup | GitHub Actions CodeQL (SAST) + Xcode Cloud TestFlight delivery. |
+| CI/CD | `.github/workflows/{tests,lint,codeql}.yml`, `ci_scripts/` | startup | GitHub Actions: XCTest suite + SwiftLint on push/PR to `main`/`dev` (non-blocking, no branch protection), CodeQL (SAST); Xcode Cloud TestFlight delivery. |
 | xmplaylist.com integration | `SXMMetadataService.swift` | external (best-effort) | Unowned 3rd-party SiriusXM metadata. Degrades gracefully; cannot impose our rigor on it. |
 | ESPN scores integration | `ESPNScoreService.swift` | external (best-effort) | Unowned 3rd-party scores. Degrades gracefully. |
