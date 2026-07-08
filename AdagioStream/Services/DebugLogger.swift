@@ -31,6 +31,13 @@ public final class DebugLogger: @unchecked Sendable {
         return docs.appendingPathComponent("adagiostream-debug-prev.log")
     }
 
+    /// Kept open for the process lifetime; reopened only after rotation or a
+    /// write failure (e.g. the file was deleted out from under us).
+    private var openHandle: FileHandle?
+    /// Bytes written via `openHandle` since it was (re)opened, so `rotateIfNeeded`
+    /// doesn't need to `stat` the file on every call.
+    private var bytesWrittenSinceOpen: UInt64 = 0
+
     private init() {}
 
     // MARK: - Public API
@@ -70,6 +77,9 @@ public final class DebugLogger: @unchecked Sendable {
 
     public func clearLogs() {
         queue.async { [self] in
+            try? openHandle?.close()
+            openHandle = nil
+            bytesWrittenSinceOpen = 0
             try? FileManager.default.removeItem(at: logFileURL)
             try? FileManager.default.removeItem(at: previousLogFileURL)
         }
@@ -159,6 +169,27 @@ public final class DebugLogger: @unchecked Sendable {
     // MARK: - Private
 
     private func appendToFile(_ entry: String) {
+        guard let data = entry.data(using: .utf8) else { return }
+        if openHandle == nil {
+            openHandle = openHandleForAppending()
+        }
+        guard let handle = openHandle else { return }
+        do {
+            try handle.write(contentsOf: data)
+            bytesWrittenSinceOpen += UInt64(data.count)
+        } catch {
+            // File likely deleted/moved out from under us (e.g. clearLogs from
+            // another process, or manual deletion) — reopen once and retry.
+            try? handle.close()
+            openHandle = openHandleForAppending()
+            try? openHandle?.write(contentsOf: data)
+            bytesWrittenSinceOpen += UInt64(data.count)
+        }
+    }
+
+    /// Creates the log file with header/backup-exclusion if needed, then opens
+    /// it for appending at end-of-file.
+    private func openHandleForAppending() -> FileHandle? {
         let url = logFileURL
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -173,17 +204,17 @@ public final class DebugLogger: @unchecked Sendable {
             let header = "=== AdagioStream Debug Log === v\(version) (build \(build))\n\n"
             try? header.write(to: url, atomically: false, encoding: .utf8)
         }
-        guard let handle = try? FileHandle(forWritingTo: url) else { return }
-        defer { try? handle.close() }
-        handle.seekToEndOfFile()
-        if let data = entry.data(using: .utf8) {
-            handle.write(data)
-        }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return nil }
+        bytesWrittenSinceOpen = handle.seekToEndOfFile()
+        return handle
     }
 
     private func rotateIfNeeded() {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
-              let size = attrs[.size] as? UInt64, size > maxFileSize else { return }
+        guard bytesWrittenSinceOpen > maxFileSize else { return }
+
+        try? openHandle?.close()
+        openHandle = nil
+        bytesWrittenSinceOpen = 0
 
         // Keep one previous log for context
         try? FileManager.default.removeItem(at: previousLogFileURL)

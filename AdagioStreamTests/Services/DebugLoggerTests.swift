@@ -48,4 +48,37 @@ final class DebugLoggerTests: XCTestCase {
         XCTAssertTrue(legacyResult.contains("v=1.16.1"))
         XCTAssertTrue(legacyResult.contains("c=AdagioStream"))
     }
+
+    /// Exercises the persistent-FileHandle append path plus rotation: writes
+    /// past the 2 MB threshold and confirms the file rolls over into
+    /// adagiostream-debug-prev.log rather than growing unbounded.
+    func testWriteAndRotate() {
+        let logger = DebugLogger.shared
+        let wasEnabled = logger.isEnabled
+        logger.isEnabled = true
+        logger.clearLogs()
+        // clearLogs() and log() are both dispatched onto DebugLogger's serial
+        // queue; round-trip through it once to know clearLogs finished before
+        // we start writing.
+        let clearedExpectation = expectation(description: "cleared")
+        DispatchQueue(label: "test-sync").async { clearedExpectation.fulfill() }
+        wait(for: [clearedExpectation], timeout: 1)
+
+        let line = String(repeating: "x", count: 1024)
+        for _ in 0..<2100 { // ~2100 KB, past the 2 MB rotation threshold
+            logger.log(line)
+        }
+
+        let rotatedExpectation = expectation(description: "rotated")
+        DispatchQueue(label: "test-sync-2").async { rotatedExpectation.fulfill() }
+        wait(for: [rotatedExpectation], timeout: 5)
+
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let prevLog = docs.appendingPathComponent("adagiostream-debug-prev.log")
+        XCTAssertTrue(fm.fileExists(atPath: prevLog.path), "expected rotation to produce a previous log file")
+
+        logger.clearLogs()
+        logger.isEnabled = wasEnabled
+    }
 }
