@@ -13,6 +13,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     public static let shared = AudioPlayerService()
     private let log = DebugLogger.shared
 
+    /// beads_mobilemusic-t96.3: the single owner of `AppSettings` — set once
+    /// by `SettingsViewModel.init`. `persistQueuePreferences()` routes writes
+    /// through it instead of doing its own independent load-modify-save, which
+    /// previously raced `SettingsViewModel.saveSettings()` for the same file.
+    weak var settingsViewModel: SettingsViewModel?
+
     @Published public var currentChannel: Channel?
 
     // MARK: - PlaybackSource seam (d6q.7, Phase 1)
@@ -1639,18 +1645,18 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// Persists `repeatMode` and `shuffleEnabled` to `AppSettings` so they
     /// survive app restarts.
     ///
-    /// Uses a fire-and-forget `Task` to avoid blocking the caller.  The write
-    /// is idempotent and cheap; no error handling is needed — if it fails the
-    /// in-memory value is still correct for the current session.
+    /// Routes through `SettingsViewModel` — the single in-memory owner of
+    /// `AppSettings` — rather than doing an independent load-modify-save,
+    /// which previously raced `SettingsViewModel.saveSettings()` and could
+    /// silently drop whichever write lost the race (beads_mobilemusic-t96.3).
     private func persistQueuePreferences() {
-        Task {
-            var settings = await PersistenceService.shared.loadOrDefault(
-                from: Constants.StorageKeys.settings, default: AppSettings.default
-            )
-            settings.repeatMode = self.repeatMode
-            settings.shuffleEnabled = self.shuffleEnabled
-            try? await PersistenceService.shared.save(settings, to: Constants.StorageKeys.settings)
+        guard let settingsViewModel else {
+            log.log("persistQueuePreferences: no SettingsViewModel wired, skipping", category: .player)
+            return
         }
+        settingsViewModel.settings.repeatMode = repeatMode
+        settingsViewModel.settings.shuffleEnabled = shuffleEnabled
+        Task { await settingsViewModel.saveSettings() }
     }
 
     /// Applies `repeatMode` and `shuffleEnabled` from loaded settings.

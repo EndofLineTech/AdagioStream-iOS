@@ -12,6 +12,7 @@ public final class SettingsViewModel: ObservableObject {
     public init(audioPlayer: AudioPlayerService) {
         self.audioPlayer = audioPlayer
         self.settings = AppSettings.default
+        audioPlayer.settingsViewModel = self
         Task { await loadSettings() }
     }
 
