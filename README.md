@@ -61,31 +61,12 @@ bd import
 bd hooks install
 ```
 
-## Building
+## Building, Testing, Versioning
 
-```bash
-# Build for simulator
-xcodebuild -scheme AdagioStream -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
-
-# Install and launch in simulator
-xcrun simctl boot "iPhone 17 Pro" 2>/dev/null
-xcrun simctl install "iPhone 17 Pro" ~/Library/Developer/Xcode/DerivedData/AdagioStream-*/Build/Products/Debug-iphonesimulator/AdagioStream.app
-xcrun simctl launch "iPhone 17 Pro" com.adagiostream.app
-```
-
-## Testing
-
-```bash
-xcodebuild test -scheme AdagioStream -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:AdagioStreamTests
-```
-
-## Versioning
-
-Bump `CURRENT_PROJECT_VERSION` in `project.yml`, then regenerate:
-
-```bash
-xcodegen generate
-```
+Standard iOS build via `xcodebuild`, unit tests via `xcodebuild test`, and version bumps
+in `project.yml` followed by `xcodegen generate`. The exact commands are kept in one place
+to avoid drift — see the **Building**, **Testing**, and **Versioning** sections of
+[CLAUDE.md](CLAUDE.md).
 
 ## Project Structure
 
