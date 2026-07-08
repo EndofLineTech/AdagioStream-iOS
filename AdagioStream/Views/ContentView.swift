@@ -126,8 +126,8 @@ struct ContentView: View {
     }
 
     private func checkForSharedURLs() {
-        guard let defaults = UserDefaults(suiteName: "group.com.adagiostream.app") else { return }
-        guard let pending = defaults.array(forKey: "pendingSharedURLs") as? [[String: String]],
+        guard let defaults = UserDefaults(suiteName: Constants.AppGroup.identifier) else { return }
+        guard let pending = defaults.array(forKey: Constants.AppGroup.pendingSharedURLsKey) as? [[String: String]],
               let first = pending.first,
               let urlString = first["url"],
               let url = URL(string: urlString) else { return }
@@ -138,9 +138,9 @@ struct ContentView: View {
         var remaining = pending
         remaining.removeFirst()
         if remaining.isEmpty {
-            defaults.removeObject(forKey: "pendingSharedURLs")
+            defaults.removeObject(forKey: Constants.AppGroup.pendingSharedURLsKey)
         } else {
-            defaults.set(remaining, forKey: "pendingSharedURLs")
+            defaults.set(remaining, forKey: Constants.AppGroup.pendingSharedURLsKey)
         }
 
         sharedURLEntry = SharedURLEntry(name: name, url: url)

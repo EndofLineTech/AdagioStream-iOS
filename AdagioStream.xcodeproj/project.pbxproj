@@ -96,6 +96,7 @@
 		6D2F4482B688673D9C5B1844 /* ChannelRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A6C821312E4FA8E96D872A3 /* ChannelRowView.swift */; };
 		6E1002B73E53AD77F5B7ED25 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B785664AF5E9481E580421E3 /* SettingsViewModel.swift */; };
 		701227A8D261E3BFC31A11B0 /* Provider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4253D682909B25CB052AED9C /* Provider.swift */; };
+		701DAF4790F3262F0FBB373A /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E220456DACC5137EA0F00B /* Constants.swift */; };
 		71D92FF85C9D20E77C1EE77C /* ArtistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15661B141F08A5A168EF3E96 /* ArtistDetailView.swift */; };
 		73708E2321CC7E5207592574 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7C7642DA09DCBAEB0F4EC649 /* Assets.xcassets */; };
 		7413AC5A1A2839861CBADFF5 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E220456DACC5137EA0F00B /* Constants.swift */; };
@@ -151,6 +152,7 @@
 		B8E21F2AA577F31548774C90 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
 		B9499506E9796FF181A586C0 /* ChannelListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */; };
 		BA8E7F8B9D51BD66C4C00960 /* CustomPlaylistEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6ED95D9BA3C1B4A1AA2F32 /* CustomPlaylistEntry.swift */; };
+		BC2B114A4E67CB8D3B0C6D70 /* ReconnectGuardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEC539C865BA9166312B9890 /* ReconnectGuardTests.swift */; };
 		BE15D7EA289AB908E6703CEF /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
 		BEE6157BF66FDDA24D6C48AD /* M3UParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */; };
 		BF0BA9D2C186EE0CB94C6A5B /* ESPNModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB6CC077DE7865648EC949C /* ESPNModels.swift */; };
@@ -340,6 +342,7 @@
 		A79AEEE3FADF91F848FD30C3 /* CustomPlaylistEntryRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistEntryRowView.swift; sourceTree = "<group>"; };
 		AA8734D305C00DEE5A785341 /* AdagioStream-tvOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "AdagioStream-tvOS.entitlements"; sourceTree = "<group>"; };
 		ADAB79854EF16906B0C6713E /* ChannelRowTVView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelRowTVView.swift; sourceTree = "<group>"; };
+		AEC539C865BA9166312B9890 /* ReconnectGuardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReconnectGuardTests.swift; sourceTree = "<group>"; };
 		B3CB98C2E33D8E9EADE59EF0 /* DownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerTests.swift; sourceTree = "<group>"; };
 		B541627D28614EF3D40AF22D /* ChannelsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsTabView.swift; sourceTree = "<group>"; };
 		B56D275AEA9D2D16A52AC178 /* AdagioStreamTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AdagioStreamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -452,6 +455,7 @@
 				8290153DA6AE230673CBD774 /* NowPlayingQueueUITests.swift */,
 				15E857A8239DB4ADDC5AA458 /* PersistenceServiceTests.swift */,
 				74A879148E50912620B26D03 /* ProviderManagerTests.swift */,
+				AEC539C865BA9166312B9890 /* ReconnectGuardTests.swift */,
 				B8F08F1BAA1F85655407A272 /* ScrobbleTests.swift */,
 				F4729A79B034622C234D80D6 /* ShuffleRepeatTests.swift */,
 				F74CB1E2C668FF92DFBBB68B /* SubsonicAuthTests.swift */,
@@ -995,6 +999,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				701DAF4790F3262F0FBB373A /* Constants.swift in Sources */,
 				0FA89C70038A8D734ACBE2B6 /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1026,6 +1031,7 @@
 				5DA4B6779C4DF27B8CD84D27 /* PlaybackQueueTests.swift in Sources */,
 				082C24BA4D5890A3DEE3ED77 /* PlaybackSourceTests.swift in Sources */,
 				D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */,
+				BC2B114A4E67CB8D3B0C6D70 /* ReconnectGuardTests.swift in Sources */,
 				5E2A02718BBDEFC7DC04DEA7 /* ScrobbleTests.swift in Sources */,
 				F22EC7EEB33BD50D037EBC95 /* ShuffleRepeatTests.swift in Sources */,
 				ACD0D3D11F441CE56CC8982A /* SubsonicAuthTests.swift in Sources */,

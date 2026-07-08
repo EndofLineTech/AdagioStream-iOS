@@ -41,4 +41,13 @@ public enum Constants {
         public static let livePath = "/live"
         public static let defaultStreamExtension = "ts"
     }
+
+    /// App Group / ShareExtension handoff. Do NOT rename — the app group ID
+    /// is also declared in each target's entitlements, and the key is a
+    /// cross-target UserDefaults(suiteName:) contract between the main app
+    /// and ShareExtension.
+    public enum AppGroup {
+        public static let identifier = "group.com.adagiostream.app"
+        public static let pendingSharedURLsKey = "pendingSharedURLs"
+    }
 }

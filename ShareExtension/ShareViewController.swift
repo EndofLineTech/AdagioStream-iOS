@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 class ShareViewController: SLComposeServiceViewController {
 
-    private let appGroupID = "group.com.adagiostream.app"
-    private let pendingURLKey = "pendingSharedURLs"
+    private let appGroupID = Constants.AppGroup.identifier
+    private let pendingURLKey = Constants.AppGroup.pendingSharedURLsKey
 
     override func isContentValid() -> Bool {
         return true
