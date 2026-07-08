@@ -214,7 +214,21 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     private var interruptedQueueAPI: NavidromeAPI?
     private var interruptedElapsedSeconds: Double?
 
-    private var isActiveSession = false
+    // Gates the wedge watchdog (see startWedgeWatchdog/stopWedgeWatchdog): the
+    // watchdog only matters while we intend to be playing, which is exactly
+    // what this flag already tracks (it stays true through interruption
+    // ride-out — see handleAudioInterruption — since the wedge detector exists
+    // precisely for stuck-during-intended-playback states).
+    private var isActiveSession = false {
+        didSet {
+            guard isActiveSession != oldValue else { return }
+            if isActiveSession {
+                startWedgeWatchdog()
+            } else {
+                stopWedgeWatchdog()
+            }
+        }
+    }
     private var lastToggleTime: Date = .distantPast
     private var lastLoggedVLCState: VLCMediaPlayerState?
     private var channelChangeRetryCount = 0
@@ -272,6 +286,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// resume.  Instrumentation only — see beads_mobilemusic-lfn.
     private var interruptionBeganCount = 0
     private var interruptionEndedCount = 0
+    // ponytail: intentionally permanent, never cancelled. Cost is one OS
+    // network-state subscription. `networkPathSummary` (below) exposes
+    // `lastPathStatus` to SettingsViewModel's debug snapshot independent of
+    // playback state, so this can't be gated to "intended playback" the way
+    // the wedge watchdog is — a paused user opening the debug snapshot would
+    // see a stale "unknown" instead of live network status.
     private var pathMonitor: NWPathMonitor?
     private let pathMonitorQueue = DispatchQueue(label: "com.adagiostream.pathmonitor")
     private var lastPathStatus: NWPath.Status?
@@ -393,12 +413,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             .sink { [weak self] _ in
                 self?.updateNowPlayingInfo()
             }
-
-        startWedgeWatchdog()
     }
 
     // MARK: - Wedge Watchdog
 
+    /// Started when `isActiveSession` flips true (intended playback begins)
+    /// and stopped when it flips false, so the timer isn't armed for the
+    /// process lifetime — see the `isActiveSession` didSet.
     private func startWedgeWatchdog() {
         wedgeWatchdogTimer?.invalidate()
         let timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
@@ -406,6 +427,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
         timer.tolerance = 1.0
         wedgeWatchdogTimer = timer
+    }
+
+    private func stopWedgeWatchdog() {
+        wedgeWatchdogTimer?.invalidate()
+        wedgeWatchdogTimer = nil
+        wedgeSuspectSince = nil
     }
 
     /// Diagnostic-only health probe. Detects the silent wedge: we believe audio
