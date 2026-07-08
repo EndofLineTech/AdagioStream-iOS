@@ -793,8 +793,13 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let items = await self.fetchArtistItems(api: api)
-            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No artists")] : items)])
+            do {
+                let items = try await self.fetchArtistItems(api: api)
+                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No artists")] : items)])
+            } catch {
+                self.log.log("Music: getArtists failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
         }
     }
 
@@ -804,8 +809,13 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let items = await self.fetchAlbumItems(api: api)
-            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No albums")] : items)])
+            do {
+                let items = try await self.fetchAlbumItems(api: api)
+                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No albums")] : items)])
+            } catch {
+                self.log.log("Music: getAlbumList2 failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
         }
     }
 
@@ -815,8 +825,13 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let items = await self.fetchPlaylistItems(api: api)
-            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No playlists")] : items)])
+            do {
+                let items = try await self.fetchPlaylistItems(api: api)
+                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No playlists")] : items)])
+            } catch {
+                self.log.log("Music: getPlaylists failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
         }
     }
 
@@ -826,112 +841,97 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         interfaceController.pushTemplate(template, animated: true, completion: nil)
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let items = await self.fetchSongItems(api: api)
-            template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No songs")] : items)])
+            do {
+                let items = try await self.fetchSongItems(api: api)
+                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No songs")] : items)])
+            } catch {
+                self.log.log("Music: getRandomSongs failed — \(error)", category: .carplay)
+                template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
+            }
         }
     }
 
     // MARK: Songs (random page → play)
 
-    private func fetchSongItems(api: NavidromeAPI) async -> [CPListItem] {
-        do {
-            let songs = try await api.getRandomSongs(size: 100)
-            return songs.enumerated().map { (index, track) in
-                let item = CPListItem(text: track.title, detailText: track.artist)
-                item.handler = { [weak self] _, completion in
-                    guard let self else { completion(); return }
-                    self.log.log("Music: play random song \(index) \"\(track.title)\"", category: .carplay)
-                    self.audioPlayer.setQueue(songs, startIndex: index, via: api)
-                    self.pushNowPlaying()
-                    completion()
-                }
-                if let coverArtID = track.coverArt {
-                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
-                } else {
-                    item.setImage(musicNoteImage())
-                }
-                return item
+    private func fetchSongItems(api: NavidromeAPI) async throws -> [CPListItem] {
+        let songs = try await api.getRandomSongs(size: 100)
+        return songs.enumerated().map { (index, track) in
+            let item = CPListItem(text: track.title, detailText: track.artist)
+            item.handler = { [weak self] _, completion in
+                guard let self else { completion(); return }
+                self.log.log("Music: play random song \(index) \"\(track.title)\"", category: .carplay)
+                self.audioPlayer.setQueue(songs, startIndex: index, via: api)
+                self.pushNowPlaying()
+                completion()
             }
-        } catch {
-            log.log("Music: getRandomSongs failed — \(error)", category: .carplay)
-            return []
+            if let coverArtID = track.coverArt {
+                loadMusicCoverArt(id: coverArtID, api: api, into: item)
+            } else {
+                item.setImage(musicNoteImage())
+            }
+            return item
         }
     }
 
     // MARK: Artists
 
-    private func fetchArtistItems(api: NavidromeAPI) async -> [CPListItem] {
-        do {
-            let artists = try await api.getArtists()
-            return artists.map { artist in
-                let detail = artist.albumCount > 0 ? "\(artist.albumCount) albums" : nil
-                let item = CPListItem(text: artist.name, detailText: detail)
-                item.accessoryType = .disclosureIndicator
-                item.handler = { [weak self] _, completion in
-                    self?.pushArtistAlbums(artist: artist, api: api)
-                    completion()
-                }
-                if let coverArtID = artist.coverArt {
-                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
-                } else {
-                    item.setImage(musicNoteImage())
-                }
-                return item
+    private func fetchArtistItems(api: NavidromeAPI) async throws -> [CPListItem] {
+        let artists = try await api.getArtists()
+        return artists.map { artist in
+            let detail = artist.albumCount > 0 ? "\(artist.albumCount) albums" : nil
+            let item = CPListItem(text: artist.name, detailText: detail)
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
+                self?.pushArtistAlbums(artist: artist, api: api)
+                completion()
             }
-        } catch {
-            log.log("Music: getArtists failed — \(error)", category: .carplay)
-            return []
+            if let coverArtID = artist.coverArt {
+                loadMusicCoverArt(id: coverArtID, api: api, into: item)
+            } else {
+                item.setImage(musicNoteImage())
+            }
+            return item
         }
     }
 
     // MARK: Albums (top-level: newest 50)
 
-    private func fetchAlbumItems(api: NavidromeAPI) async -> [CPListItem] {
-        do {
-            let albums = try await api.getAlbumList2(type: .newest, size: 50)
-            return albums.map { album in
-                let item = CPListItem(text: album.title, detailText: nil)
-                item.accessoryType = .disclosureIndicator
-                item.handler = { [weak self] _, completion in
-                    self?.pushAlbumTracks(album: album, artistName: nil, api: api)
-                    completion()
-                }
-                if let coverArtID = album.coverArt {
-                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
-                } else {
-                    item.setImage(musicNoteImage())
-                }
-                return item
+    private func fetchAlbumItems(api: NavidromeAPI) async throws -> [CPListItem] {
+        let albums = try await api.getAlbumList2(type: .newest, size: 50)
+        return albums.map { album in
+            let item = CPListItem(text: album.title, detailText: nil)
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
+                self?.pushAlbumTracks(album: album, artistName: nil, api: api)
+                completion()
             }
-        } catch {
-            log.log("Music: getAlbumList2 failed — \(error)", category: .carplay)
-            return []
+            if let coverArtID = album.coverArt {
+                loadMusicCoverArt(id: coverArtID, api: api, into: item)
+            } else {
+                item.setImage(musicNoteImage())
+            }
+            return item
         }
     }
 
     // MARK: Playlists
 
-    private func fetchPlaylistItems(api: NavidromeAPI) async -> [CPListItem] {
-        do {
-            let playlists = try await api.getPlaylists()
-            return playlists.map { playlist in
-                let detail = playlist.songCount > 0 ? "\(playlist.songCount) tracks" : nil
-                let item = CPListItem(text: playlist.name, detailText: detail)
-                item.accessoryType = .disclosureIndicator
-                item.handler = { [weak self] _, completion in
-                    self?.pushPlaylistTracks(playlist: playlist, api: api)
-                    completion()
-                }
-                if let coverArtID = playlist.coverArt {
-                    loadMusicCoverArt(id: coverArtID, api: api, into: item)
-                } else {
-                    item.setImage(musicNoteImage())
-                }
-                return item
+    private func fetchPlaylistItems(api: NavidromeAPI) async throws -> [CPListItem] {
+        let playlists = try await api.getPlaylists()
+        return playlists.map { playlist in
+            let detail = playlist.songCount > 0 ? "\(playlist.songCount) tracks" : nil
+            let item = CPListItem(text: playlist.name, detailText: detail)
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
+                self?.pushPlaylistTracks(playlist: playlist, api: api)
+                completion()
             }
-        } catch {
-            log.log("Music: getPlaylists failed — \(error)", category: .carplay)
-            return []
+            if let coverArtID = playlist.coverArt {
+                loadMusicCoverArt(id: coverArtID, api: api, into: item)
+            } else {
+                item.setImage(musicNoteImage())
+            }
+            return item
         }
     }
 
