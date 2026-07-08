@@ -64,4 +64,21 @@ final class ExtensionsTests: XCTestCase {
         let queryDict = Dictionary(uniqueKeysWithValues: components.queryItems!.map { ($0.name, $0.value!) })
         XCTAssertEqual(queryDict["category_id"], "5")
     }
+
+    // MARK: - Int.durationString
+
+    func testDurationStringZero() {
+        XCTAssertEqual(0.durationString, "0:00")
+    }
+
+    func testDurationStringUnderAnHour() {
+        XCTAssertEqual(90.durationString, "1:30")
+    }
+
+    func testDurationStringRollsOverAtAnHour() {
+        // beads_mobilemusic-t96.2: the buggy SwiftUI copies rendered "125:30"
+        // for a track over an hour instead of rolling to h:mm:ss.
+        XCTAssertEqual(7530.durationString, "2:05:30")
+        XCTAssertEqual(3600.durationString, "1:00:00")
+    }
 }

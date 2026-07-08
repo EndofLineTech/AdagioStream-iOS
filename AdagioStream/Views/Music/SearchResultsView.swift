@@ -272,7 +272,7 @@ private struct SearchSongRowView: View {
                 // Duration + optional play count
                 HStack(spacing: 6) {
                     if let duration = track.duration {
-                        Text(formatDuration(duration))
+                        Text(duration.durationString)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -316,12 +316,6 @@ private struct SearchSongRowView: View {
             }
         }
         return parts.joined(separator: ", ")
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return String(format: "%d:%02d", m, s)
     }
 }
 

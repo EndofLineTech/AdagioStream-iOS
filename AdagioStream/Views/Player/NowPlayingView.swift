@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Formats a time interval as mm:ss. Shared by `NowPlayingView` and
+/// `UpNextView` (elapsed/remaining time, not a full track duration —
+/// see `Int.durationString` for the h:mm:ss track-duration formatter).
+private func formatTime(_ seconds: Double) -> String {
+    let s = max(0, Int(seconds.rounded()))
+    return String(format: "%d:%02d", s / 60, s % 60)
+}
+
 struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var providerManager: ProviderManager
@@ -441,11 +449,6 @@ struct NowPlayingView: View {
         }
     }
 
-    /// Formats a time interval as mm:ss.
-    private func formatTime(_ seconds: Double) -> String {
-        let s = max(0, Int(seconds.rounded()))
-        return String(format: "%d:%02d", s / 60, s % 60)
-    }
 
     private var channelPlaceholder: some View {
         RoundedRectangle(cornerRadius: artworkRadius)
@@ -583,8 +586,4 @@ struct UpNextView: View {
         .accessibilityHint(isPlaying ? "" : "Double tap to jump to this track")
     }
 
-    private func formatTime(_ seconds: Double) -> String {
-        let s = max(0, Int(seconds.rounded()))
-        return String(format: "%d:%02d", s / 60, s % 60)
-    }
 }

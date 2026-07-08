@@ -404,7 +404,7 @@ struct TrackRowView: View {
 
             // Duration
             if let duration = track.duration {
-                Text(formatDuration(duration))
+                Text(duration.durationString)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -415,12 +415,6 @@ struct TrackRowView: View {
         .onTapGesture {
             onPlay()
         }
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return String(format: "%d:%02d", m, s)
     }
 }
 

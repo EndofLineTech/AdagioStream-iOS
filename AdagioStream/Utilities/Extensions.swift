@@ -1,5 +1,23 @@
 import Foundation
 
+// MARK: - Int (duration)
+
+extension Int {
+    /// Formats a track duration in seconds as `m:ss`, rolling over to
+    /// `h:mm:ss` once the duration reaches an hour. Shared by all
+    /// track-duration displays; see beads_mobilemusic-t96.2.
+    public var durationString: String {
+        let h = self / 3600
+        let m = (self % 3600) / 60
+        let s = self % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        } else {
+            return String(format: "%d:%02d", m, s)
+        }
+    }
+}
+
 // MARK: - Date
 
 extension Date {
