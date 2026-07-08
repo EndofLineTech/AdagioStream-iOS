@@ -538,20 +538,29 @@ public final class ProviderManager: ObservableObject {
 
     // MARK: - Favorites
 
+    /// Patches `isFavorite` across all three parallel channel arrays
+    /// (`channels` / `rawChannels` / `providerRawChannels`) for one channel ID.
+    /// Does not touch `favoriteOrder` — callers handle that themselves since
+    /// each call site's ordering semantics differ (beads_mobilemusic-t96.10).
+    private func setFavorite(_ isFavorite: Bool, forChannelID id: String) {
+        if let index = channels.firstIndex(where: { $0.id == id }) {
+            channels[index].isFavorite = isFavorite
+        }
+        if let rawIndex = rawChannels.firstIndex(where: { $0.id == id }) {
+            rawChannels[rawIndex].isFavorite = isFavorite
+        }
+        if let provIndex = providerRawChannels.firstIndex(where: { $0.id == id }) {
+            providerRawChannels[provIndex].isFavorite = isFavorite
+        }
+    }
+
     public func toggleFavorite(_ channel: Channel) async {
         let newValue: Bool
         if let index = channels.firstIndex(where: { $0.id == channel.id }) {
-            channels[index].isFavorite.toggle()
-            newValue = channels[index].isFavorite
+            newValue = !channels[index].isFavorite
         } else { return }
 
-        // Keep rawChannels and providerRawChannels in sync
-        if let rawIndex = rawChannels.firstIndex(where: { $0.id == channel.id }) {
-            rawChannels[rawIndex].isFavorite = newValue
-        }
-        if let provIndex = providerRawChannels.firstIndex(where: { $0.id == channel.id }) {
-            providerRawChannels[provIndex].isFavorite = newValue
-        }
+        setFavorite(newValue, forChannelID: channel.id)
 
         if newValue {
             favoriteOrder.append(channel.id)
@@ -582,14 +591,8 @@ public final class ProviderManager: ObservableObject {
     }
 
     public func clearFavorites() async {
-        for i in channels.indices {
-            channels[i].isFavorite = false
-        }
-        for i in rawChannels.indices {
-            rawChannels[i].isFavorite = false
-        }
-        for i in providerRawChannels.indices {
-            providerRawChannels[i].isFavorite = false
+        for id in favoriteOrder {
+            setFavorite(false, forChannelID: id)
         }
         favoriteOrder = []
         await saveFavoriteOrder()
@@ -612,15 +615,7 @@ public final class ProviderManager: ObservableObject {
             favoriteOrder.removeAll { $0 == id }
         }
         for id in idsToRemove {
-            if let index = channels.firstIndex(where: { $0.id == id }) {
-                channels[index].isFavorite = false
-            }
-            if let rawIndex = rawChannels.firstIndex(where: { $0.id == id }) {
-                rawChannels[rawIndex].isFavorite = false
-            }
-            if let provIndex = providerRawChannels.firstIndex(where: { $0.id == id }) {
-                providerRawChannels[provIndex].isFavorite = false
-            }
+            setFavorite(false, forChannelID: id)
         }
         rebuildVisibleGroups()
         Task { await saveFavoriteOrder() }
