@@ -82,7 +82,8 @@ struct AlbumDetailView: View {
                 ForEach(viewModel.albumTracks, id: \.id) { track in
                     TrackRowView(
                         track: track,
-                        artistName: nil,   // bug sbx: artist is in the header
+                        leading: .trackNumber(track.trackNumber),
+                        subtitle: nil,   // bug sbx: artist is in the header
                         onPlay: { play(track: track) }
                     )
                     .accessibilityLabel(trackAccessibilityLabel(track))
@@ -322,67 +323,6 @@ struct AlbumDownloadAllButton: View {
     private func enqueueAll() {
         for track in tracks {
             downloadManager.download(track: track, via: api)
-        }
-    }
-}
-
-// MARK: - Track row
-
-struct TrackRowView: View {
-    let track: Track
-    /// Optional secondary line.  The album view passes `nil` (the artist is in the
-    /// header — redundant per row, bug sbx); other contexts may pass a name.
-    let artistName: String?
-    let onPlay: () -> Void
-
-    var body: some View {
-        // Apple Music style (bug sbx): number · title · duration; tap to play.
-        // Love + Download live in the row's swipe action + long-press menu so the
-        // title gets the full width instead of fighting inline buttons.
-        HStack(spacing: 12) {
-            // Track number badge
-            Group {
-                if let number = track.trackNumber {
-                    Text(String(number))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, alignment: .trailing)
-                } else {
-                    Spacer()
-                        .frame(width: 28)
-                }
-            }
-            .accessibilityHidden(true)
-
-            // Title + optional subtitle
-            VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                if let name = artistName {
-                    Text(name)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
-
-            // Duration
-            if let duration = track.duration {
-                Text(duration.durationString)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityHidden(true)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onPlay()
         }
     }
 }

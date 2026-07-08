@@ -344,15 +344,16 @@ struct PlaylistDetailView: View {
             Section {
                 let tracks = viewModel.playlistTracks
                 ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
-                    PlaylistTrackRowView(
+                    TrackRowView(
                         track: track,
-                        position: index + 1,
-                        onPlay: { play(track: track) },
-                        api: api,
+                        leading: .position(index + 1),
                         starred: viewModel.playlistTrackStarStates[track.id]?.starred,
                         onToggleStar: {
                             Task { await viewModel.toggleStar(id: track.id) }
-                        }
+                        },
+                        downloadAPI: api,
+                        showsInlinePlayButton: true,
+                        onPlay: { play(track: track) }
                     )
                     .accessibilityLabel(playlistTrackAccessibilityLabel(track, position: index + 1))
                     .accessibilityHint(isEditingTracks ? "Swipe to remove from playlist" : "Tap to play")
@@ -524,80 +525,6 @@ struct PlaylistDetailView: View {
             } else {
                 return "\(hours) hr \(mins) min"
             }
-        }
-    }
-}
-
-// MARK: - Playlist track row
-
-struct PlaylistTrackRowView: View {
-    let track: Track
-    let position: Int
-    let onPlay: () -> Void
-    /// l31.2: When non-nil, a download button is shown for this track.
-    var api: NavidromeAPI? = nil
-    /// 65x.2: When non-nil the row shows a heart button reflecting starred state.
-    var starred: Bool? = nil
-    /// 65x.2: Called when the heart button is tapped.
-    var onToggleStar: (() -> Void)? = nil
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Position badge
-            Text(String(position))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 28, alignment: .trailing)
-                .accessibilityHidden(true)
-
-            // Title
-            VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            // Duration
-            if let duration = track.duration {
-                Text(duration.durationString)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityHidden(true)
-            }
-
-            // 65x.2: Star toggle — shown when star state is available
-            if let isStarred = starred, let toggle = onToggleStar {
-                NavidromeStarButton(
-                    starred: isStarred,
-                    accessibilityLabel: isStarred ? "Unstar \(track.title)" : "Star \(track.title)",
-                    onToggle: toggle
-                )
-            }
-
-            // l31.2: Download button — shown when an API context is available
-            if let resolvedAPI = api {
-                TrackDownloadButton(track: track, api: resolvedAPI)
-            }
-
-            // Play button
-            Button {
-                onPlay()
-            } label: {
-                Image(systemName: "play.circle")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play \(track.title)")
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onPlay()
         }
     }
 }

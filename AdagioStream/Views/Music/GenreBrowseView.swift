@@ -150,11 +150,13 @@ struct GenreDetailView: View {
         let tracks = viewModel.genreTracks
         return List {
             ForEach(tracks, id: \.id) { track in
-                GenreTrackRowView(
+                TrackRowView(
                     track: track,
-                    api: api,
+                    leading: .coverArt(api: api, coverArtID: track.coverArt),
+                    subtitle: track.genre,
                     // 65x.3: pass star state for starred indicator
-                    starState: viewModel.genreTrackStarStates[track.id]
+                    starIndicator: viewModel.genreTrackStarStates[track.id]?.starred ?? false,
+                    showsInlinePlayButton: true
                 ) {
                     // d6q.1: enqueue the full genre song list starting at the
                     // tapped track so next/previous steps through the genre.
@@ -195,78 +197,6 @@ struct GenreDetailView: View {
             parts.append("played \(count) \(count == 1 ? "time" : "times")")
         }
         return parts.joined(separator: ", ")
-    }
-}
-
-// MARK: - Genre track row
-
-/// Track row for genre-browse song lists.
-/// 65x.3: Accepts optional star state to show a small starred indicator.
-struct GenreTrackRowView: View {
-    let track: Track
-    let api: NavidromeAPI
-    /// 65x.3: When non-nil, enables the starred indicator in the title row.
-    var starState: NavidromeAPI.StarState? = nil
-    let onPlay: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            // Cover art thumbnail (small, for visual variety in genre lists)
-            SubsonicCoverArt(
-                api: api,
-                coverArtID: track.coverArt,
-                size: 80,
-                width: 40,
-                height: 40,
-                cornerRadius: 6
-            )
-            .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                // Title + optional starred indicator
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(track.title)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    if let state = starState, state.starred {
-                        NavidromeStarIndicator(starred: true)
-                    }
-                }
-
-                if let genre = track.genre {
-                    Text(genre)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-
-            Spacer()
-
-            if let duration = track.duration {
-                Text(duration.durationString)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityHidden(true)
-            }
-
-            Button {
-                onPlay()
-            } label: {
-                Image(systemName: "play.circle")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play \(track.title)")
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onPlay()
-        }
     }
 }
 
