@@ -1419,70 +1419,6 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         startLibraryTrack(track, inQueue: tracks, at: clampedIndex, via: api)
     }
 
-    // MARK: - Auto-advance (d6q.3)
-
-    /// Advance the library queue after a natural track-end event.
-    ///
-    /// This is the single decision point that fires when VLC reports `.ended`
-    /// for a `.library` track.  It is intentionally separate from
-    /// `playNextInQueue()` (which is the user-gesture / remote-command path)
-    /// so that **d6q.4 (repeat mode)** can intercept here without touching the
-    /// public next/previous API.
-    ///
-    /// **d6q.4 seam — how to wire repeat:**
-    /// When d6q.4 is built, add a `repeatMode` property (default `.off`) and
-    /// branch at the top of this method:
-    ///   - `.one`  → `startLibraryTrack(currentTrack, ...)` to restart in place
-    ///   - `.all`  → wrap the index (nextIndex % queue.count) before calling
-    ///               `startLibraryTrack`
-    ///   - `.off`  → the existing `playNextInQueue()` behaviour below
-    ///
-    /// **Runaway-advance guard:**
-    /// `advance()` is only called from the `.ended` branch in `syncState()`,
-    /// which fires exclusively when VLC reaches the natural end of a finite
-    /// media file.  The `.error` and `.stopped` branches are explicitly
-    /// excluded — they do NOT call `advance()` — so a track that fails to
-    /// start (network error, bad URL) leaves the queue stopped rather than
-    /// spinning through every track.  No additional rate-limiter is needed
-    /// because `.ended` can only fire once per media lifecycle; a second fire
-    /// on the same player instance would require VLC to reach end-of-media
-    /// again, which cannot happen after `startLibraryTrack` has retired the
-    /// player.
-    ///
-    /// **d6q.9 — Gapless / inter-track gap findings:**
-    /// The current architecture tears down the VLCMediaPlayer instance
-    /// (`retirePlayer`) on every track transition.  The measured gap is
-    /// approximately 200–500 ms of silence (network-caching fill + new VLC
-    /// instance init + amem bridge attach).  Three alternatives were considered:
-    ///
-    /// 1. `VLCMediaListPlayer` — MobileVLCKit 3.6.0 exposes this class.  It
-    ///    maintains an internal VLCMediaPlayer and advances between VLCMediaList
-    ///    items automatically.  However, it does NOT use the amem (custom audio
-    ///    output) bridge — it owns its own audio unit, which would bypass the
-    ///    AVAudioEngine pipeline entirely and break the audio session ownership
-    ///    model, the wedge watchdog, and the ring-buffer path the rest of the app
-    ///    depends on.  **Not viable without a major architecture change.**
-    ///
-    /// 2. Reuse VLCMediaPlayer across tracks (swap media without `retirePlayer`)
-    ///    — VLCKit's `mediaPlayer.media = newMedia; mediaPlayer.play()` without
-    ///    full teardown is plausible in theory, but the existing `retirePlayer`
-    ///    comment documents that omitting `pthread_join` (via background disposal)
-    ///    caused 0x8BADF00D watchdog kills.  A half-measure that stops but does
-    ///    not background-dispose the old instance risks that same stall.
-    ///    Additionally, the amem bridge (`VLCAudioCallbackBridge.attachAudioCallbacks`)
-    ///    is designed to be attached once per player instance; re-attaching on
-    ///    a live player is untested.  **Risky without a dedicated spike.**
-    ///
-    /// 3. Accept the gap — the ~200–500 ms silence is audible but tolerable for
-    ///    album playback.  Most users expect a brief gap between tracks.  This
-    ///    is not significantly worse than typical Bluetooth latency.
-    ///
-    /// **Recommendation:** Accept the gap at this stage (option 3).  A proper
-    /// gapless implementation would require either a second VLC instance
-    /// pre-buffering the next track during the final seconds of the current one
-    /// (double-buffering), or a dedicated spike to validate reusing
-    /// VLCMediaPlayer without retire.  File as a follow-up task (d6q gapless
-    /// improvement) when the basic queue playback is proven stable.
     // MARK: - Shuffle helpers (d6q.4)
 
     /// Builds a shuffle permutation for `queueCount` tracks with `pinned`
@@ -1517,6 +1453,18 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// remote-command path.  Repeat `.one` does NOT affect those methods —
     /// a user pressing next always moves to the adjacent track even in
     /// repeat-one mode.  Only auto-advance (this method) honours `.one`.
+    ///
+    /// **d6q.9 — Gapless / inter-track gap (TODO, not yet implemented):**
+    /// Every track transition tears down and recreates the VLCMediaPlayer
+    /// instance (`retirePlayer`), costing ~200–500 ms of silence between
+    /// tracks (network-caching fill + new VLC instance init + amem bridge
+    /// attach). `VLCMediaListPlayer` was ruled out — it bypasses the amem/
+    /// AVAudioEngine pipeline entirely, breaking the wedge watchdog and
+    /// ring-buffer path. Reusing one VLCMediaPlayer across tracks (swap
+    /// `.media` without full teardown) is unvalidated and risks the
+    /// 0x8BADF00D watchdog kill `retirePlayer`'s pthread_join exists to avoid.
+    /// Accepted for now; revisit with a dedicated double-buffering spike if
+    /// the gap becomes a real complaint.
     private func advance() {
         guard case .library(let queue, let index) = playbackSource,
               let api = queueAPI else {
@@ -2204,17 +2152,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         if abs(elapsed - trackElapsed) > 0.1 { trackElapsed = elapsed }
         if trackDuration != duration { trackDuration = duration }
 
-        let center = MPNowPlayingInfoCenter.default()
-        center.nowPlayingInfo = info
-        center.playbackState = state
-
-        let stateName: String
-        switch state {
-        case .playing: stateName = "playing"
-        case .paused:  stateName = "paused"
-        default:       stateName = "other"
-        }
-        log.log("NowPlaying (track): title=\"\(title)\", artist=\"\(artist)\", isLive=false, state=\(stateName), elapsed=\(String(format: "%.1f", elapsed))s, duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil")s, rate=\(rate)", category: .player)
+        publishNowPlayingInfo(info, state: state)
+        log.log("NowPlaying (track): title=\"\(title)\", artist=\"\(artist)\", isLive=false, state=\(nowPlayingStateName(state)), elapsed=\(String(format: "%.1f", elapsed))s, duration=\(duration.map { String(format: "%.1f", $0) } ?? "nil")s, rate=\(rate)", category: .player)
     }
 
     /// Deactivate→reactivate the session so iOS formally hands audio focus
@@ -3541,20 +3480,29 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             info[MPMediaItemPropertyArtwork] = artwork
         }
 
+        publishNowPlayingInfo(info, state: state)
+        log.log("NowPlaying set: source=\(source), title=\"\(title)\", artist=\"\(artist)\", album=\"\(channel.name)\", isLive=\(isLive), state=\(nowPlayingStateName(state)), rate=\(rate), hasArtwork=\(artwork != nil)", category: .player)
+    }
+
+    /// Publishes now-playing info to the system — the tail shared by
+    /// `updateNowPlayingInfo` (radio) and `updateNowPlayingInfoForTrack`
+    /// (library). Source selection and change-detection differ per caller
+    /// and stay inline in each; only the actual publish is common.
+    private func publishNowPlayingInfo(_ info: [String: Any], state: MPNowPlayingPlaybackState) {
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = info
         center.playbackState = state
+    }
 
-        let stateName: String
+    private func nowPlayingStateName(_ state: MPNowPlayingPlaybackState) -> String {
         switch state {
-        case .playing: stateName = "playing"
-        case .paused: stateName = "paused"
-        case .stopped: stateName = "stopped"
-        case .interrupted: stateName = "interrupted"
-        case .unknown: stateName = "unknown"
-        @unknown default: stateName = "raw(\(state.rawValue))"
+        case .playing: return "playing"
+        case .paused: return "paused"
+        case .stopped: return "stopped"
+        case .interrupted: return "interrupted"
+        case .unknown: return "unknown"
+        @unknown default: return "raw(\(state.rawValue))"
         }
-        log.log("NowPlaying set: source=\(source), title=\"\(title)\", artist=\"\(artist)\", album=\"\(channel.name)\", isLive=\(isLive), state=\(stateName), rate=\(rate), hasArtwork=\(artwork != nil)", category: .player)
     }
 
     private func fetchSXMArtwork(url: URL, trackID: String) {
