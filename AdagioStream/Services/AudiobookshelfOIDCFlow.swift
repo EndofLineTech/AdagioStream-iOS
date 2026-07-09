@@ -92,7 +92,11 @@ extension AudiobookshelfOIDC {
             throw OIDCError.network(error)
         }
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw OIDCError.discoveryFailed(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)
+            throw OIDCError.requestFailed(
+                step: "sign-in start",
+                statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                detail: safeErrorDetail(from: data)
+            )
         }
         // Prefer the JSON body; a `Location`-style redirect may already have been
         // followed by URLSession, in which case the final URL is the IdP URL.
@@ -177,7 +181,11 @@ extension AudiobookshelfOIDC {
             throw OIDCError.network(error)
         }
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw OIDCError.discoveryFailed(statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1)
+            throw OIDCError.requestFailed(
+                step: "token exchange",
+                statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                detail: safeErrorDetail(from: data)
+            )
         }
         return try parseTokens(from: data)
     }

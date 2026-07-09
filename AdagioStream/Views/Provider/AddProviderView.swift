@@ -394,7 +394,8 @@ struct AddProviderView: View {
     Single sign-on needs the server configured for it — the app can't do this part:
 
     • In Audiobookshelf admin, add adagiostream://oauth to "Allowed Mobile Redirect URIs".
-    • Your identity provider must allow-list the server's HTTPS callback and mobile-redirect URIs (not the adagiostream:// scheme).
+    • In your identity provider (Google/Authentik/…), allow-list the server's mobile-redirect URI — https://<server>/auth/openid/mobile-redirect (include any base path). This is a DIFFERENT URI than the web callback; registering only the callback makes web login work but app SSO fail.
+    • Enter your server URL above INCLUDING any base path (e.g. https://host/audiobookshelf), not the bare host.
     • A reverse proxy in front of Audiobookshelf must send X-Forwarded-Proto: https.
     • Requires Audiobookshelf server 2.26.0 or newer.
     • SSO can't be used behind an untrusted self-signed certificate. Use a trusted certificate (e.g. Let's Encrypt), or sign in with a username and password instead.

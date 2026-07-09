@@ -20,12 +20,27 @@ them in-app under the SSO section's "SSO setup & requirements" disclosure.
    `adagiostream://oauth` to the OpenID setting *Allowed Mobile Redirect URIs*.
    This is the custom scheme `ASWebAuthenticationSession` captures.
 
-2. **Identity-provider allow-list** — the IdP (Google/Authentik/Authelia) must
-   allow-list the **Audiobookshelf HTTPS callback and mobile-redirect URIs**
-   (e.g. `https://abs.example.com/auth/openid/callback` and the server's
-   `/auth/openid/mobile-redirect`). It does **not** allow-list the
-   `adagiostream://` scheme — the IdP only ever talks to Audiobookshelf over
-   HTTPS; Audiobookshelf hands the code back to the app on the custom scheme.
+2. **Identity-provider allow-list — the mobile-redirect URI is the one people
+   miss.** The IdP (Google/Authentik/Authelia) must allow-list **both** the
+   HTTPS callback **and** the distinct **mobile-redirect** URI:
+
+   - web sign-in uses `https://<server>/auth/openid/callback`
+   - **the app uses `https://<server>/auth/openid/mobile-redirect`** — a
+     *different* URI. Registering only the callback makes web login work but the
+     app's SSO fail.
+
+   Include the server's reverse-proxy **base path** if it has one. Example for a
+   server at `https://abs.example.com/audiobookshelf`, the app URI to add is:
+
+   `https://abs.example.com/audiobookshelf/auth/openid/mobile-redirect`
+
+   The IdP never sees the `adagiostream://` scheme — it only talks to
+   Audiobookshelf over HTTPS; Audiobookshelf hands the code back to the app on
+   the custom scheme.
+
+   > Enter your server URL in the app **including any base path** (e.g.
+   > `https://abs.example.com/audiobookshelf`, not the bare host) so every OIDC
+   > request hits the same routes the IdP redirect targets.
 
 3. **Reverse proxy `X-Forwarded-Proto`** — a proxy in front of Audiobookshelf
    must set `X-Forwarded-Proto: https` so the server builds correct HTTPS

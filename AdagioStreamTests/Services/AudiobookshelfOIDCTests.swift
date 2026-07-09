@@ -255,4 +255,67 @@ final class AudiobookshelfOIDCTests: XCTestCase {
         let url = URL(string: "adagiostream://oauth?state=S1")!
         XCTAssertNil(AudiobookshelfOIDC.validatedCallback(url, expectedState: "S1"))
     }
+
+    // MARK: - Code round-trip encoding (beads_mobilemusic-zq2)
+
+    /// Decodes a query the way ABS's server (express/`qs`) does: a literal `+`
+    /// becomes a SPACE, then the rest is percent-decoded. This is what actually
+    /// happens to the `code` on the wire — Foundation's own decoder treats `+`
+    /// literally and would hide the bug, so we model the server explicitly.
+    private func serverDecodeQueryValue(_ raw: String) -> String {
+        let plusToSpace = raw.replacingOccurrences(of: "+", with: " ")
+        return plusToSpace.removingPercentEncoding ?? plusToSpace
+    }
+
+    /// Regression: a Google OIDC auth code often contains `+`, `/`, and `=`. The
+    /// callback URL delivers it percent-encoded; `validatedCallback` decodes it
+    /// once; `AudiobookshelfURL.resolve` must re-encode it so ABS's `+`→space
+    /// decode reconstructs the EXACT code. Before the fix, `URLComponents`
+    /// left `+` unescaped → ABS saw a space → `invalid_grant (Malformed auth
+    /// code)` → HTTP 500.
+    func testAuthCodeWithPlusSlashEqualsRoundTripsToServerIntact() {
+        let realCode = "4/0AX4XfWh-abc/def=ghi+jkl"   // realistic Google code shape
+        let realState = "st/ate=+val"
+
+        // 1. Browser delivers the callback percent-encoded (as ABS's
+        //    mobile-redirect does via encodeURIComponent).
+        func enc(_ s: String) -> String {
+            s.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        }
+        let callbackURL = URL(string: "adagiostream://oauth?code=\(enc(realCode))&state=\(enc(realState))")!
+
+        // 2. Extraction decodes once.
+        guard let cb = AudiobookshelfOIDC.validatedCallback(callbackURL, expectedState: realState) else {
+            return XCTFail("callback should validate")
+        }
+        XCTAssertEqual(cb.code, realCode, "extraction should decode the code exactly once")
+
+        // 3. Build the exchange URL through the shared resolver.
+        let exURL = AudiobookshelfURL.resolve(
+            host: URL(string: "https://abs.example.com")!,
+            path: "/auth/openid/callback",
+            query: ["state": cb.state, "code": cb.code, "code_verifier": "verifierXYZ"]
+        )!
+
+        // 4. What the SERVER reconstructs must equal the ORIGINAL code/state.
+        let comps = URLComponents(url: exURL, resolvingAgainstBaseURL: false)!
+        let wireCode = comps.percentEncodedQueryItems!.first { $0.name == "code" }!.value!
+        let wireState = comps.percentEncodedQueryItems!.first { $0.name == "state" }!.value!
+        XCTAssertTrue(wireCode.contains("%2B"), "'+' MUST be percent-encoded on the wire, not left literal")
+        XCTAssertEqual(serverDecodeQueryValue(wireCode), realCode,
+                       "ABS's +→space decode must reconstruct the exact auth code")
+        XCTAssertEqual(serverDecodeQueryValue(wireState), realState)
+    }
+
+    /// The subpath (reverse-proxy base path) must be preserved on ALL OIDC
+    /// endpoints when the user enters a subpath host — else the flow hits the
+    /// wrong routes (ymf.1). Covers discovery, auth-URL, and callback builders.
+    func testSubpathHostPreservedOnAllOIDCEndpoints() {
+        let host = URL(string: "https://abs.example.com/audiobookshelf")!
+        for path in ["/status", "/auth/openid", "/auth/openid/callback"] {
+            let url = AudiobookshelfURL.resolve(host: host, path: path)!
+            XCTAssertEqual(url.path, "/audiobookshelf" + path,
+                           "subpath must be preserved on \(path)")
+        }
+    }
 }

@@ -44,6 +44,11 @@ public enum AudiobookshelfOIDC {
     public enum OIDCError: Error, LocalizedError {
         case invalidURL
         case discoveryFailed(statusCode: Int)
+        /// A sign-in request returned a non-2xx status. `step` names which request
+        /// failed (e.g. "sign-in start", "token exchange") so a server-side error
+        /// is diagnosable instead of a bare "error 500". `detail` is a short,
+        /// redacted snippet of the response body (never the code/verifier/tokens).
+        case requestFailed(step: String, statusCode: Int, detail: String?)
         case authURLMissing
         case malformedResponse
         case network(Error)
@@ -52,11 +57,32 @@ public enum AudiobookshelfOIDC {
             switch self {
             case .invalidURL: return "Invalid server URL."
             case .discoveryFailed(let code): return "Could not read server status (HTTP \(code))."
+            case .requestFailed(let step, let code, let detail):
+                let base = "Sign-in failed at the \(step) step (HTTP \(code))."
+                // A 5xx after Google auth is almost always an IdP redirect-URI
+                // mismatch — the server's /auth/openid/mobile-redirect URI is not
+                // allow-listed in the identity provider. Point the user there.
+                if (500...599).contains(code) {
+                    return base + " The identity provider likely rejected the server's mobile-redirect URI — see SSO setup requirements."
+                }
+                if let detail, !detail.isEmpty { return base + " " + detail }
+                return base
             case .authURLMissing: return "The server did not return a sign-in URL."
             case .malformedResponse: return "The server response was not in the expected format."
             case .network(let e): return "Cannot reach the server: \(e.localizedDescription)"
             }
         }
+    }
+
+    /// Extracts a short, safe error snippet from a failed-response body: at most
+    /// 200 chars, single-lined. ABS mobile errors are plain text ("No session",
+    /// "Error in callback"); an IdP HTML/JSON error is truncated. Never called on
+    /// a success body, so it can't leak a token payload.
+    static func safeErrorDetail(from data: Data) -> String? {
+        guard let raw = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
+        let oneLine = raw.replacingOccurrences(of: "\n", with: " ")
+        return oneLine.count > 200 ? String(oneLine.prefix(200)) + "…" : oneLine
     }
 
     /// Raw `GET /status` payload. Only the auth-related fields are read.

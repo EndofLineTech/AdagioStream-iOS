@@ -19,10 +19,38 @@ enum AudiobookshelfURL {
         let suffix = path.hasPrefix("/") ? path : "/" + path
         components.path = base + suffix
         if !query.isEmpty {
-            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+            // Percent-encode values ourselves rather than letting `.queryItems` do
+            // it: `URLComponents.queryItems` leaves `+`, `/`, and `=` UN-encoded
+            // (they're legal query chars per RFC 3986), but ABS's server decodes
+            // the query with express/`qs`, which turns a literal `+` into a SPACE.
+            // A Google OIDC auth code often contains `+` (and `/`, `=`); with the
+            // stock encoder the code arrives at `/auth/openid/callback` corrupted,
+            // and ABS returns 500 `invalid_grant (Malformed auth code)`
+            // (beads_mobilemusic-zq2). Encoding `+/=` explicitly makes the wire
+            // form survive express's decode intact — matching the official app's
+            // `encodeURIComponent`. Fixed in the shared builder so every ABS URL
+            // (tokens/passwords too) round-trips these chars safely.
+            components.percentEncodedQueryItems = query.map { key, value in
+                URLQueryItem(
+                    name: key.addingPercentEncoding(withAllowedCharacters: .absQueryValueAllowed) ?? key,
+                    value: value.addingPercentEncoding(withAllowedCharacters: .absQueryValueAllowed) ?? value
+                )
+            }
         }
         return components.url
     }
+}
+
+private extension CharacterSet {
+    /// `urlQueryAllowed` minus the sub-delimiters that break either query parsing
+    /// or express's decode: `+` (→ space in `qs`), `/` `=` `&` `?` `#` (delimiters
+    /// or ambiguous). Everything left in the set stays literal; the rest is
+    /// percent-encoded, so each value is decoded exactly once server-side.
+    static let absQueryValueAllowed: CharacterSet = {
+        var s = CharacterSet.urlQueryAllowed
+        s.remove(charactersIn: "+/=&?#")
+        return s
+    }()
 }
 
 /// Audiobookshelf JWT auth: login, refresh with token rotation, and a
