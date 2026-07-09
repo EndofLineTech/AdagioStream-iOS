@@ -97,8 +97,9 @@ extension URL {
             components.host = "***"
         }
 
-        // Redact query params (Xtream: username/password; Subsonic: u/p/t/s)
-        let redactedParamNames: Set<String> = ["username", "password", "u", "p", "t", "s"]
+        // Redact query params (Xtream: username/password; Subsonic: u/p/t/s;
+        // Audiobookshelf: token — a live JWT access token on stream/cover URLs)
+        let redactedParamNames: Set<String> = ["username", "password", "u", "p", "t", "s", "token"]
         components.queryItems = components.queryItems?.map { item in
             if redactedParamNames.contains(item.name) {
                 return URLQueryItem(name: item.name, value: "***")

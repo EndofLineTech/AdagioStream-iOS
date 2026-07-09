@@ -156,6 +156,12 @@ public final class DebugLogger: @unchecked Sendable {
             with: "p=***",
             options: .regularExpression
         )
+        // Audiobookshelf query param: token= (JWT access token on stream/cover URLs)
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])token=[^&\s]+"#,
+            with: "token=***",
+            options: .regularExpression
+        )
         return result
     }
 

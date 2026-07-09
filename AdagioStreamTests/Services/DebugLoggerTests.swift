@@ -49,6 +49,16 @@ final class DebugLoggerTests: XCTestCase {
         XCTAssertTrue(legacyResult.contains("c=AdagioStream"))
     }
 
+    func testRedactsABSTokenParam() {
+        // ymf.3: ABS stream/cover URLs carry a live JWT in ?token=.
+        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.sig"
+        let input = "Media parsed: url=https://abs.example.com/audiobookshelf/s/item/abc/track.m4b?token=\(jwt)&width=400"
+        let result = DebugLogger.redactCredentials(input)
+        XCTAssertFalse(result.contains(jwt), "token= (ABS access token) must be redacted")
+        XCTAssertTrue(result.contains("token=***"))
+        XCTAssertTrue(result.contains("width=400"), "non-credential params must survive")
+    }
+
     /// Exercises the persistent-FileHandle append path plus rotation: writes
     /// past the 2 MB threshold and confirms the file rolls over into
     /// adagiostream-debug-prev.log rather than growing unbounded.

@@ -110,4 +110,14 @@ final class ExtensionsTests: XCTestCase {
         XCTAssertTrue(redacted.contains("v=1.16.1"))
         XCTAssertTrue(redacted.contains("c=AdagioStream"))
     }
+
+    func testRedactedForLogRedactsABSTokenParam() {
+        // ymf.3: ABS stream/cover URLs carry a live JWT access token in ?token=.
+        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.sig"
+        let url = URL(string: "https://abs.example.com/audiobookshelf/s/item/abc/track.m4b?token=\(jwt)&width=400")!
+        let redacted = url.redactedForLog
+        XCTAssertFalse(redacted.contains(jwt), "the access token must not appear in logs")
+        XCTAssertTrue(redacted.contains("token=***"))
+        XCTAssertTrue(redacted.contains("width=400"), "non-credential params survive")
+    }
 }
