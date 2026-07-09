@@ -171,6 +171,10 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         } catch {
             return
         }
+        // This /play session is opened only to read audioTracks[] for the offset
+        // join — close it on every path (incl. the nil-bail below) so the server
+        // doesn't hold an idle session until it reaps (ymf.4).
+        defer { Task { await api.closeSession(sessionID: session.id) } }
 
         guard let files = Self.downloadFiles(session: session, audioFiles: item.audioFiles()) else { return }
         let chapters = item.chapters()
