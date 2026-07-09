@@ -33,6 +33,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         playbackSource?.currentItem
     }
 
+    /// True when anything is playing that warrants the mini-player: a radio/
+    /// library `nowPlaying` item OR an Audiobookshelf book (audiobooks are a
+    /// separate path with no `nowPlaying` item — yu8.1/yu8.4).
+    public var hasActivePlayback: Bool {
+        nowPlaying != nil || currentAudiobook != nil
+    }
+
     @Published public var isPlaying = false
     @Published public var isBuffering = false
     @Published public var error: String?

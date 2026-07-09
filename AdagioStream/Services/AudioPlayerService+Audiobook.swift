@@ -53,6 +53,21 @@ extension AudioPlayerService {
         return fresh
     }
 
+    // MARK: - Pure helpers (unit-tested)
+
+    /// Resume-position precedence (yu8.3): an explicit override wins, then the
+    /// server's `/play` currentTime (seeded from user progress), then the last
+    /// cached book record. `nil` server value falls through.
+    static func resumePosition(override: Double?, sessionCurrentTime: Double?, bookCurrentTime: Double) -> Double {
+        override ?? sessionCurrentTime ?? bookCurrentTime
+    }
+
+    /// `timeListened` for a sync: seconds advanced since the last sync, clamped
+    /// to ≥ 0 so a backward seek never reports negative listen time.
+    static func timeListened(sinceLastSynced last: Double, currentGlobal: Double) -> Double {
+        max(0, currentGlobal - last)
+    }
+
     // MARK: - Start / resume
 
     /// Opens a playback session for `book` and starts playing at the server's
@@ -68,7 +83,11 @@ extension AudioPlayerService {
                     return
                 }
                 // Resume point: explicit override → server currentTime → book record.
-                let resume = startGlobalTime ?? session.currentTime ?? book.currentTime
+                let resume = AudioPlayerService.resumePosition(
+                    override: startGlobalTime,
+                    sessionCurrentTime: session.currentTime,
+                    bookCurrentTime: book.currentTime
+                )
                 guard let located = timeline.locate(global: resume) else { return }
 
                 let abs = AudiobookSession(
@@ -84,6 +103,10 @@ extension AudioPlayerService {
                 self.audiobookDuration = timeline.totalDuration
                 self.audiobookGlobalTime = resume
                 self.currentChapter = timeline.chapter(at: resume)
+                // Resolve cover art for the in-app player + lock screen.
+                self.currentTrackArtwork = nil
+                self.nowPlayingArtworkURL = await api.coverURL(itemID: book.id)
+                self.loadAudiobookArtwork(itemID: book.id, api: api)
                 self.loadAudiobookFile(located.file, fileOffset: located.fileOffset)
             } catch {
                 self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -254,7 +277,7 @@ extension AudioPlayerService {
     internal func syncAudiobookProgress(force: Bool = false) {
         guard let session = audiobookSession else { return }
         let global = audiobookCurrentGlobalTime
-        let listened = max(0, global - session.lastSyncedGlobalTime)
+        let listened = AudioPlayerService.timeListened(sinceLastSynced: session.lastSyncedGlobalTime, currentGlobal: global)
         let duration = session.timeline.totalDuration
         session.lastSyncedGlobalTime = global
         session.lastSyncDate = Date()
@@ -351,5 +374,19 @@ extension AudioPlayerService {
         let center = MPNowPlayingInfoCenter.default()
         center.nowPlayingInfo = info
         center.playbackState = state
+    }
+
+    /// Loads the book cover into `currentTrackArtwork` for the lock screen /
+    /// Control Center. UIKit-only (no artwork on tvOS lock screen here).
+    private func loadAudiobookArtwork(itemID: String, api: AudiobookshelfAPI) {
+        #if canImport(UIKit)
+        Task { @MainActor in
+            guard let url = await api.coverURL(itemID: itemID),
+                  let image = await ImageCacheService.shared.image(for: url) else { return }
+            guard self.audiobookSession?.book.id == itemID else { return }
+            self.currentTrackArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            self.updateNowPlayingInfoForAudiobook()
+        }
+        #endif
     }
 }
