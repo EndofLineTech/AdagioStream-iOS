@@ -4,11 +4,87 @@ struct NowPlayingTabView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerService
 
     var body: some View {
-        if let channel = audioPlayer.currentChannel {
+        if let book = audioPlayer.currentAudiobook {
+            audiobookContent(for: book)
+        } else if let channel = audioPlayer.currentChannel {
             playingContent(for: channel)
         } else {
             emptyState
         }
+    }
+
+    // MARK: - Audiobook now-playing (xmq)
+
+    private func audiobookContent(for book: Audiobook) -> some View {
+        VStack(spacing: 40) {
+            audiobookArtwork
+                .frame(width: 360, height: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+
+            VStack(spacing: 12) {
+                Text(book.title)
+                    .font(.largeTitle)
+                if let chapter = audioPlayer.currentChapter {
+                    Text(chapter.title)
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                Text("\(Self.formatTime(audioPlayer.audiobookGlobalTime)) / \(Self.formatTime(audioPlayer.audiobookDuration ?? 0))")
+                    .font(.title3.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+
+            audiobookTransport
+        }
+        .padding(60)
+    }
+
+    @ViewBuilder private var audiobookArtwork: some View {
+        if let url = audioPlayer.nowPlayingArtworkURL {
+            AsyncImage(url: url) { image in
+                image.resizable().scaledToFit()
+            } placeholder: {
+                audiobookPlaceholderArt
+            }
+        } else {
+            audiobookPlaceholderArt
+        }
+    }
+
+    private var audiobookPlaceholderArt: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 24).fill(.secondary.opacity(0.2))
+            Image(systemName: "book.closed").font(.system(size: 120)).foregroundStyle(.secondary)
+        }
+    }
+
+    private var audiobookTransport: some View {
+        HStack(spacing: 32) {
+            Button(action: { audioPlayer.skipToPreviousChapter() }) {
+                Image(systemName: "backward.fill")
+                    .font(.title)
+                    .frame(width: 72, height: 72)
+            }
+
+            Button(action: { audioPlayer.togglePlayPause() }) {
+                Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.largeTitle)
+                    .frame(width: 96, height: 96)
+            }
+
+            Button(action: { audioPlayer.skipToNextChapter() }) {
+                Image(systemName: "forward.fill")
+                    .font(.title)
+                    .frame(width: 72, height: 72)
+            }
+        }
+    }
+
+    static func formatTime(_ seconds: Double) -> String {
+        let s = Int(max(0, seconds).rounded())
+        let h = s / 3600, m = (s % 3600) / 60, sec = s % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, sec) : String(format: "%d:%02d", m, sec)
     }
 
     private var emptyState: some View {
