@@ -37,11 +37,17 @@ final class MockURLProtocolHandler: URLProtocol {
     static var responseQueue: [Response] = []
     /// When non-nil, throw this error instead of returning a response.
     static var stubbedError: Error?
+    /// When set, routes each request to a response by inspecting it — needed for
+    /// concurrent tests where the flat `responseQueue` order is nondeterministic.
+    static var responder: ((URLRequest) -> Response)?
+    /// Serializes captured-request bookkeeping under concurrent loads.
+    private static let lock = NSLock()
 
     static func reset() {
         capturedRequests = []
         responseQueue = []
         stubbedError = nil
+        responder = nil
     }
 
     static func makeSession() -> URLSession {
@@ -57,19 +63,24 @@ final class MockURLProtocolHandler: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        MockURLProtocolHandler.lock.lock()
         MockURLProtocolHandler.capturedRequests.append(request)
 
         if let error = MockURLProtocolHandler.stubbedError {
+            MockURLProtocolHandler.lock.unlock()
             client?.urlProtocol(self, didFailWithError: error)
             return
         }
 
         let response: MockURLProtocolHandler.Response
-        if MockURLProtocolHandler.responseQueue.count > 1 {
+        if let responder = MockURLProtocolHandler.responder {
+            response = responder(request)
+        } else if MockURLProtocolHandler.responseQueue.count > 1 {
             response = MockURLProtocolHandler.responseQueue.removeFirst()
         } else {
             response = MockURLProtocolHandler.responseQueue.first ?? Response(json: "{}")
         }
+        MockURLProtocolHandler.lock.unlock()
 
         let http = HTTPURLResponse(
             url: request.url!,

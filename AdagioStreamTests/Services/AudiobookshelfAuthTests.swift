@@ -117,4 +117,43 @@ final class AudiobookshelfAuthTests: XCTestCase {
         XCTAssertEqual(retryAuth, "Bearer FRESH")
         XCTAssertEqual(MockURLProtocolHandler.capturedRequests.count, 3)
     }
+
+    // MARK: - ymf.2: two concurrent 401s coalesce into ONE refresh, no logout
+
+    func testConcurrent401sRefreshOnce() async throws {
+        let auth = makeAuth(seed: .init(accessToken: "STALE", refreshToken: "R1"))
+
+        // Route by request: refresh POST → new pair; authed GET with the stale
+        // token → 401; authed GET with the fresh token → 200. Order-independent,
+        // so it's deterministic under concurrency.
+        MockURLProtocolHandler.responder = { req in
+            if req.url?.path.hasSuffix("/auth/refresh") == true {
+                return .init(json: #"{"user":{"accessToken":"FRESH"},"refreshToken":"R2"}"#)
+            }
+            let bearer = req.value(forHTTPHeaderField: "Authorization")
+            return bearer == "Bearer FRESH"
+                ? .init(json: #"{"ok":true}"#, statusCode: 200)
+                : .init(json: "{}", statusCode: 401)
+        }
+
+        func fire() async throws -> Int {
+            var req = URLRequest(url: URL(string: "https://abs.example.com/api/libraries")!)
+            req.httpMethod = "GET"
+            return try await auth.authorizedData(for: req).1.statusCode
+        }
+
+        async let a = fire()
+        async let b = fire()
+        let (ra, rb) = try await (a, b)
+
+        XCTAssertEqual(ra, 200)
+        XCTAssertEqual(rb, 200)
+        XCTAssertNotNil(stored["k"], "no forced logout — tokens must survive")
+        XCTAssertEqual(stored["k"]?.accessToken, "FRESH")
+        XCTAssertEqual(stored["k"]?.refreshToken, "R2")
+
+        let refreshCount = MockURLProtocolHandler.capturedRequests
+            .filter { $0.url?.path.hasSuffix("/auth/refresh") == true }.count
+        XCTAssertEqual(refreshCount, 1, "concurrent 401s must trigger exactly one refresh")
+    }
 }

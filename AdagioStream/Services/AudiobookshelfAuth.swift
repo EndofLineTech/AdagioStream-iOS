@@ -71,6 +71,13 @@ public actor AudiobookshelfAuth {
 
     private var tokens: Tokens?
 
+    /// Coalesces concurrent refreshes. Two authed requests near expiry both 401
+    /// on the same stale access token; without this the second refresh would POST
+    /// the already-rotated (now-invalid) refresh token, get rejected, and clear
+    /// the freshly-rotated pair — forcing a full re-login (ymf.2). The first 401
+    /// starts this task; concurrent callers await it instead of starting a second.
+    private var inFlightRefresh: Task<Void, Error>?
+
     // MARK: - Injection seams (tests override these; production uses Keychain)
 
     private let loadTokens: (String) -> Tokens?
@@ -167,7 +174,7 @@ public actor AudiobookshelfAuth {
         var http = response as? HTTPURLResponse
 
         if http?.statusCode == 401 {
-            try await refresh()  // throws .reauthRequired on failure (tokens cleared)
+            try await refreshIfNeeded(staleAccessToken: access)  // throws .reauthRequired on failure
             guard let newAccess = tokens?.accessToken else { throw AuthError.reauthRequired }
             access = newAccess
             var retry = request
@@ -185,6 +192,25 @@ public actor AudiobookshelfAuth {
     public func currentAccessToken() -> String? { tokens?.accessToken }
 
     // MARK: - Refresh (rotates the refresh token)
+
+    /// Refreshes at most once for a wave of concurrent 401s. If someone already
+    /// rotated the token since this caller's 401 (its access token changed), the
+    /// caller just retries with the new token — no refresh. Otherwise it joins
+    /// (or starts) the single in-flight refresh. Preserves `refresh()`'s
+    /// failure contract: a failed refresh clears tokens and throws `.reauthRequired`.
+    private func refreshIfNeeded(staleAccessToken: String) async throws {
+        // Someone else already refreshed while we were suspended — reuse it.
+        if let current = tokens?.accessToken, current != staleAccessToken { return }
+
+        if let existing = inFlightRefresh {
+            try await existing.value
+            return
+        }
+        let task = Task { try await self.refresh() }
+        inFlightRefresh = task
+        defer { inFlightRefresh = nil }
+        try await task.value
+    }
 
     /// `POST /auth/refresh` with `x-refresh-token`. Persists the ROTATED pair on
     /// success. On failure, clears tokens and throws `.reauthRequired`.
