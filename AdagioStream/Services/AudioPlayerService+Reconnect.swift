@@ -41,6 +41,24 @@ extension AudioPlayerService {
         reconnectInFlightSince = nil
     }
 
+    /// Pure decision: does this call to `play(channel:userInitiated:)` own
+    /// the shared reconnect guard, and must therefore carry it through
+    /// play()'s debounce instead of the guard being released when the
+    /// synchronous call returns? (beads_mobilemusic-t96.26)
+    ///
+    /// A user-initiated call never claims the guard itself — regardless of
+    /// whether some other reconnect attempt happens to be in flight, a
+    /// manual tap must never be gated, delayed, or treated as a guard owner.
+    /// An automatic call only owns the guard if one is actually held (the
+    /// caller — path-monitor or deferred-reconnect — claimed it just before
+    /// calling in).
+    nonisolated static func playCallOwnsReconnectGuard(
+        userInitiated: Bool,
+        reconnectInFlightSince: Date?
+    ) -> Bool {
+        !userInitiated && reconnectInFlightSince != nil
+    }
+
     // MARK: - Network Path Monitor
 
     /// Human-readable summary of the last observed network path, for debug
@@ -108,7 +126,11 @@ extension AudioPlayerService {
         }
 
         guard claimReconnectGuard(path: "path-monitor") else { return }
-        defer { releaseReconnectGuard() }
+        // Ownership of the guard transfers into play(): it holds the claim
+        // through its ~1.5s debounce and releases when startStream() actually
+        // runs (or the debounce is cancelled/superseded). Releasing here
+        // would reopen the cross-path collision window the guard exists to
+        // close (beads_mobilemusic-t96.26).
 
         log.log("Path-driven reconnect for \"\(channel.name)\" — \(reason)", category: .player)
         lastPathReconnectTime = Date()
@@ -174,7 +196,10 @@ extension AudioPlayerService {
                 return
             }
             self.log.log("Deferred reconnect firing for \"\(channel.name)\" — other audio released", category: .audioSession)
-            self.releaseReconnectGuard()
+            // Ownership transfers into play(): it carries the claim through
+            // its debounce and releases when startStream() runs (or the
+            // debounce is cancelled/superseded) — do not release here, that
+            // would reopen the collision window (beads_mobilemusic-t96.26).
             self.play(channel: channel, userInitiated: false)
         }
         deferredReconnectWorkItem = work

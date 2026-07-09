@@ -239,6 +239,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     internal let probeTimeout: TimeInterval = 45
     internal var lastProbeHTTPStatus: Int?
     internal var pendingPlayWorkItem: DispatchWorkItem?
+    /// True when `pendingPlayWorkItem` was scheduled by a reconnect path that
+    /// is holding the shared reconnect guard (beads_mobilemusic-t96.26).  The
+    /// guard must survive play()'s debounce, not just the synchronous call —
+    /// this flag is how cancellation (a fresh play() superseding the pending
+    /// one) knows to release the guard it would otherwise leak.
+    internal var pendingPlayOwnsReconnectGuard = false
     internal var channelNameOverlayActive = false
     private var channelNameOverlayWorkItem: DispatchWorkItem?
     internal var lastTeardownTime: Date = .distantPast
@@ -424,9 +430,16 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     ///   must never seize the session from other audio; they defer and retry
     ///   once it releases.  See beads_mobilemusic-lfn.
     public func play(channel: Channel, userInitiated: Bool = true) {
-        // A fresh play() supersedes any deferred automatic reconnect.
-        deferredReconnectWorkItem?.cancel()
-        deferredReconnectWorkItem = nil
+        // A fresh play() supersedes any deferred automatic reconnect. That
+        // reconnect holds the shared guard across its poll chain (claimed
+        // once at attempt 0) — cancelling it here without releasing would
+        // leak the claim until the staleness escape kicks in
+        // (beads_mobilemusic-t96.26).
+        if deferredReconnectWorkItem != nil {
+            deferredReconnectWorkItem?.cancel()
+            deferredReconnectWorkItem = nil
+            releaseReconnectGuard()
+        }
         // Don't tear down an active stream to restart the same channel.
         // During CarPlay reconnect, multiple PLAY commands and channel
         // selections can fire within seconds — each would needlessly
@@ -445,14 +458,28 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         if channel.id == currentChannel?.id, isActiveSession,
            vlcLooksAlive, AudioOutput.shared.isRunning {
             log.log("play() skipped: \"\(channel.name)\" already active", category: .player)
+            // A reconnect path may have claimed the guard before calling in —
+            // no work item is scheduled on this early-return path, so release
+            // here or the claim leaks until the staleness escape kicks in.
+            if !userInitiated {
+                releaseReconnectGuard()
+            }
             return
         }
 
         log.log("play() channel=\"\(channel.name)\" group=\"\(channel.group)\" url=\(channel.streamURL.redactedForLog)", category: .player)
 
-        // Cancel any pending stream start from a previous rapid channel tap
+        // Cancel any pending stream start from a previous rapid channel tap.
+        // If that pending start was a reconnect path's debounced play, this
+        // supersedes it — release the guard here so the superseding call
+        // (user tap or a newer reconnect) never gets blocked by a claim whose
+        // owner just got cancelled (beads_mobilemusic-t96.26).
         pendingPlayWorkItem?.cancel()
         pendingPlayWorkItem = nil
+        if pendingPlayOwnsReconnectGuard {
+            pendingPlayOwnsReconnectGuard = false
+            releaseReconnectGuard()
+        }
         streamProbeTask?.cancel()
         streamProbeTask = nil
         probeStartTime = nil
@@ -564,8 +591,25 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         let needsDelay = lastTeardownTime.timeIntervalSince1970 > 0
             && Date().timeIntervalSince(lastTeardownTime) < 10
 
+        // A reconnect path (path-monitor / deferred-reconnect) claims the
+        // shared guard before calling play(:userInitiated: false). Carry
+        // that ownership through the debounce so the guard stays held until
+        // startStream() actually runs, instead of being released the moment
+        // this synchronous call returns — closing the cross-path collision
+        // window the guard exists to prevent (beads_mobilemusic-t96.26).
+        // A user-initiated call never claims the guard, so this is always
+        // false for a manual tap regardless of guard state.
+        let ownsReconnectGuard = Self.playCallOwnsReconnectGuard(userInitiated: userInitiated, reconnectInFlightSince: reconnectInFlightSince)
+        pendingPlayOwnsReconnectGuard = ownsReconnectGuard
+
         let workItem = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            defer {
+                if ownsReconnectGuard {
+                    self.pendingPlayOwnsReconnectGuard = false
+                    self.releaseReconnectGuard()
+                }
+            }
             guard self.currentChannel?.id == channel.id else {
                 self.log.log("Channel changed during debounce, aborting play for \(channel.name)", category: .player)
                 return

@@ -50,4 +50,63 @@ final class ReconnectGuardTests: XCTestCase {
             "A guard older than staleAfter must be treated as abandoned and reclaimable"
         )
     }
+
+    // MARK: - beads_mobilemusic-t96.26: guard ownership through play()'s debounce
+
+    func testUserInitiatedPlayNeverOwnsGuardEvenWhileOneIsHeld() {
+        // A manual tap must never be blocked, delayed, or treated as owning
+        // a reconnect's claim — regardless of whether some other reconnect
+        // attempt happens to be in flight at the same moment.
+        XCTAssertFalse(
+            AudioPlayerService.playCallOwnsReconnectGuard(userInitiated: true, reconnectInFlightSince: Date()),
+            "User-initiated play must never own the reconnect guard"
+        )
+        XCTAssertFalse(
+            AudioPlayerService.playCallOwnsReconnectGuard(userInitiated: true, reconnectInFlightSince: nil),
+            "User-initiated play must never own the reconnect guard"
+        )
+    }
+
+    func testAutomaticPlayOwnsGuardOnlyWhenOneIsActuallyHeld() {
+        // An automatic play (path-monitor / deferred-reconnect) owns the
+        // guard only if its caller already claimed it before calling in.
+        // If nothing is held, this is some other automatic path (e.g. a
+        // cold-restart after a survived short interruption) that never
+        // claimed a guard in the first place — it must not adopt one.
+        XCTAssertTrue(
+            AudioPlayerService.playCallOwnsReconnectGuard(userInitiated: false, reconnectInFlightSince: Date()),
+            "Automatic play must carry an already-held guard through its debounce"
+        )
+        XCTAssertFalse(
+            AudioPlayerService.playCallOwnsReconnectGuard(userInitiated: false, reconnectInFlightSince: nil),
+            "Automatic play must not claim guard ownership that was never held"
+        )
+    }
+
 }
+
+// MARK: - Claim/release bookkeeping on the live singleton (iOS only)
+//
+// claimReconnectGuard()/releaseReconnectGuard() only mutate
+// `reconnectInFlightSince` (plus a log call) — no VLC/AVAudioSession side
+// effects — so they're safe to exercise directly on the shared singleton.
+// The debounce-carrying behavior itself (inside play(), which does touch
+// VLC/AVAudioSession/DispatchWorkItem timing) is not exercisable here; that
+// path is covered by the pure decision function above plus manual/field
+// verification.
+
+#if os(iOS)
+@MainActor
+final class ReconnectGuardSingletonTests: XCTestCase {
+
+    func testClaimReleaseRoundTripOnSingleton() {
+        let service = AudioPlayerService.shared
+        service.releaseReconnectGuard() // ensure clean slate regardless of test order
+        XCTAssertTrue(service.claimReconnectGuard(path: "test-claim"), "Guard must be claimable when free")
+        XCTAssertFalse(service.claimReconnectGuard(path: "test-second-claim"), "A second claim must be rejected while the first is held")
+        service.releaseReconnectGuard()
+        XCTAssertTrue(service.claimReconnectGuard(path: "test-reclaim-after-release"), "Guard must be reclaimable after release")
+        service.releaseReconnectGuard() // leave clean for other tests
+    }
+}
+#endif
