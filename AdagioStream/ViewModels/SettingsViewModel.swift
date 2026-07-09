@@ -65,6 +65,7 @@ public final class SettingsViewModel: ObservableObject {
             var xtreamCount = 0
             var m3uCount = 0
             var subsonicCount = 0
+            var absCount = 0
             var enabledCount = 0
             for provider in providers {
                 if provider.isEnabled { enabledCount += 1 }
@@ -72,9 +73,10 @@ public final class SettingsViewModel: ObservableObject {
                 case .xtreamCodes: xtreamCount += 1
                 case .m3u: m3uCount += 1
                 case .subsonic: subsonicCount += 1
+                case .audiobookshelf: absCount += 1
                 }
             }
-            providerSummary = "total=\(providers.count), enabled=\(enabledCount), xtreamCodes=\(xtreamCount), m3u=\(m3uCount), subsonic=\(subsonicCount)"
+            providerSummary = "total=\(providers.count), enabled=\(enabledCount), xtreamCodes=\(xtreamCount), m3u=\(m3uCount), subsonic=\(subsonicCount), audiobookshelf=\(absCount)"
         }
         let channels = ProviderManager.shared.channels.count
         let snapshot = """

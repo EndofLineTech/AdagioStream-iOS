@@ -25,6 +25,11 @@ struct AddProviderView: View {
     @State private var subsonicUsername = ""
     @State private var subsonicPassword = ""
 
+    // Audiobookshelf fields
+    @State private var absHost = ""
+    @State private var absUsername = ""
+    @State private var absPassword = ""
+
     @State private var error: String?
     @State private var isSaving = false
 
@@ -36,12 +41,14 @@ struct AddProviderView: View {
         case m3u
         case xtreamCodes
         case subsonic
+        case audiobookshelf
 
         var label: String {
             switch self {
             case .m3u: return "M3U"
             case .xtreamCodes: return "Xtream Codes"
             case .subsonic: return "Navidrome"
+            case .audiobookshelf: return "Audiobookshelf"
             }
         }
     }
@@ -144,6 +151,38 @@ struct AddProviderView: View {
                             .font(.footnote)
                         }
                     }
+
+                case .audiobookshelf:
+                    Section {
+                        TextField("Server URL", text: $absHost)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Audiobookshelf server URL")
+                        TextField("Username", text: $absUsername)
+                            .textContentType(.init(rawValue: ""))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Audiobookshelf username")
+                        MaskedTextField(placeholder: "Password", text: $absPassword)
+                            .accessibilityLabel("Audiobookshelf password")
+                    } header: {
+                        Text("Audiobookshelf Settings")
+                    } footer: {
+                        Text("Include http:// or https://, e.g. https://abs.example.com. Requires server 2.26.0 or newer.")
+                    }
+
+                    if isAudiobookshelfHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
+                    }
                 }
 
                 if let error {
@@ -191,6 +230,13 @@ struct AddProviderView: View {
         return scheme == "http"
     }
 
+    private var isAudiobookshelfHTTP: Bool {
+        guard formProviderType == .audiobookshelf,
+              let url = URL(string: absHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
     private var isValid: Bool {
         guard !name.isEmpty else { return false }
         switch formProviderType {
@@ -209,6 +255,11 @@ struct AddProviderView: View {
                   let scheme = url.scheme?.lowercased(),
                   Self.allowedSchemes.contains(scheme) else { return false }
             return !subsonicUsername.isEmpty && !subsonicPassword.isEmpty
+        case .audiobookshelf:
+            guard let url = URL(string: absHost),
+                  let scheme = url.scheme?.lowercased(),
+                  Self.allowedSchemes.contains(scheme) else { return false }
+            return !absUsername.isEmpty && !absPassword.isEmpty
         }
     }
 
@@ -232,6 +283,11 @@ struct AddProviderView: View {
             subsonicHost = host.absoluteString
             subsonicUsername = username
             subsonicPassword = password
+        case .audiobookshelf(let host, let username, let password):
+            formProviderType = .audiobookshelf
+            absHost = host.absoluteString
+            absUsername = username
+            absPassword = password
         }
         stripStreamIDs = provider.stripStreamIDs
     }
@@ -273,6 +329,14 @@ struct AddProviderView: View {
                 return
             }
             type = .subsonic(host: host, username: subsonicUsername, password: subsonicPassword)
+
+        case .audiobookshelf:
+            guard let host = URL(string: absHost) else {
+                error = "Invalid server URL"
+                isSaving = false
+                return
+            }
+            type = .audiobookshelf(host: host, username: absUsername, password: absPassword)
         }
 
         if let existing = editing {

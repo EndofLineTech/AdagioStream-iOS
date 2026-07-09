@@ -146,6 +146,30 @@ public final class ProviderManager: ObservableObject {
                 )
                 return false
             }
+        } else if case .audiobookshelf(let host, let username, let password) = provider.type {
+            // Audiobookshelf: validate connectivity + auth by logging in and
+            // listing libraries. 0 books is NOT an error (library loading is a
+            // later epic), mirroring the Subsonic ping approach.
+            do {
+                let auth = AudiobookshelfAuth(
+                    host: host, username: username, password: password,
+                    providerID: provider.id.uuidString
+                )
+                _ = try await auth.login()
+                let api = AudiobookshelfAPI(host: host, auth: auth)
+                _ = try await api.bookLibraries()
+                DebugLogger.shared.log(
+                    "\(context)[\(provider.name)]: Audiobookshelf login + libraries OK",
+                    category: .providers
+                )
+            } catch {
+                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                DebugLogger.shared.log(
+                    "\(context)[\(provider.name)]: REJECTED — Audiobookshelf validation failed: \(String(describing: error))",
+                    category: .providers
+                )
+                return false
+            }
         } else {
             // M3U / XC: validate by loading channels; reject if empty.
             do {
@@ -328,6 +352,7 @@ public final class ProviderManager: ObservableObject {
                 case .m3u: return "M3U"
                 case .xtreamCodes: return "XC"
                 case .subsonic: return "Subsonic"
+                case .audiobookshelf: return "Audiobookshelf"
                 }
             }()
             DebugLogger.shared.log(
@@ -487,6 +512,13 @@ public final class ProviderManager: ObservableObject {
             // loading (artists, albums, songs) is deferred to E2. Returning [] is
             // correct — it is NOT an error, and the 0-channels guard in addProvider/
             // updateProvider is intentionally bypassed for Subsonic providers.
+            return []
+
+        case .audiobookshelf:
+            // Audiobookshelf contributes no live channels — same as Subsonic.
+            // Library (audiobooks/chapters) loading is a later epic. Returning []
+            // is correct and the 0-channels guard is bypassed for ABS in
+            // validateProvider above.
             return []
         }
     }

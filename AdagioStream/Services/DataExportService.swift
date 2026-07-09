@@ -49,6 +49,14 @@ public struct DataExportService {
                     serverURL: host.absoluteString,
                     username: username
                 )
+            case .audiobookshelf(let host, let username, _):
+                return ExportedProvider(
+                    name: provider.name,
+                    type: "Audiobookshelf",
+                    isEnabled: provider.isEnabled,
+                    serverURL: host.absoluteString,
+                    username: username
+                )
             }
         }
 

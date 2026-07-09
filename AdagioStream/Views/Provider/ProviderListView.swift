@@ -110,6 +110,7 @@ private struct ProviderRow: View {
         case .m3u: return "M3U Playlist"
         case .xtreamCodes: return "Xtream Codes"
         case .subsonic: return "Subsonic"
+        case .audiobookshelf: return "Audiobookshelf"
         }
     }
 }
