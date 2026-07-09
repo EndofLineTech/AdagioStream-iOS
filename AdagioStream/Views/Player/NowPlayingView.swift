@@ -276,9 +276,17 @@ struct NowPlayingView: View {
         .onChange(of: audioPlayer.trackElapsed) { _, newElapsed in
             if !isScrubbing { scrubValue = newElapsed }
         }
-        // yu8.4: same sync for the audiobook book-global position.
+        // yu8.4 / 4xw.3: sync the audiobook scrubber. In chapter mode the slider
+        // is chapter-relative, so track (global - chapterStart); otherwise it
+        // tracks the whole-book global position.
         .onChange(of: audioPlayer.audiobookGlobalTime) { _, newElapsed in
-            if !isScrubbing && isAudiobookMode { scrubValue = newElapsed }
+            if !isScrubbing && isAudiobookMode {
+                if let ch = audioPlayer.currentChapter {
+                    scrubValue = max(0, newElapsed - ch.start)
+                } else {
+                    scrubValue = newElapsed
+                }
+            }
         }
         // Self-dismiss when playback ends (user stop, or CarPlay disconnect
         // calling stop()). The presenting MiniPlayerView is removed from the
@@ -412,13 +420,25 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private var audiobookSeekBar: some View {
-        let duration = audioPlayer.audiobookDuration ?? 1.0
-        let displayElapsed = isScrubbing ? scrubValue : audioPlayer.audiobookGlobalTime
+        // 4xw.3: when the book has chapters, the scrubber + time are
+        // CHAPTER-relative (elapsed/duration within the current chapter) and
+        // scrubbing seeks within that chapter; a non-chaptered book keeps the
+        // whole-book global scrubber. Reaching a chapter end just clamps — the
+        // prev/next-chapter transport handles crossing chapters.
+        let chapter = audioPlayer.currentChapter
+        let duration = chapter?.duration ?? audioPlayer.audiobookDuration ?? 1.0
+        // Live position within the scope (chapter or whole book).
+        let livePosition: Double = {
+            let global = audioPlayer.audiobookGlobalTime
+            guard let chapter else { return global }
+            return min(max(0, global - chapter.start), max(chapter.duration, 0))
+        }()
+        let displayElapsed = isScrubbing ? scrubValue : livePosition
 
         VStack(spacing: 4) {
             Slider(
                 value: Binding(
-                    get: { isScrubbing ? scrubValue : audioPlayer.audiobookGlobalTime },
+                    get: { isScrubbing ? scrubValue : livePosition },
                     set: { newVal in
                         scrubValue = newVal
                         isScrubbing = true
@@ -430,13 +450,17 @@ struct NowPlayingView: View {
             } minimumValueLabel: {
                 Text(formatTime(displayElapsed)).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
             } maximumValueLabel: {
-                Text(audioPlayer.audiobookDuration.map(formatTime) ?? "--:--")
+                Text(formatTime(duration))
                     .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
             } onEditingChanged: { editing in
                 isScrubbing = editing
-                if !editing { audioPlayer.seekAudiobook(toGlobal: scrubValue) }
+                if !editing {
+                    // Convert the chapter-relative scrub value back to global.
+                    let target = chapter.map { $0.start + scrubValue } ?? scrubValue
+                    audioPlayer.seekAudiobook(toGlobal: target)
+                }
             }
-            .accessibilityLabel("Seek audiobook")
+            .accessibilityLabel(chapter != nil ? "Seek within chapter" : "Seek audiobook")
             .accessibilityValue("\(Int(displayElapsed)) of \(Int(duration)) seconds")
         }
         .padding(.horizontal)
