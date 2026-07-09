@@ -7,8 +7,12 @@ struct AddProviderView: View {
     /// Pass an existing provider to edit it; leave nil to add a new one.
     var editing: Provider?
 
+    /// When true, adding is locked to M3U: the type picker is hidden and only the
+    /// M3U form shows. Used by the "Custom M3Us" tab entry point. Ignored when editing.
+    var lockedToM3U = false
+
     @State private var name = ""
-    @State private var formProviderType: FormProviderType = .m3u
+    @State private var formProviderType: FormProviderType
 
     // M3U fields
     @State private var m3uURL = ""
@@ -33,7 +37,27 @@ struct AddProviderView: View {
     @State private var error: String?
     @State private var isSaving = false
 
+    init(editing: Provider? = nil, lockedToM3U: Bool = false) {
+        self.editing = editing
+        self.lockedToM3U = lockedToM3U
+        // When adding a new provider, default the picker to Xtream Codes since M3U
+        // is no longer a picker option (it's added from the Custom M3Us tab). When
+        // locked to M3U, or editing, populateFromEditing() / the M3U form takes over.
+        _formProviderType = State(initialValue: lockedToM3U ? .m3u : .xtreamCodes)
+    }
+
     private var isEditing: Bool { editing != nil }
+
+    /// M3U is excluded from the picker: new M3Us are added from the Custom M3Us tab.
+    private var pickerTypes: [FormProviderType] {
+        FormProviderType.allCases.filter { $0 != .m3u }
+    }
+
+    /// Hide the type picker when there's nothing to choose: locked to M3U, or
+    /// editing an M3U provider (whose type can't change and isn't a picker option).
+    private var hidePicker: Bool {
+        lockedToM3U || (isEditing && formProviderType == .m3u)
+    }
 
     // MARK: - Typed provider-form enum (replaces fragile Int picker)
 
@@ -59,14 +83,16 @@ struct AddProviderView: View {
                 Section("Account Details") {
                     TextField("Name", text: $name)
                         .accessibilityLabel("Account name")
-                    Picker("Type", selection: $formProviderType) {
-                        ForEach(FormProviderType.allCases, id: \.self) { type in
-                            Text(type.label).tag(type)
+                    if !hidePicker {
+                        Picker("Type", selection: $formProviderType) {
+                            ForEach(pickerTypes, id: \.self) { type in
+                                Text(type.label).tag(type)
+                            }
                         }
+                        .pickerStyle(.segmented)
+                        .disabled(isEditing)
+                        .accessibilityLabel("Provider type")
                     }
-                    .pickerStyle(.segmented)
-                    .disabled(isEditing)
-                    .accessibilityLabel("Provider type")
                 }
 
                 switch formProviderType {
@@ -192,7 +218,7 @@ struct AddProviderView: View {
                     }
                 }
             }
-            .navigationTitle(isEditing ? "Edit Account" : "Add Account")
+            .navigationTitle(isEditing ? "Edit Account" : (lockedToM3U ? "Add M3U" : "Add Account"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
