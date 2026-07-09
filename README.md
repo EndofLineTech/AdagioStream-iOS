@@ -75,7 +75,7 @@ AdagioStream/
 ├── Models/           Data structures (Provider, Channel, NavidromeModels, etc.)
 ├── Services/         Business logic
 │   ├── Audio/        AVAudioEngine + VLCAudioCallbackBridge (amem PCM pipeline)
-│   ├── AudioPlayerService.swift
+│   ├── AudioPlayerService.swift (+6 extension files)  See ADR 0005
 │   ├── NavidromeAPI.swift      Subsonic REST client
 │   ├── NavidromeStore.swift    GRDB SQLite library + download index
 │   ├── SubsonicAuth.swift      Token + salt MD5 authentication
@@ -91,6 +91,45 @@ docs/adr/             Architecture Decision Records
 AdagioStreamWidget/   Lock screen and Live Activity widget
 ShareExtension/       URL share sheet handler
 ```
+
+## Shared components
+
+Reach for these before hand-rolling the equivalent — each replaced 3+ drifted
+copies during the 2026-07-08 redundancy remediation (`beads_mobilemusic-t96`):
+
+- **`LoadableContent`** (`Views/Music/LoadableContent.swift`) — the
+  loading/empty/error/loaded switch for async list screens. Use it for any
+  new browse screen instead of hand-rolling the state switch; supply only
+  the per-screen strings/icon and the loaded content.
+- **`TrackRowView`** (`Views/Music/TrackRowView.swift`) — the unified track
+  row. Optional slots (`leading` style, star, download, inline play button)
+  cover album/playlist/genre row variants; add a new slot rather than a new
+  row type.
+- **`Int.durationString`** (`Utilities/Extensions.swift`) — the one
+  track-duration formatter. Formats `m:ss`, rolling over to `h:mm:ss` past an
+  hour. Never hand-roll `m:ss` again — the prior 4 copies had no hour
+  rollover.
+- **`URL.redactedForLog`** (`Utilities/Extensions.swift`) — redacts both
+  Xtream (path + `username`/`password`) and Subsonic (`u`/`p`/`t`/`s` query
+  params) credential shapes. Always use it when logging a provider URL.
+- **`RetryOnServerError`** (`Utilities/Extensions.swift`) + an injectable
+  `retryDelay: Duration` parameter on `NavidromeAPI`/`XtreamCodesAPI` — the
+  shared retry-once-on-5xx gate. Tests construct the client with `retryDelay:
+  .zero` to skip the real sleep.
+- **`Constants.AppGroup`** (`Constants.swift`) — the app-group identifier
+  (`identifier`) and shared-defaults key (`pendingSharedURLsKey`) used to hand
+  off shared URLs to `ShareExtension`. `Constants.swift` is included in
+  ShareExtension's `sources:` in `project.yml` for exactly this.
+- **Reconnect-in-flight guard** (`claimReconnectGuard`/`releaseReconnectGuard`
+  in `AudioPlayerService+Reconnect.swift`) — any new reconnect/retry path
+  must claim the guard before acting and release it (typically via `defer`)
+  rather than firing independently; this is what keeps the path monitor,
+  deferred reconnect, and probe-and-retry from tearing down the VLC player
+  concurrently.
+- **`AdagioStreamTests/TestSupport/`** — `TrackFixtures.swift`
+  (`makeTrack(...)`, `makeInMemoryNavidromeStore()`) and
+  `MockURLProtocolHandler.swift` (network-stub harness for injected
+  `URLSession`s). New tests should use these instead of a local duplicate.
 
 ## Dependencies
 
