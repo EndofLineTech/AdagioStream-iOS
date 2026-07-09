@@ -112,7 +112,7 @@ struct CustomPlaylistListView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
-                    .accessibilityLabel("Add")
+                    .accessibilityLabel("Add playlist or M3U")
                 }
             }
             .sheet(isPresented: $showingAddM3U) {

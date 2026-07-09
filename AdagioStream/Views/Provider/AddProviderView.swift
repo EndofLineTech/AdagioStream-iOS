@@ -47,10 +47,22 @@ struct AddProviderView: View {
     init(editing: Provider? = nil, lockedToM3U: Bool = false) {
         self.editing = editing
         self.lockedToM3U = lockedToM3U
-        // When adding a new provider, default the picker to Xtream Codes since M3U
-        // is no longer a picker option (it's added from the Custom M3Us tab). When
-        // locked to M3U, or editing, populateFromEditing() / the M3U form takes over.
-        _formProviderType = State(initialValue: lockedToM3U ? .m3u : .xtreamCodes)
+        // Derive the initial form type on first paint so editing shows the right
+        // form immediately (no one-frame Xtream flash). When adding a new provider,
+        // default the picker to Xtream Codes since M3U is no longer a picker option
+        // (it's added from the Custom M3Us tab).
+        let initialType: FormProviderType
+        if let editing {
+            switch editing.type {
+            case .m3u: initialType = .m3u
+            case .xtreamCodes: initialType = .xtreamCodes
+            case .subsonic: initialType = .subsonic
+            case .audiobookshelf: initialType = .audiobookshelf
+            }
+        } else {
+            initialType = lockedToM3U ? .m3u : .xtreamCodes
+        }
+        _formProviderType = State(initialValue: initialType)
     }
 
     private var isEditing: Bool { editing != nil }

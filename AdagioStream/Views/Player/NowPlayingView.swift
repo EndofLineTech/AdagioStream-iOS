@@ -450,7 +450,9 @@ struct NowPlayingView: View {
             } minimumValueLabel: {
                 Text(formatTime(displayElapsed)).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
             } maximumValueLabel: {
-                Text(formatTime(duration))
+                // A degenerate (zero-duration) chapter would print a misleading
+                // "0:00" max; show "--:--" instead.
+                Text(duration > 0 ? formatTime(duration) : "--:--")
                     .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
             } onEditingChanged: { editing in
                 isScrubbing = editing
