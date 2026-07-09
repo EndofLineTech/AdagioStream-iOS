@@ -293,6 +293,16 @@ public final class ProviderManager: ObservableObject {
         providers.filter(\.isEnabled).count
     }
 
+    /// Server-type providers only (Xtream / Navidrome / Audiobookshelf), excluding
+    /// M3U. M3U providers are managed exclusively from the Custom M3Us tab, so the
+    /// Settings → Accounts lists show only server accounts (beads_mobilemusic-jt8).
+    public var serverProviders: [Provider] {
+        providers.filter {
+            if case .m3u = $0.type { return false }
+            return true
+        }
+    }
+
     /// Returns a `NavidromeAPI` client for the first enabled Subsonic provider,
     /// or `nil` when none is configured.
     ///

@@ -8,7 +8,7 @@ struct ProviderListView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if providerManager.providers.isEmpty {
+                if providerManager.serverProviders.isEmpty {
                     EmptyStateView(
                         title: "No Accounts",
                         systemImage: "server.rack",
@@ -16,12 +16,12 @@ struct ProviderListView: View {
                     )
                 } else {
                     List {
-                        ForEach(providerManager.providers) { provider in
+                        ForEach(providerManager.serverProviders) { provider in
                             ProviderRow(provider: provider)
                         }
                         .onDelete { indexSet in
                             if let index = indexSet.first {
-                                providerToDelete = providerManager.providers[index]
+                                providerToDelete = providerManager.serverProviders[index]
                             }
                         }
 

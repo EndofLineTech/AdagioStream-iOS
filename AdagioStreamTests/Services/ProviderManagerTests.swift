@@ -152,6 +152,22 @@ final class ProviderManagerTests: XCTestCase {
         XCTAssertEqual(set.count, 1, "Identical subsonic types should deduplicate in a Set")
     }
 
+    // MARK: - serverProviders filtering (beads_mobilemusic-jt8)
+
+    @MainActor
+    func testServerProvidersExcludesM3U() {
+        let manager = ProviderManager()
+        manager.providers = [
+            Provider(name: "M3U", type: .m3u(url: URL(string: "https://e.com/a.m3u")!, epgURL: nil)),
+            Provider(name: "Xtream", type: .xtreamCodes(host: URL(string: "https://x.com")!, username: "u", password: "p")),
+            Provider(name: "Navidrome", type: .subsonic(host: URL(string: "https://n.com")!, username: "u", password: "p")),
+            Provider(name: "ABS", type: .audiobookshelf(host: URL(string: "https://a.com")!, username: "u", password: "p")),
+        ]
+
+        let names = manager.serverProviders.map(\.name)
+        XCTAssertEqual(names, ["Xtream", "Navidrome", "ABS"], "M3U must be excluded from serverProviders; server types preserved in order")
+    }
+
     // MARK: - Subsonic addProvider / updateProvider validation via seam
     //
     // ProviderManager constructs NavidromeAPI internally, so injecting a real
