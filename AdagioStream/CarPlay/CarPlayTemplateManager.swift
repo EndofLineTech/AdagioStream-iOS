@@ -10,7 +10,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
     let customPlaylistManager = CustomPlaylistManager.shared
-    private let log = DebugLogger.shared
+    let log = DebugLogger.shared
     let savedSongsManager = SavedSongsManager.shared
     private var cancellable: AnyCancellable?
     private var playlistCancellable: AnyCancellable?
@@ -472,9 +472,13 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // can never hide a category the way the old eager-section build could.
         let musicItems = providerManager.subsonicAPI != nil ? makeMusicCategoryItems() : []
 
-        // No Navidrome: preserve the historical single, header-less section so
-        // channel-only users see no visual change.
-        if musicItems.isEmpty {
+        // ciu.1: Audiobooks category — one root entry gated on an ABS provider,
+        // mirroring the Navidrome-music gating. Pushes the book list on tap.
+        let audiobookItems = providerManager.audiobookshelfAPI != nil ? [makeAudiobooksCategoryItem()] : []
+
+        // No secondary source (no Navidrome, no ABS): preserve the historical
+        // single, header-less section so channel-only users see no change.
+        if musicItems.isEmpty && audiobookItems.isEmpty {
             if items.isEmpty {
                 let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
                 placeholder.handler = { _, completion in completion() }
@@ -483,9 +487,9 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             return [CPListSection(items: items)]
         }
 
-        // Navidrome present: split into ordered, labeled sections. Now Playing
-        // is pulled out into its own leading section so it stays pinned at the
-        // top regardless of the streaming/music order.
+        // Secondary source present: split into ordered, labeled sections. Now
+        // Playing is pulled out into its own leading section so it stays pinned
+        // at the top regardless of the streaming/music order.
         var sections: [CPListSection] = []
         if let firstNowPlaying = nowPlayingItem, items.first === firstNowPlaying {
             items.removeFirst()
@@ -495,15 +499,22 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         let streamingSection = items.isEmpty
             ? nil
             : CPListSection(items: items, header: "Channels", sectionIndexTitle: nil)
-        let musicSection = CPListSection(items: musicItems, header: "Music", sectionIndexTitle: nil)
+        let musicSection = musicItems.isEmpty
+            ? nil
+            : CPListSection(items: musicItems, header: "Music", sectionIndexTitle: nil)
 
         switch providerManager.carPlaySourceOrder {
         case .streamingFirst:
             if let streamingSection { sections.append(streamingSection) }
-            sections.append(musicSection)
+            if let musicSection { sections.append(musicSection) }
         case .navidromeFirst:
-            sections.append(musicSection)
+            if let musicSection { sections.append(musicSection) }
             if let streamingSection { sections.append(streamingSection) }
+        }
+        // Audiobooks always trail the streaming/music ordering (they're not part
+        // of the carPlaySourceOrder toggle, which only covers streaming↔Navidrome).
+        if !audiobookItems.isEmpty {
+            sections.append(CPListSection(items: audiobookItems, header: "Audiobooks", sectionIndexTitle: nil))
         }
         return sections
     }
@@ -525,7 +536,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         }
     }
 
-    private func pushNowPlaying() {
+    func pushNowPlaying() {
         let nowPlaying = CPNowPlayingTemplate.shared
         let context = nowPlayingContext()
         if interfaceController.topTemplate is CPNowPlayingTemplate {
@@ -1080,7 +1091,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     }
 
     /// A non-tappable placeholder item for empty or failed list states.
-    private func emptyMusicItem(_ text: String) -> CPListItem {
+    func emptyMusicItem(_ text: String) -> CPListItem {
         let item = CPListItem(text: text, detailText: nil)
         item.handler = { _, completion in completion() }
         return item

@@ -320,6 +320,12 @@ extension AudioPlayerService {
             DebugLogger.shared.log("Remote command: NEXT_TRACK", category: .remoteCommand)
             Task { @MainActor in
                 guard let self else { return }
+                // ciu.1: an active audiobook maps next/prev-track to chapter skip
+                // (CarPlay now-playing + lock screen both route through here).
+                if self.currentAudiobook != nil {
+                    self.skipToNextChapter()
+                    return
+                }
                 // d6q.1: route to queue navigation in library mode;
                 // retain existing radio channel-cycling otherwise.
                 if case .library = self.playbackSource {
@@ -336,6 +342,11 @@ extension AudioPlayerService {
             DebugLogger.shared.log("Remote command: PREVIOUS_TRACK", category: .remoteCommand)
             Task { @MainActor in
                 guard let self else { return }
+                // ciu.1: an active audiobook maps next/prev-track to chapter skip.
+                if self.currentAudiobook != nil {
+                    self.skipToPreviousChapter()
+                    return
+                }
                 // d6q.1: route to queue navigation in library mode;
                 // retain existing radio channel-cycling otherwise.
                 if case .library = self.playbackSource {

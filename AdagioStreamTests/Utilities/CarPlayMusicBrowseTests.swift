@@ -148,5 +148,43 @@ final class CarPlayMusicBrowseTests: XCTestCase {
             "With no currentIndex and no duration, row detail is nil"
         )
     }
+
+    // MARK: - audiobookRowDetail (ciu.1)
+
+    private func makeBook(author: String?, progress: Double, isFinished: Bool) -> Audiobook {
+        Audiobook(
+            id: "b1", libraryItemId: "b1", libraryId: "lib1", title: "A Book",
+            author: author, progress: progress, isFinished: isFinished, updatedAt: 0
+        )
+    }
+
+    func testAudiobookRowDetailAuthorAndProgress() {
+        let book = makeBook(author: "Ursula K. Le Guin", progress: 0.42, isFinished: false)
+        XCTAssertEqual(
+            CarPlayTemplateManager.audiobookRowDetail(book),
+            "Ursula K. Le Guin · 42% listened"
+        )
+    }
+
+    func testAudiobookRowDetailFinishedWins() {
+        // Finished takes precedence over a progress percentage.
+        let book = makeBook(author: "Author", progress: 0.9, isFinished: true)
+        XCTAssertEqual(CarPlayTemplateManager.audiobookRowDetail(book), "Author · Finished")
+    }
+
+    func testAudiobookRowDetailAuthorOnlyWhenUnstarted() {
+        let book = makeBook(author: "Author", progress: 0, isFinished: false)
+        XCTAssertEqual(CarPlayTemplateManager.audiobookRowDetail(book), "Author")
+    }
+
+    func testAudiobookRowDetailProgressOnlyWhenNoAuthor() {
+        let book = makeBook(author: nil, progress: 0.5, isFinished: false)
+        XCTAssertEqual(CarPlayTemplateManager.audiobookRowDetail(book), "50% listened")
+    }
+
+    func testAudiobookRowDetailEmptyAuthorTreatedAsNil() {
+        let book = makeBook(author: "", progress: 0, isFinished: false)
+        XCTAssertNil(CarPlayTemplateManager.audiobookRowDetail(book))
+    }
 }
 #endif
