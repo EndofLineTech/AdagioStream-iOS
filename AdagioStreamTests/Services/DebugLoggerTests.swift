@@ -26,6 +26,17 @@ final class DebugLoggerTests: XCTestCase {
         XCTAssertEqual(input, result)
     }
 
+    // Review #3: a URL with userinfo (https://user:pass@host) must not leak the
+    // credentials into the log (ABS discovery logs the typed host on failure).
+    func testRedactsURLUserinfo() {
+        let input = "ABS discovery failed for https://alice:hunter2@abs.example.com/status: timeout"
+        let result = DebugLogger.redactCredentials(input)
+        XCTAssertFalse(result.contains("alice"))
+        XCTAssertFalse(result.contains("hunter2"))
+        XCTAssertTrue(result.contains("abs.example.com"))
+        XCTAssertTrue(result.contains("***@"))
+    }
+
     func testRedactsSubsonicQueryParams() {
         // Subsonic API URL with token auth: u= username, t= token, s= salt
         let tokenInput = "https://music.example.com/rest/stream?u=alice&t=abc123&s=saltydog&id=42&v=1.16.1&c=AdagioStream"

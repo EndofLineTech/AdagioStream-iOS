@@ -112,6 +112,12 @@ public final class DebugLogger: @unchecked Sendable {
     /// `s=`, `p=`).
     public static func redactCredentials(_ message: String) -> String {
         var result = message
+        // URL userinfo: https://user:pass@host → https://***@host
+        result = result.replacingOccurrences(
+            of: #"(https?://)[^/@\s]+@"#,
+            with: "$1***@",
+            options: .regularExpression
+        )
         // Stream URLs: https://host:port/live/user/pass/id.ext → https://***/live/***/***/id.ext
         result = result.replacingOccurrences(
             of: #"(https?://)([^/\s]+)(/live/)([^/]+)/([^/]+)/"#,

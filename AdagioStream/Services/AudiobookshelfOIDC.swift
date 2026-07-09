@@ -28,12 +28,14 @@ public enum AudiobookshelfOIDC {
     public struct Discovery: Equatable {
         public var isInit: Bool
         public var supportsOpenID: Bool
+        public var supportsLocal: Bool
         public var buttonText: String
         public var autoLaunch: Bool
 
-        public init(isInit: Bool, supportsOpenID: Bool, buttonText: String, autoLaunch: Bool) {
+        public init(isInit: Bool, supportsOpenID: Bool, supportsLocal: Bool = true, buttonText: String, autoLaunch: Bool) {
             self.isInit = isInit
             self.supportsOpenID = supportsOpenID
+            self.supportsLocal = supportsLocal
             self.buttonText = buttonText
             self.autoLaunch = autoLaunch
         }
@@ -71,12 +73,17 @@ public enum AudiobookshelfOIDC {
 
     /// Maps a decoded `/status` payload to `Discovery`. Pure — unit-tested.
     static func discovery(from status: StatusResponse) -> Discovery {
-        let openid = status.authMethods?.contains("openid") ?? false
+        let methods = status.authMethods ?? []
+        let openid = methods.contains("openid")
+        // Default to local=true when the server didn't send authMethods, so a
+        // sparse/old response never hides the password fields.
+        let local = methods.isEmpty ? true : methods.contains("local")
         let label = status.authFormData?.authOpenIDButtonText.flatMap { $0.isEmpty ? nil : $0 }
             ?? "Login with OpenID"
         return Discovery(
             isInit: status.isInit ?? true,
             supportsOpenID: openid,
+            supportsLocal: local,
             buttonText: label,
             autoLaunch: status.authFormData?.authOpenIDAutoLaunch ?? false
         )
@@ -88,10 +95,16 @@ public enum AudiobookshelfOIDC {
         guard let url = AudiobookshelfURL.resolve(host: host, path: "/status") else {
             throw OIDCError.invalidURL
         }
+        // Short per-request timeout so a black-holed server surfaces as .failed
+        // in ~8s instead of hanging the UI on URLSession's ~60s default. On the
+        // request (not a session config) so it applies to any injected session
+        // and doesn't touch the sign-in/exchange path.
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await session.data(from: url)
+            (data, response) = try await session.data(for: request)
         } catch {
             throw OIDCError.network(error)
         }

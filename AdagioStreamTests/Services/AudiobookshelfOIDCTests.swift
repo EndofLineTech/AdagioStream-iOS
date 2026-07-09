@@ -39,6 +39,69 @@ final class AudiobookshelfOIDCTests: XCTestCase {
         XCTAssertTrue(d.isInit)
     }
 
+    // Regression for bug 1e4: the user's real ABS 2.35.1 /status payload
+    // (authMethods ["local","openid"], button "Login with Google") must yield
+    // supportsOpenID:true + supportsLocal:true so the URL-first flow reveals
+    // BOTH the SSO button and the password fields. Mocked — never hits the live
+    // server. (The runtime bug was in the view's debounce, but this locks the
+    // decode against the exact production shape so a decode regression can't
+    // silently re-hide the button.)
+    func testDiscoveryDecodesRealUserStatusPayload() async throws {
+        MockURLProtocolHandler.responseQueue = [.init(json: """
+        {
+          "app": "audiobookshelf",
+          "serverVersion": "2.35.1",
+          "isInit": true,
+          "language": "en-us",
+          "authMethods": ["local", "openid"],
+          "authFormData": {
+            "authLoginCustomMessage": "",
+            "authOpenIDButtonText": "Login with Google",
+            "authOpenIDAutoLaunch": false
+          }
+        }
+        """)]
+        let d = try await AudiobookshelfOIDC.discover(
+            host: URL(string: "https://bookshelf.endofline.tech")!,
+            session: MockURLProtocolHandler.makeSession()
+        )
+        XCTAssertTrue(d.supportsOpenID, "openid must be detected from the real payload")
+        XCTAssertTrue(d.supportsLocal, "local must be detected so password fields show")
+        XCTAssertEqual(d.buttonText, "Login with Google")
+        XCTAssertFalse(d.autoLaunch)
+        XCTAssertTrue(d.isInit)
+    }
+
+    func testDiscoveryReportsLocalAbsentWhenOnlyOpenID() {
+        let status = AudiobookshelfOIDC.StatusResponse(
+            isInit: true,
+            authMethods: ["openid"],
+            authFormData: nil
+        )
+        let d = AudiobookshelfOIDC.discovery(from: status)
+        XCTAssertTrue(d.supportsOpenID)
+        XCTAssertFalse(d.supportsLocal, "openid-only server should not advertise local auth")
+    }
+
+    // Lockout floor (review #1): a server offering only an unrecognized method
+    // (e.g. ["ldap"]) has neither local nor openid. The add-provider form must
+    // still expose the password fields (SSO isn't the offered path), so the user
+    // isn't locked out. This mirrors AddProviderView.absShowsPasswordFields
+    // (supportsLocal || !supportsOpenID) at the discovery layer.
+    func testDiscoveryUnknownMethodShowsPasswordFloor() {
+        let status = AudiobookshelfOIDC.StatusResponse(
+            isInit: true,
+            authMethods: ["ldap"],
+            authFormData: nil
+        )
+        let d = AudiobookshelfOIDC.discovery(from: status)
+        XCTAssertFalse(d.supportsOpenID)
+        XCTAssertFalse(d.supportsLocal)
+        // The view floor: show password whenever SSO isn't offered.
+        XCTAssertTrue(d.supportsLocal || !d.supportsOpenID,
+                      "unknown-only auth method must still expose the password path")
+    }
+
     func testDiscoveryOpenIDAbsentWhenNotInAuthMethods() async throws {
         MockURLProtocolHandler.responseQueue = [.init(json: """
         {"isInit": true, "authMethods": ["local"]}

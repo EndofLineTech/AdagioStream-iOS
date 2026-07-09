@@ -34,10 +34,38 @@ struct AddProviderView: View {
     @State private var absUsername = ""
     @State private var absPassword = ""
 
-    // Audiobookshelf OpenID/SSO discovery (wv4.3)
-    @State private var absDiscovery: AudiobookshelfOIDC.Discovery?
-    @State private var isDiscovering = false
+    // Audiobookshelf discovery (URL-first flow, bug 1e4). `.task(id: absHost)`
+    // drives it; `absDiscoveryToken` is bumped by "Retry" to re-run without an
+    // edit. `absDiscoveryPhase` is the single source of truth for the UI.
+    @State private var absDiscoveryPhase: ABSDiscoveryPhase = .idle
+    @State private var absDiscoveryToken = 0
     @State private var isSigningIn = false
+
+    enum ABSDiscoveryPhase: Equatable {
+        case idle
+        case checking
+        case done(AudiobookshelfOIDC.Discovery)
+        case failed(String)
+    }
+
+    /// Convenience: the successful discovery, if any.
+    private var absDiscovery: AudiobookshelfOIDC.Discovery? {
+        if case .done(let d) = absDiscoveryPhase { return d }
+        return nil
+    }
+
+    /// Show username/password when the server advertises local auth, when
+    /// discovery failed, or when it hasn't run yet (empty/http URL) — so the
+    /// user is never locked out of the password path. Floor: if SSO is NOT the
+    /// offered path (e.g. authMethods ["ldap"]), still show password so an
+    /// unrecognized auth method can't hide every credential field.
+    private var absShowsPasswordFields: Bool {
+        switch absDiscoveryPhase {
+        case .done(let d): return d.supportsLocal || !d.supportsOpenID
+        case .idle, .failed: return true
+        case .checking: return false
+        }
+    }
     /// Retains the ASWebAuthenticationSession driver for the flow's lifetime.
     @State private var oidcSession = AudiobookshelfOIDCSession()
 
@@ -198,6 +226,11 @@ struct AddProviderView: View {
                     }
 
                 case .audiobookshelf:
+                    // URL-first: only the server URL shows until discovery reveals
+                    // which auth methods the server offers. Discovery runs off the
+                    // committed URL via `.task(id:)` — SwiftUI cancels/restarts it
+                    // on every edit, so there is no fragile self-referential
+                    // "did the host change while I slept" re-check (bug 1e4).
                     Section {
                         TextField("Server URL", text: $absHost)
                             .keyboardType(.URL)
@@ -205,18 +238,51 @@ struct AddProviderView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Audiobookshelf server URL")
-                            .onChange(of: absHost) { discoverSSO() }
-                        TextField("Username", text: $absUsername)
-                            .textContentType(.init(rawValue: ""))
-                            .autocorrectionDisabled()
-                            .textInputAutocapitalization(.never)
-                            .accessibilityLabel("Audiobookshelf username")
-                        MaskedTextField(placeholder: "Password", text: $absPassword)
-                            .accessibilityLabel("Audiobookshelf password")
+                            .task(id: AnyHashable([absHost, String(absDiscoveryToken)])) { await discoverABS() }
                     } header: {
                         Text("Audiobookshelf Settings")
                     } footer: {
                         Text("Include http:// or https://, e.g. https://abs.example.com. Requires server 2.26.0 or newer.")
+                    }
+
+                    // Visible discovery state (replaces the old silent `try?`).
+                    if case .checking = absDiscoveryPhase {
+                        Section {
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Text("Checking sign-in options…")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("Checking sign-in options")
+                        }
+                    }
+                    if case .failed(let message) = absDiscoveryPhase {
+                        Section {
+                            Label(message, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                                .font(.footnote)
+                            Button("Retry") { absDiscoveryToken &+= 1 }
+                                .accessibilityLabel("Retry checking sign-in options")
+                        } footer: {
+                            Text("Couldn't reach the server to check sign-in options. Enter your username and password below, or fix the URL and retry.")
+                        }
+                    }
+
+                    // Username/password: shown when the server offers local auth,
+                    // OR whenever discovery failed / hasn't run (so the user is
+                    // never locked out and the http password path still works).
+                    if absShowsPasswordFields {
+                        Section {
+                            TextField("Username", text: $absUsername)
+                                .textContentType(.init(rawValue: ""))
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .accessibilityLabel("Audiobookshelf username")
+                            MaskedTextField(placeholder: "Password", text: $absPassword)
+                                .accessibilityLabel("Audiobookshelf password")
+                        } header: {
+                            Text("Sign in with username & password")
+                        }
                     }
 
                     if !isEditing, let discovery = absDiscovery, discovery.supportsOpenID {
@@ -336,22 +402,50 @@ struct AddProviderView: View {
 
     // MARK: - Audiobookshelf OpenID / SSO (wv4.3)
 
-    /// Debounced `GET /status` discovery. Clears any prior result, waits for the
-    /// user to stop typing, then shows the SSO button only if the server offers
-    /// openid. Discovery failures are silent — the user can still use password.
-    private func discoverSSO() {
-        absDiscovery = nil
-        guard formProviderType == .audiobookshelf, let host = absSSOHost else { return }
-        isDiscovering = true
-        Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            // Bail if the host changed while we waited.
-            guard absSSOHost == host else { return }
-            let result = try? await AudiobookshelfOIDC.discover(host: host)
-            await MainActor.run {
-                isDiscovering = false
-                if absSSOHost == host { absDiscovery = result }
-            }
+    /// URL-first `GET /status` discovery, driven by `.task(id: absHost)`.
+    ///
+    /// Runs on the main actor; SwiftUI cancels and restarts it whenever `absHost`
+    /// (or the Retry token) changes, so there is no manual "did the host change
+    /// while I slept" re-check — the previous root cause (bug 1e4), where that
+    /// self-referential guard non-deterministically dropped the result and the
+    /// silent `try?` hid the failure, giving the user no SSO button and no error.
+    ///
+    /// Failures are now VISIBLE: `.failed` surfaces an inline message + Retry and
+    /// still shows the password fields, so the user is never locked out.
+    @MainActor
+    private func discoverABS() async {
+        guard formProviderType == .audiobookshelf, !isEditing else {
+            absDiscoveryPhase = .idle
+            return
+        }
+        // No https URL yet → idle (password path still available for http, and
+        // SSO is https-only). Empty/partial input shouldn't show errors.
+        guard let host = absSSOHost else {
+            absDiscoveryPhase = .idle
+            return
+        }
+        // Debounce: a cancellable sleep. If the user keeps typing, SwiftUI
+        // cancels this task and starts a fresh one — the sleep throws and we bail.
+        do {
+            try await Task.sleep(nanoseconds: 500_000_000)
+        } catch {
+            return // cancelled — a newer task owns discovery
+        }
+        absDiscoveryPhase = .checking
+        do {
+            let discovery = try await AudiobookshelfOIDC.discover(host: host)
+            guard !Task.isCancelled else { return }
+            absDiscoveryPhase = .done(discovery)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            DebugLogger.shared.log(
+                "ABS discovery failed for \(host.absoluteString): \(message)",
+                category: .general
+            )
+            absDiscoveryPhase = .failed(message)
         }
     }
 
