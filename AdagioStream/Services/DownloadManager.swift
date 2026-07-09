@@ -111,6 +111,14 @@ public final class DownloadManager: NSObject, ObservableObject {
     /// avoid creating duplicate tasks if download() is called twice quickly.
     private var enqueuedTrackIDs: Set<String> = []
 
+    /// The ABS API per in-flight book, so a background file task that 401s can
+    /// re-fetch a fresh token and re-enqueue itself (ymf.5). Keyed by bookID.
+    private var bookAPIs: [String: AudiobookshelfAPI] = [:]
+
+    /// Book file task descriptions we've already re-authed once, so a persistent
+    /// 401 fails the book instead of looping (ymf.5 — one re-auth per file).
+    private var reauthedBookTasks: Set<String> = []
+
     // MARK: - Static path helpers (nonisolated — safe to call from delegates)
 
     /// Derives the resume-data directory path without accessing any
@@ -475,20 +483,44 @@ public final class DownloadManager: NSObject, ObservableObject {
         try? store.upsert(audiobookDownload: record)
         refreshAudiobookDownloads()
 
+        // Keep the API so a 401'd file task can re-auth and re-enqueue (ymf.5).
+        bookAPIs[itemID] = api
+
         // Fetch a live token once, then enqueue a task per file with the Bearer
         // header. Token-in-header keeps short-lived JWTs out of URLs/logs.
         Task { @MainActor in
             let token = await api.currentAccessToken()
             for file in files {
-                guard let url = api.fileDownloadURL(itemID: itemID, ino: file.ino) else { continue }
-                var request = URLRequest(url: url)
-                request.timeoutInterval = 300
-                if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
-                let task = self.backgroundSession.downloadTask(with: request)
-                task.taskDescription = Self.bookTaskDescription(bookID: itemID, ino: file.ino)
-                task.resume()
+                self.enqueueBookFileTask(bookID: itemID, ino: file.ino, token: token, api: api)
             }
         }
+    }
+
+    /// Enqueues one book file's background download task with a Bearer token.
+    /// Shared by the initial download and the 401 re-auth retry (ymf.5).
+    private func enqueueBookFileTask(bookID: String, ino: String, token: String?, api: AudiobookshelfAPI) {
+        guard let url = api.fileDownloadURL(itemID: bookID, ino: ino) else { return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 300
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        let task = backgroundSession.downloadTask(with: request)
+        task.taskDescription = Self.bookTaskDescription(bookID: bookID, ino: ino)
+        task.resume()
+    }
+
+    /// On a 401 for a book file (stale snapshot token after OS-deferral), fetch a
+    /// fresh token and re-enqueue JUST that file — at most once per file — instead
+    /// of failing the whole book (ymf.5). Returns false if we've already retried
+    /// this file or have no API for the book, so the caller fails it.
+    @MainActor
+    fileprivate func retryBookFileAfterAuth(bookID: String, ino: String) async -> Bool {
+        let desc = Self.bookTaskDescription(bookID: bookID, ino: ino)
+        guard !reauthedBookTasks.contains(desc), let api = bookAPIs[bookID] else { return false }
+        reauthedBookTasks.insert(desc)
+        let stale = await api.currentAccessToken()
+        guard let fresh = await api.refreshedAccessToken(stale: stale) else { return false }
+        enqueueBookFileTask(bookID: bookID, ino: ino, token: fresh, api: api)
+        return true
     }
 
     /// Deletes a downloaded book: cancels any in-flight file tasks, removes the
@@ -508,6 +540,7 @@ public final class DownloadManager: NSObject, ObservableObject {
             .appendingPathComponent(itemID, isDirectory: true)
         try? FileManager.default.removeItem(at: bookDir)
         try? store.deleteAudiobookDownload(forBook: itemID)
+        forgetBookRetryState(bookID: itemID)
         refreshAudiobookDownloads()
     }
 
@@ -534,7 +567,10 @@ public final class DownloadManager: NSObject, ObservableObject {
             record.files[idx].localPath = localPath
         }
         record.updatedAt = Int(Date().timeIntervalSince1970)
-        if record.allFilesPresent { record.status = .completed }
+        if record.allFilesPresent {
+            record.status = .completed
+            forgetBookRetryState(bookID: bookID)
+        }
         try? store.upsert(audiobookDownload: record)
         refreshAudiobookDownloads()
     }
@@ -546,8 +582,17 @@ public final class DownloadManager: NSObject, ObservableObject {
         record.status = .failed
         record.error = error
         record.updatedAt = Int(Date().timeIntervalSince1970)
+        forgetBookRetryState(bookID: bookID)
         try? store.upsert(audiobookDownload: record)
         refreshAudiobookDownloads()
+    }
+
+    /// Drops the per-book API + re-auth bookkeeping once the book is settled
+    /// (completed, failed, or deleted) so the maps don't grow unbounded (ymf.5).
+    private func forgetBookRetryState(bookID: String) {
+        bookAPIs.removeValue(forKey: bookID)
+        let prefix = Self.bookTaskDescription(bookID: bookID, ino: "")
+        reauthedBookTasks = reauthedBookTasks.filter { !$0.hasPrefix(prefix) }
     }
 
     // MARK: - Launch reconciliation
@@ -805,8 +850,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
     }
 
     /// Moves a finished book file to its on-disk home and updates the manifest.
-    /// A non-2xx status (e.g. 403 when the user lacks `canDownload`) fails the
-    /// whole book with a clear message.
+    /// A non-2xx status fails the whole book with a clear message — EXCEPT a 401,
+    /// where a snapshot token likely went stale after OS-deferral: we re-auth and
+    /// re-enqueue just this file once (ymf.5), only failing if that retry can't run.
     private nonisolated func finishBookFileDownload(
         bookID: String,
         ino: String,
@@ -815,6 +861,14 @@ extension DownloadManager: URLSessionDownloadDelegate {
     ) {
         if let http = task.response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             try? FileManager.default.removeItem(at: location)
+            if http.statusCode == 401 {
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if await self.retryBookFileAfterAuth(bookID: bookID, ino: ino) { return }
+                    self.markBookFileFailed(bookID: bookID, error: "Download failed (HTTP 401).")
+                }
+                return
+            }
             let message = http.statusCode == 403
                 ? "Download not permitted for this account."
                 : "Download failed (HTTP \(http.statusCode))."

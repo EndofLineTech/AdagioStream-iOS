@@ -233,4 +233,42 @@ final class AudiobookshelfAuthTests: XCTestCase {
             .filter { $0.url?.path.hasSuffix("/auth/refresh") == true }.count
         XCTAssertEqual(refreshCount, 1, "concurrent 401s must trigger exactly one refresh")
     }
+
+    // MARK: - ymf.5: background download 401 → force a fresh token to re-enqueue
+
+    func testRefreshedAccessTokenRotatesForStaleToken() async throws {
+        let auth = makeAuth(seed: .init(accessToken: "STALE", refreshToken: "R1"))
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: #"{"user":{"accessToken":"FRESH"},"refreshToken":"R2"}"#)
+        ]
+        let token = await auth.refreshedAccessToken(stale: "STALE")
+        XCTAssertEqual(token, "FRESH", "a stale download token forces a rotation to the fresh one")
+        XCTAssertEqual(stored["k"]?.refreshToken, "R2")
+    }
+
+    func testRefreshedAccessTokenNilWhenRefreshFails() async {
+        let auth = makeAuth(seed: .init(accessToken: "STALE", refreshToken: "R1"))
+        MockURLProtocolHandler.responseQueue = [.init(json: "{}", statusCode: 401)]
+        let token = await auth.refreshedAccessToken(stale: "STALE")
+        XCTAssertNil(token, "a failed refresh returns nil so the caller fails the file, not loops")
+    }
+
+    func testConcurrentRefreshedAccessTokenCoalesces() async throws {
+        // Two file tasks 401 on the same stale token — one refresh, both get FRESH.
+        let auth = makeAuth(seed: .init(accessToken: "STALE", refreshToken: "R1"))
+        MockURLProtocolHandler.responder = { req in
+            if req.url?.path.hasSuffix("/auth/refresh") == true {
+                return .init(json: #"{"user":{"accessToken":"FRESH"},"refreshToken":"R2"}"#)
+            }
+            return .init(json: "{}", statusCode: 401)
+        }
+        async let a = auth.refreshedAccessToken(stale: "STALE")
+        async let b = auth.refreshedAccessToken(stale: "STALE")
+        let (ta, tb) = await (a, b)
+        XCTAssertEqual(ta, "FRESH")
+        XCTAssertEqual(tb, "FRESH")
+        let refreshCount = MockURLProtocolHandler.capturedRequests
+            .filter { $0.url?.path.hasSuffix("/auth/refresh") == true }.count
+        XCTAssertEqual(refreshCount, 1, "concurrent file-task 401s must trigger exactly one refresh")
+    }
 }

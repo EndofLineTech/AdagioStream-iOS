@@ -116,6 +116,12 @@ public struct AudiobookshelfAPI {
         await auth.currentAccessToken()
     }
 
+    /// Forces a token refresh and returns the fresh access token, for re-authing a
+    /// background download task that 401'd on a stale snapshot token (ymf.5).
+    public func refreshedAccessToken(stale: String?) async -> String? {
+        await auth.refreshedAccessToken(stale: stale)
+    }
+
     // MARK: - Batched progress sync (E3 / mkj.2)
 
     /// `PATCH /api/me/progress/batch/update` — flushes queued offline progress in

@@ -221,6 +221,20 @@ public actor AudiobookshelfAuth {
     /// art) where headers can't be set. `nil` until first login.
     public func currentAccessToken() -> String? { tokens?.accessToken }
 
+    /// Forces a token rotation and returns the fresh access token. Used when a
+    /// background download task 401s on a snapshot token that went stale while
+    /// OS-deferred (ymf.5). Reuses the same coalesced refresh as the 401-retry
+    /// path so a wave of file-task 401s triggers exactly one refresh. Returns
+    /// `nil` if reauth is required (refresh failed / no tokens).
+    public func refreshedAccessToken(stale: String?) async -> String? {
+        do {
+            try await refreshIfNeeded(staleAccessToken: stale ?? tokens?.accessToken ?? "")
+        } catch {
+            return nil
+        }
+        return tokens?.accessToken
+    }
+
     /// Seeds a token pair obtained out-of-band (the OpenID/SSO flow) into the
     /// same Keychain storage a password login uses. After this, refresh/rotation
     /// and 401-retry work identically — an OIDC provider never calls `login()`
