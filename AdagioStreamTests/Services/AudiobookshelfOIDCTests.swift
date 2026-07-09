@@ -151,4 +151,45 @@ final class AudiobookshelfOIDCTests: XCTestCase {
         let raw = "https://idp.example.com/authorize?state=abc"
         XCTAssertEqual(AudiobookshelfOIDC.decodeAuthURL(from: Data(raw.utf8)), raw)
     }
+
+    // MARK: - CSRF state (security fix)
+
+    func testStateIsRandomPerCall() {
+        XCTAssertNotEqual(AudiobookshelfOIDC.makeState(), AudiobookshelfOIDC.makeState())
+        // 32 bytes → 43-char base64url, no padding.
+        XCTAssertEqual(AudiobookshelfOIDC.makeState().count, 43)
+    }
+
+    func testAuthorizationURLIncludesState() async throws {
+        MockURLProtocolHandler.responseQueue = [.init(json:
+            #"{"authorizationUrl": "https://idp.example.com/authorize"}"#)]
+        _ = try await AudiobookshelfOIDC.authorizationURL(
+            host: URL(string: "https://abs.example.com")!,
+            challenge: "chal",
+            state: "STATE123",
+            session: MockURLProtocolHandler.makeSession()
+        )
+        let sent = MockURLProtocolHandler.capturedRequests.first?.url
+        let items = URLComponents(url: sent!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first(where: { $0.name == "state" })?.value, "STATE123")
+        XCTAssertEqual(items.first(where: { $0.name == "code_challenge_method" })?.value, "S256")
+    }
+
+    func testValidatedCallbackAcceptsMatchingState() {
+        let url = URL(string: "adagiostream://oauth?code=abc&state=S1")!
+        let cb = AudiobookshelfOIDC.validatedCallback(url, expectedState: "S1")
+        XCTAssertEqual(cb, AudiobookshelfOIDC.Callback(code: "abc", state: "S1"))
+    }
+
+    func testValidatedCallbackRejectsMismatchedState() {
+        // A crafted callback with an attacker's code but a foreign state.
+        let url = URL(string: "adagiostream://oauth?code=attacker&state=WRONG")!
+        XCTAssertNil(AudiobookshelfOIDC.validatedCallback(url, expectedState: "S1"),
+                     "must reject (and thus not exchange) on state mismatch")
+    }
+
+    func testValidatedCallbackRejectsMissingCode() {
+        let url = URL(string: "adagiostream://oauth?state=S1")!
+        XCTAssertNil(AudiobookshelfOIDC.validatedCallback(url, expectedState: "S1"))
+    }
 }

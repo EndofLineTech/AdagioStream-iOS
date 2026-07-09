@@ -301,11 +301,12 @@ struct AddProviderView: View {
         return scheme == "http"
     }
 
-    /// Valid http/https ABS host, or nil. Used for SSO discovery + sign-in.
+    /// Valid HTTPS ABS host, or nil. SSO carries code/code_verifier/tokens, so
+    /// the discovery + sign-in path is https-only (the password path still
+    /// accepts http via `allowedSchemes`, unchanged).
     private var absSSOHost: URL? {
         guard let url = URL(string: absHost),
-              let scheme = url.scheme?.lowercased(),
-              Self.allowedSchemes.contains(scheme) else { return nil }
+              url.scheme?.lowercased() == "https" else { return nil }
         return url
     }
 

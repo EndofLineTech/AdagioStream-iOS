@@ -14,12 +14,14 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
     enum SignInError: Error, LocalizedError {
         case cancelled
         case missingCallbackParams
+        case stateMismatch
         case flow(Error)
 
         var errorDescription: String? {
             switch self {
             case .cancelled: return "Sign-in was cancelled."
             case .missingCallbackParams: return "The sign-in response was incomplete. Try again."
+            case .stateMismatch: return "The sign-in response could not be verified. Please try again."
             case .flow(let e): return (e as? LocalizedError)?.errorDescription ?? e.localizedDescription
             }
         }
@@ -32,30 +34,32 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
     /// `SignInError.cancelled` if the user dismisses the browser.
     func signIn(host: URL) async throws -> AudiobookshelfAuth.Tokens {
         let pkce = AudiobookshelfOIDC.makePKCE()
+        let expectedState = AudiobookshelfOIDC.makeState()
         // ONE session shared across authorizationURL + exchange for the cookie jar.
         let flowSession = AudiobookshelfOIDC.makeFlowSession()
 
         let authURL: URL
         do {
             authURL = try await AudiobookshelfOIDC.authorizationURL(
-                host: host, challenge: pkce.challenge, session: flowSession
+                host: host, challenge: pkce.challenge, state: expectedState, session: flowSession
             )
         } catch {
             throw SignInError.flow(error)
         }
 
-        let callback = try await presentWebSession(authURL: authURL)
+        let callbackURL = try await presentWebSession(authURL: authURL)
 
-        guard let comps = URLComponents(url: callback, resolvingAgainstBaseURL: false),
-              let items = comps.queryItems,
-              let code = items.first(where: { $0.name == "code" })?.value,
-              let state = items.first(where: { $0.name == "state" })?.value else {
-            throw SignInError.missingCallbackParams
+        // CSRF guard: reject an injected code whose state doesn't match ours,
+        // BEFORE exchanging. The custom scheme is app-wide — anyone can invoke
+        // adagiostream://oauth?code=…&state=…; only our own state proves the
+        // callback answers our request.
+        guard let callback = AudiobookshelfOIDC.validatedCallback(callbackURL, expectedState: expectedState) else {
+            throw SignInError.stateMismatch
         }
 
         do {
             return try await AudiobookshelfOIDC.exchange(
-                host: host, state: state, code: code, verifier: pkce.verifier, session: flowSession
+                host: host, state: callback.state, code: callback.code, verifier: pkce.verifier, session: flowSession
             )
         } catch {
             throw SignInError.flow(error)

@@ -141,6 +141,11 @@ public actor AudiobookshelfAuth {
     /// the body. Persists the returned token pair and returns the session.
     @discardableResult
     public func login() async throws -> Session {
+        // OIDC/SSO providers have no password — an empty password means the
+        // Keychain tokens were lost. Never POST empty creds (that returns a 401
+        // "check your username and password", which is wrong for SSO); demand
+        // re-auth so the UI routes back to the SSO flow.
+        guard !password.isEmpty else { throw AuthError.reauthRequired }
         guard let url = AudiobookshelfURL.resolve(host: host, path: "/login") else { throw AuthError.invalidURL }
 
         var req = URLRequest(url: url)

@@ -118,6 +118,55 @@ final class AudiobookshelfAuthTests: XCTestCase {
         }
     }
 
+    // MARK: - OIDC provider with lost tokens must demand re-auth, not empty login
+
+    func testEmptyPasswordLoginThrowsReauthWithoutNetworkCall() async {
+        // OIDC provider (empty creds), tokens lost from the Keychain.
+        let auth = AudiobookshelfAuth(
+            host: URL(string: "https://abs.example.com")!,
+            username: "", password: "",
+            providerID: "PID",
+            session: session,
+            loadTokens: { _ in nil },
+            saveTokens: { _, _ in },
+            clearTokens: { _ in }
+        )
+        do {
+            _ = try await auth.login()
+            XCTFail("Expected reauthRequired")
+        } catch AudiobookshelfAuth.AuthError.reauthRequired {
+            // Must NOT have POSTed empty creds to /login.
+            XCTAssertTrue(MockURLProtocolHandler.capturedRequests.isEmpty,
+                          "empty-password login must not hit the network")
+        } catch {
+            XCTFail("Expected reauthRequired, got \(error)")
+        }
+    }
+
+    func testAuthorizedRequestWithLostOIDCTokensThrowsReauth() async {
+        // authorizedData with no tokens falls into login(); for an OIDC provider
+        // that must surface reauthRequired, not a 401 "check your password".
+        let auth = AudiobookshelfAuth(
+            host: URL(string: "https://abs.example.com")!,
+            username: "", password: "",
+            providerID: "PID",
+            session: session,
+            loadTokens: { _ in nil },
+            saveTokens: { _, _ in },
+            clearTokens: { _ in }
+        )
+        var req = URLRequest(url: URL(string: "https://abs.example.com/api/me")!)
+        req.httpMethod = "GET"
+        do {
+            _ = try await auth.authorizedData(for: req)
+            XCTFail("Expected reauthRequired")
+        } catch AudiobookshelfAuth.AuthError.reauthRequired {
+            // ok
+        } catch {
+            XCTFail("Expected reauthRequired, got \(error)")
+        }
+    }
+
     // MARK: - 401 on an authed request → refresh → retry succeeds
 
     func testAuthorizedRequestRetriesAfter401() async throws {

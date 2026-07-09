@@ -50,6 +50,10 @@ public extension Provider.ProviderType {
     /// the access/refresh tokens live in the Keychain (seeded by the OIDC flow),
     /// so no credentials are stored. Lets validation skip the password `login()`
     /// path and rely on the pre-seeded tokens instead.
+    // ponytail: empty-cred marker — no enum change. Ceiling: a password-authed
+    // ABS provider can't have empty username+password anyway (form validation
+    // requires both), so the two never collide. Upgrade to an explicit
+    // `authMode` field on the ABS case only if that invariant ever loosens.
     var isAudiobookshelfOIDC: Bool {
         if case .audiobookshelf(_, let username, let password) = self {
             return username.isEmpty && password.isEmpty

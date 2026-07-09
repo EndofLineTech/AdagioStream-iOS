@@ -28,6 +28,17 @@ extension AudiobookshelfOIDC {
         return PKCE(verifier: verifier, challenge: challenge)
     }
 
+    /// A random CSRF `state`: 32 random bytes as base64url. The client generates
+    /// it, sends it to `/auth/openid`, and MUST compare it against the value the
+    /// browser callback returns before exchanging the code — otherwise a crafted
+    /// `adagiostream://oauth?code=…` on the app-wide scheme could inject an
+    /// attacker's authorization code. PKCE alone does not cover this.
+    public static func makeState() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return base64URL(Data(bytes))
+    }
+
     /// base64url per RFC 4648 §5: base64 with `+`→`-`, `/`→`_`, padding stripped.
     static func base64URL(_ data: Data) -> String {
         data.base64EncodedString()
@@ -58,14 +69,16 @@ extension AudiobookshelfOIDC {
     /// &client_id=&response_type=code` → the IdP authorization URL to open in the
     /// browser. ABS stores our `redirect_uri` keyed by `state` and substitutes
     /// its own `/auth/openid/mobile-redirect` toward the IdP. Pass the shared
-    /// `session` from `makeFlowSession()`.
-    public static func authorizationURL(host: URL, challenge: String, session: URLSession) async throws -> URL {
+    /// `session` from `makeFlowSession()` and the `state` from `makeState()`;
+    /// the caller MUST validate the callback's `state` against it before exchange.
+    public static func authorizationURL(host: URL, challenge: String, state: String, session: URLSession) async throws -> URL {
         guard let url = AudiobookshelfURL.resolve(host: host, path: "/auth/openid", query: [
             "code_challenge": challenge,
             "code_challenge_method": "S256",
             "redirect_uri": redirectURI,
             "client_id": clientID,
             "response_type": "code",
+            "state": state,
         ]) else { throw OIDCError.invalidURL }
 
         var req = URLRequest(url: url)
@@ -108,6 +121,30 @@ extension AudiobookshelfOIDC {
             return raw
         }
         return nil
+    }
+
+    // MARK: - Callback parsing + CSRF validation
+
+    /// A validated `adagiostream://oauth` callback: the code, plus the state
+    /// already confirmed to match the request's state.
+    public struct Callback: Equatable {
+        public let code: String
+        public let state: String
+    }
+
+    /// Parses a callback URL and enforces the CSRF `state` match. Returns nil on
+    /// a missing param OR a mismatched state — callers must NOT exchange on nil.
+    /// Pure — unit-tested; keeps the security check out of the untestable
+    /// ASWebAuthenticationSession path.
+    static func validatedCallback(_ url: URL, expectedState: String) -> Callback? {
+        guard let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let items = comps.queryItems,
+              let code = items.first(where: { $0.name == "code" })?.value,
+              let state = items.first(where: { $0.name == "state" })?.value,
+              state == expectedState else {
+            return nil
+        }
+        return Callback(code: code, state: state)
     }
 
     // MARK: - Step 3: token exchange
