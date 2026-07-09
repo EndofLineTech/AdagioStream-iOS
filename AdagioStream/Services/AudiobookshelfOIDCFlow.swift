@@ -49,18 +49,35 @@ extension AudiobookshelfOIDC {
 
     // MARK: - Shared-cookie session
 
+    /// URLSession delegate that cancels every HTTP redirect (returns the 3xx
+    /// response as-is instead of following it). The official audiobookshelf-app
+    /// client sets `redirect: 'manual'` on `/auth/openid` and reads only the
+    /// `Location` header — following the 302 to Google (and downloading ~900KB of
+    /// sign-in HTML) is the one divergence we saw against the popup-500. This
+    /// makes the flow session match the official client. Foundation-only, so it
+    /// stays tvOS-safe.
+    final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask,
+                        willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest,
+                        completionHandler: @escaping (URLRequest?) -> Void) {
+            completionHandler(nil) // cancel: return the 3xx response, don't follow.
+        }
+    }
+
     /// One `URLSession` with an isolated, ephemeral cookie store shared across
     /// `authorizationURL` and `exchange`. ABS sets an `auth_method` cookie in the
     /// first call that the callback needs; without a shared jar the exchange gets
     /// "invalid state"/session errors. Ephemeral so these cookies never touch the
-    /// app's default cookie storage.
+    /// app's default cookie storage. The `NoRedirectDelegate` stops us following
+    /// `/auth/openid`'s 302 to the IdP so we read the `Location` header instead.
     public static func makeFlowSession() -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
         config.httpCookieStorage = HTTPCookieStorage()
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
-        return URLSession(configuration: config)
+        return URLSession(configuration: config, delegate: NoRedirectDelegate(), delegateQueue: nil)
     }
 
     // MARK: - Step 1: authorization URL
@@ -98,28 +115,41 @@ extension AudiobookshelfOIDC {
             DebugLogger.shared.log("[OIDC] /auth/openid transport error: \(error)", category: .providers)
             throw OIDCError.network(error)
         }
-        // TEMP-OIDC-DEBUG zq2: response status + the auth URL ABS hands back
-        // (final URL after any redirect URLSession followed).
-        let startStatus = (response as? HTTPURLResponse)?.statusCode ?? -1
-        DebugLogger.shared.log("[OIDC] /auth/openid response status=\(startStatus) finalURL=\(response.url?.absoluteString ?? "nil") bodyLen=\(data.count)", category: .providers)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+        let http0 = response as? HTTPURLResponse
+        let startStatus = http0?.statusCode ?? -1
+        let location = http0?.value(forHTTPHeaderField: "Location")
+        // TEMP-OIDC-DEBUG zq2: NEW behavior — we no longer FOLLOW the 302 to the
+        // IdP; the flow session's NoRedirectDelegate cancels the redirect, so we
+        // read the `Location` header of the 3xx (matching the official client).
+        // This line shows the status + extracted Location so the next log proves
+        // we read Location instead of downloading Google's sign-in HTML.
+        DebugLogger.shared.log("[OIDC] /auth/openid response status=\(startStatus) location=\(location ?? "nil") bodyLen=\(data.count)", category: .providers)
+
+        // The official audiobookshelf-app treats ANY 3xx from /auth/openid as the
+        // success case and reads the IdP URL from the Location header.
+        if (300...399).contains(startStatus) {
+            if let loc = location, let authURL = URL(string: loc) {
+                DebugLogger.shared.log("[OIDC] auth URL from Location header: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
+                return authURL
+            }
+            // 3xx with no usable Location — fall through to body/error below.
+        }
+
+        // Defensive fallback: a non-3xx 2xx server that returns the auth URL in a
+        // JSON body (some deployments). Keep this path so we don't regress those.
+        guard let http = response as? HTTPURLResponse,
+              (200...399).contains(http.statusCode) else {
             // TEMP-OIDC-DEBUG zq2
             DebugLogger.shared.log("[OIDC] /auth/openid FAILED status=\(startStatus) body=\(String(data: data, encoding: .utf8)?.prefix(500) ?? "")", category: .providers)
             throw OIDCError.requestFailed(
                 step: "sign-in start",
-                statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1,
+                statusCode: startStatus,
                 detail: safeErrorDetail(from: data)
             )
         }
-        // Prefer the JSON body; a `Location`-style redirect may already have been
-        // followed by URLSession, in which case the final URL is the IdP URL.
         if let raw = decodeAuthURL(from: data), let authURL = URL(string: raw) {
             DebugLogger.shared.log("[OIDC] auth URL from body: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
             return authURL
-        }
-        if let finalURL = response.url, finalURL != url {
-            DebugLogger.shared.log("[OIDC] auth URL from finalURL: \(finalURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
-            return finalURL
         }
         throw OIDCError.authURLMissing
     }

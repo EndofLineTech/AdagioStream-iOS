@@ -238,6 +238,24 @@ final class AudiobookshelfOIDCTests: XCTestCase {
         XCTAssertEqual(items.first(where: { $0.name == "code_challenge_method" })?.value, "S256")
     }
 
+    // beads_mobilemusic-zq2: match the official audiobookshelf-app client — a 3xx
+    // from /auth/openid is the success case and the IdP URL comes from the
+    // `Location` header, NOT from following the redirect to Google.
+    func testAuthorizationURLReadsLocationHeaderOn3xx() async throws {
+        MockURLProtocolHandler.responseQueue = [.init(
+            data: Data(),
+            statusCode: 302,
+            headers: ["Location": "https://idp.example.com/authorize?foo=bar"]
+        )]
+        let authURL = try await AudiobookshelfOIDC.authorizationURL(
+            host: URL(string: "https://abs.example.com")!,
+            challenge: "chal",
+            state: "STATE123",
+            session: MockURLProtocolHandler.makeSession()
+        )
+        XCTAssertEqual(authURL.absoluteString, "https://idp.example.com/authorize?foo=bar")
+    }
+
     func testValidatedCallbackAcceptsMatchingState() {
         let url = URL(string: "adagiostream://oauth?code=abc&state=S1")!
         let cb = AudiobookshelfOIDC.validatedCallback(url, expectedState: "S1")
