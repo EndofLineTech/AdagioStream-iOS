@@ -1,0 +1,120 @@
+import XCTest
+@testable import AdagioStream
+
+// Covers the subtle auth logic: refresh rotates + persists the new refresh
+// token, and a 401 triggers exactly one refresh-then-retry.
+
+final class AudiobookshelfAuthTests: XCTestCase {
+
+    private var session: URLSession!
+    /// In-memory token store shared with the actor via injection.
+    private var stored: [String: AudiobookshelfAuth.Tokens] = [:]
+
+    override func setUp() {
+        super.setUp()
+        MockURLProtocolHandler.reset()
+        session = MockURLProtocolHandler.makeSession()
+        stored = [:]
+    }
+
+    override func tearDown() {
+        MockURLProtocolHandler.reset()
+        super.tearDown()
+    }
+
+    private func makeAuth(seed: AudiobookshelfAuth.Tokens? = nil) -> AudiobookshelfAuth {
+        if let seed { stored["k"] = seed }
+        return AudiobookshelfAuth(
+            host: URL(string: "https://abs.example.com")!,
+            username: "alice",
+            password: "sesame",
+            providerID: "PID",
+            session: session,
+            loadTokens: { _ in self.stored["k"] },
+            saveTokens: { t, _ in self.stored["k"] = t },
+            clearTokens: { _ in self.stored["k"] = nil }
+        )
+    }
+
+    // MARK: - login persists tokens + captures permissions
+
+    func testLoginParsesTokensAndPermissions() async throws {
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: """
+                {"user":{"accessToken":"A1","permissions":{"download":true},
+                 "mediaProgress":[{"currentTime":10.0,"progress":0.5,"isFinished":false}]},
+                 "refreshToken":"R1"}
+                """)
+        ]
+        let auth = makeAuth()
+        let sessionResult = try await auth.login()
+
+        XCTAssertEqual(sessionResult.tokens.accessToken, "A1")
+        XCTAssertEqual(sessionResult.tokens.refreshToken, "R1")
+        XCTAssertTrue(sessionResult.canDownload)
+        XCTAssertEqual(stored["k"]?.refreshToken, "R1", "tokens must persist to the store")
+    }
+
+    // MARK: - refresh rotates and persists the new refresh token
+
+    func testRefreshRotatesRefreshToken() async throws {
+        let auth = makeAuth(seed: .init(accessToken: "A1", refreshToken: "R1"))
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: #"{"user":{"accessToken":"A2"},"refreshToken":"R2"}"#)
+        ]
+
+        try await auth.refresh()
+
+        XCTAssertEqual(stored["k"]?.accessToken, "A2")
+        XCTAssertEqual(stored["k"]?.refreshToken, "R2", "refresh token must rotate to the new value")
+
+        // The refresh request must carry the OLD refresh token in the header.
+        let sentHeader = MockURLProtocolHandler.capturedRequests.last?
+            .value(forHTTPHeaderField: "x-refresh-token")
+        XCTAssertEqual(sentHeader, "R1")
+    }
+
+    // MARK: - refresh failure forces re-login (tokens cleared)
+
+    func testRefreshFailureClearsTokens() async {
+        let auth = makeAuth(seed: .init(accessToken: "A1", refreshToken: "R1"))
+        MockURLProtocolHandler.responseQueue = [.init(json: "{}", statusCode: 401)]
+
+        do {
+            try await auth.refresh()
+            XCTFail("Expected reauthRequired")
+        } catch AudiobookshelfAuth.AuthError.reauthRequired {
+            XCTAssertNil(stored["k"], "a failed refresh must clear the token pair")
+        } catch {
+            XCTFail("Expected reauthRequired, got \(error)")
+        }
+    }
+
+    // MARK: - 401 on an authed request → refresh → retry succeeds
+
+    func testAuthorizedRequestRetriesAfter401() async throws {
+        let auth = makeAuth(seed: .init(accessToken: "STALE", refreshToken: "R1"))
+        // 1) first authed GET → 401
+        // 2) refresh → new tokens
+        // 3) retried GET → 200
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: "{}", statusCode: 401),
+            .init(json: #"{"user":{"accessToken":"FRESH"},"refreshToken":"R2"}"#),
+            .init(json: #"{"ok":true}"#, statusCode: 200),
+        ]
+
+        var req = URLRequest(url: URL(string: "https://abs.example.com/api/libraries")!)
+        req.httpMethod = "GET"
+        let (_, http) = try await auth.authorizedData(for: req)
+
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertEqual(stored["k"]?.accessToken, "FRESH")
+        XCTAssertEqual(stored["k"]?.refreshToken, "R2")
+
+        // The retried GET must use the refreshed access token, not the stale one.
+        let retryAuth = MockURLProtocolHandler.capturedRequests.last?
+            .value(forHTTPHeaderField: "Authorization")
+        XCTAssertEqual(retryAuth, "Bearer FRESH")
+        XCTAssertEqual(MockURLProtocolHandler.capturedRequests.count, 3)
+    }
+}
