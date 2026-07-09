@@ -81,6 +81,11 @@ extension AudiobookshelfOIDC {
             "state": state,
         ]) else { throw OIDCError.invalidURL }
 
+        // TEMP-OIDC-DEBUG zq2: log the EXACT /auth/openid request we send (all
+        // query params, incl. the encoded redirect_uri/code_challenge/state).
+        DebugLogger.shared.log("[OIDC] SENSITIVE DEBUG BUILD — logs OAuth material; do not distribute", category: .providers)
+        DebugLogger.shared.log("[OIDC] /auth/openid request URL: \(url.absoluteString)", category: .providers)
+
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
 
@@ -89,9 +94,17 @@ extension AudiobookshelfOIDC {
         do {
             (data, response) = try await session.data(for: req)
         } catch {
+            // TEMP-OIDC-DEBUG zq2
+            DebugLogger.shared.log("[OIDC] /auth/openid transport error: \(error)", category: .providers)
             throw OIDCError.network(error)
         }
+        // TEMP-OIDC-DEBUG zq2: response status + the auth URL ABS hands back
+        // (final URL after any redirect URLSession followed).
+        let startStatus = (response as? HTTPURLResponse)?.statusCode ?? -1
+        DebugLogger.shared.log("[OIDC] /auth/openid response status=\(startStatus) finalURL=\(response.url?.absoluteString ?? "nil") bodyLen=\(data.count)", category: .providers)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            // TEMP-OIDC-DEBUG zq2
+            DebugLogger.shared.log("[OIDC] /auth/openid FAILED status=\(startStatus) body=\(String(data: data, encoding: .utf8)?.prefix(500) ?? "")", category: .providers)
             throw OIDCError.requestFailed(
                 step: "sign-in start",
                 statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1,
@@ -101,9 +114,13 @@ extension AudiobookshelfOIDC {
         // Prefer the JSON body; a `Location`-style redirect may already have been
         // followed by URLSession, in which case the final URL is the IdP URL.
         if let raw = decodeAuthURL(from: data), let authURL = URL(string: raw) {
+            DebugLogger.shared.log("[OIDC] auth URL from body: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
             return authURL
         }
-        if let finalURL = response.url, finalURL != url { return finalURL }
+        if let finalURL = response.url, finalURL != url {
+            DebugLogger.shared.log("[OIDC] auth URL from finalURL: \(finalURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
+            return finalURL
+        }
         throw OIDCError.authURLMissing
     }
 
@@ -170,6 +187,11 @@ extension AudiobookshelfOIDC {
             "code_verifier": verifier,
         ]) else { throw OIDCError.invalidURL }
 
+        // TEMP-OIDC-DEBUG zq2: log the EXACT /auth/openid/callback URL we build
+        // (encoded code/code_verifier/state). Reaching here means the browser
+        // DID hand us a callback — if the popup 500s, this line never appears.
+        DebugLogger.shared.log("[OIDC] /auth/openid/callback request URL: \(url.absoluteString)", category: .providers)
+
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
 
@@ -178,15 +200,23 @@ extension AudiobookshelfOIDC {
         do {
             (data, response) = try await session.data(for: req)
         } catch {
+            // TEMP-OIDC-DEBUG zq2
+            DebugLogger.shared.log("[OIDC] /auth/openid/callback transport error: \(error)", category: .providers)
             throw OIDCError.network(error)
         }
+        // TEMP-OIDC-DEBUG zq2: status + body ONLY on failure. Do NOT log a
+        // success body — it carries access/refresh tokens (reusable secrets).
+        let exStatus = (response as? HTTPURLResponse)?.statusCode ?? -1
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            // TEMP-OIDC-DEBUG zq2
+            DebugLogger.shared.log("[OIDC] /auth/openid/callback FAILED status=\(exStatus) body=\(String(data: data, encoding: .utf8)?.prefix(500) ?? "")", category: .providers)
             throw OIDCError.requestFailed(
                 step: "token exchange",
                 statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1,
                 detail: safeErrorDetail(from: data)
             )
         }
+        DebugLogger.shared.log("[OIDC] /auth/openid/callback status=\(exStatus) OK (token body redacted)", category: .providers) // TEMP-OIDC-DEBUG zq2
         return try parseTokens(from: data)
     }
 
