@@ -246,6 +246,50 @@ public final class NavidromeStore {
             try db.execute(sql: "ALTER TABLE tracks ADD COLUMN artist TEXT")
         }
 
+        // ── v4: Audiobookshelf cache ─────────────────────────────────────────
+        // audiobooks + chapters live in this same store (one DB, not two). No
+        // FK to the Navidrome tables — an unrelated media domain. chapters FKs
+        // audiobooks with ON DELETE CASCADE. start/end are global-timeline
+        // seconds spanning file boundaries (from ABS media.chapters[]).
+        m.registerMigration("createAudiobookshelfCache") { db in
+            try db.execute(sql: """
+                CREATE TABLE audiobooks (
+                    id            TEXT PRIMARY KEY NOT NULL,
+                    libraryItemId TEXT NOT NULL,
+                    libraryId     TEXT NOT NULL,
+                    title         TEXT NOT NULL,
+                    author        TEXT,
+                    duration      REAL,
+                    coverPath     TEXT,
+                    currentTime   REAL NOT NULL DEFAULT 0,
+                    progress      REAL NOT NULL DEFAULT 0,
+                    isFinished    INTEGER NOT NULL DEFAULT 0,
+                    lastUpdate    INTEGER NOT NULL DEFAULT 0,
+                    updatedAt     INTEGER NOT NULL
+                )
+                """)
+            try db.execute(sql: """
+                CREATE INDEX idx_audiobooks_libraryId ON audiobooks (libraryId)
+                """)
+            try db.execute(sql: """
+                CREATE INDEX idx_audiobooks_title
+                    ON audiobooks (title COLLATE NOCASE)
+                """)
+
+            try db.execute(sql: """
+                CREATE TABLE chapters (
+                    id     TEXT PRIMARY KEY NOT NULL,
+                    bookId TEXT NOT NULL REFERENCES audiobooks(id) ON DELETE CASCADE,
+                    title  TEXT NOT NULL,
+                    start  REAL NOT NULL,
+                    end    REAL NOT NULL
+                )
+                """)
+            try db.execute(sql: """
+                CREATE INDEX idx_chapters_bookId ON chapters (bookId)
+                """)
+        }
+
         return m
     }()
 }
@@ -363,6 +407,44 @@ extension NavidromeStore {
             try Track
                 .filter(Column("albumId") == albumId)
                 .order(Column("discNumber"), Column("trackNumber"))
+                .fetchAll(db)
+        }
+    }
+
+    // MARK: - Audiobookshelf CRUD (v4 schema)
+
+    /// Upserts audiobook records (INSERT OR REPLACE by id).
+    public func upsert(audiobooks: [Audiobook]) throws {
+        try writer.write { db in
+            for book in audiobooks { try book.save(db) }
+        }
+    }
+
+    /// Replaces the full chapter set for a book. Old rows are deleted first so a
+    /// re-fetch with fewer/renumbered chapters doesn't leave orphans.
+    public func replaceChapters(_ chapters: [AudiobookChapter], forBook bookId: String) throws {
+        try writer.write { db in
+            _ = try AudiobookChapter.filter(Column("bookId") == bookId).deleteAll(db)
+            for chapter in chapters { try chapter.save(db) }
+        }
+    }
+
+    /// Returns all audiobooks in a library, ordered by title.
+    public func audiobooks(forLibrary libraryId: String) throws -> [Audiobook] {
+        try writer.read { db in
+            try Audiobook
+                .filter(Column("libraryId") == libraryId)
+                .order(Column("title"))
+                .fetchAll(db)
+        }
+    }
+
+    /// Returns a book's chapters ordered by start time.
+    public func chapters(forBook bookId: String) throws -> [AudiobookChapter] {
+        try writer.read { db in
+            try AudiobookChapter
+                .filter(Column("bookId") == bookId)
+                .order(Column("start"))
                 .fetchAll(db)
         }
     }

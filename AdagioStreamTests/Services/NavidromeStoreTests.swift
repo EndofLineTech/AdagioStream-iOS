@@ -18,7 +18,7 @@ final class NavidromeStoreTests: XCTestCase {
 
     // MARK: - Migration completeness
 
-    /// All v1 + v2 tables exist after migration.
+    /// All v1 + v2 + v4 tables exist after migration.
     func testMigrationsCreateAllTables() throws {
         let store = try makeStore()
         let tableNames = try store.writer.read { db -> [String] in
@@ -28,7 +28,10 @@ final class NavidromeStoreTests: XCTestCase {
             )
         }
         // grdb_migrations is the internal GRDB tracking table.
-        let expected: Set<String> = ["artists", "albums", "tracks", "downloads", "grdb_migrations"]
+        let expected: Set<String> = [
+            "artists", "albums", "tracks", "downloads",
+            "audiobooks", "chapters", "grdb_migrations",
+        ]
         XCTAssertEqual(Set(tableNames), expected,
                        "Expected tables \(expected), got \(tableNames)")
     }
