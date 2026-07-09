@@ -11,6 +11,12 @@ struct RootTabView: View {
                 ChannelsTabView()
                     .tabItem { Label("Channels", systemImage: "radio") }
 
+                // ciu.2: audiobooks tab, only when an ABS provider is configured.
+                if providerManager.audiobookshelfAPI != nil {
+                    AudiobooksTabView()
+                        .tabItem { Label("Audiobooks", systemImage: "books.vertical") }
+                }
+
                 NowPlayingTabView()
                     .tabItem { Label("Now Playing", systemImage: "play.circle") }
 
