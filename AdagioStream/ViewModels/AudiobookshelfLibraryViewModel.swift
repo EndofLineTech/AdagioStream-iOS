@@ -19,6 +19,11 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     @Published public private(set) var books: [Audiobook] = []
     @Published public private(set) var booksState: LoadState = .idle
 
+    /// Book libraries seen on the last `loadBooks` (id + name), for grouping the
+    /// book list per library (6z5). One entry when the server has a single book
+    /// library.
+    @Published public private(set) var libraries: [ABSLibraryDTO] = []
+
     // MARK: - Continue Listening (00t)
 
     /// In-progress, not-finished books in server order (GET /api/me/items-in-progress).
@@ -58,6 +63,7 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         booksState = .loading
         do {
             let libraries = try await api.bookLibraries()
+            self.libraries = libraries
             var all: [Audiobook] = []
             let now = Int(Date().timeIntervalSince1970)
             for library in libraries {

@@ -29,7 +29,9 @@ extension CarPlayTemplateManager {
         return item
     }
 
-    /// Pushes the book list, fetching via the shared library view-model.
+    /// Pushes the book list, fetching via the shared library view-model. With
+    /// more than one book library the top level becomes a library picker (6z5);
+    /// a single library keeps the flat book list (no pointless drill-down).
     func pushAudiobookList() {
         log.log("Audiobooks: pushAudiobookList", category: .carplay)
         guard let api = providerManager.audiobookshelfAPI else { return }
@@ -48,14 +50,39 @@ extension CarPlayTemplateManager {
             case .empty:
                 template.updateSections([CPListSection(items: [self.emptyMusicItem("No audiobooks")])])
             default:
-                let items = viewModel.books.map { book in
-                    self.audiobookRowItem(book, coverURL: viewModel.coverURLs[book.id], api: api)
+                if viewModel.libraries.count > 1 {
+                    let items = viewModel.libraries.map { library in
+                        self.libraryPickerItem(library, viewModel: viewModel, api: api)
+                    }
+                    template.updateSections([CPListSection(items: items)])
+                } else {
+                    template.updateSections([self.bookSection(viewModel.books, viewModel: viewModel, api: api)])
                 }
-                template.updateSections([CPListSection(items: items.isEmpty
-                    ? [self.emptyMusicItem("No audiobooks")]
-                    : items)])
             }
         }
+    }
+
+    /// One library row that drills into just that library's books.
+    private func libraryPickerItem(_ library: ABSLibraryDTO, viewModel: AudiobookshelfLibraryViewModel, api: AudiobookshelfAPI) -> CPListItem {
+        let books = viewModel.books.filter { $0.libraryId == library.id }
+        let item = CPListItem(text: library.name, detailText: "\(books.count) book\(books.count == 1 ? "" : "s")")
+        item.accessoryType = .disclosureIndicator
+        item.setImage(audiobookPlaceholderImage())
+        item.handler = { [weak self] _, completion in
+            guard let self else { completion(); return }
+            let template = CPListTemplate(title: library.name, sections: [self.bookSection(books, viewModel: viewModel, api: api)])
+            self.interfaceController.pushTemplate(template, animated: true, completion: nil)
+            completion()
+        }
+        return item
+    }
+
+    /// A section of book rows (or an empty placeholder).
+    private func bookSection(_ books: [Audiobook], viewModel: AudiobookshelfLibraryViewModel, api: AudiobookshelfAPI) -> CPListSection {
+        let items = books.map { book in
+            self.audiobookRowItem(book, coverURL: viewModel.coverURLs[book.id], api: api)
+        }
+        return CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No audiobooks")] : items)
     }
 
     /// One book row: title + author/progress detail, cover art, tap-to-resume.
