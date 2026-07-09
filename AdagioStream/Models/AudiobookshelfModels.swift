@@ -94,6 +94,10 @@ public struct AudiobookChapter: Codable, FetchableRecord, PersistableRecord, Equ
         self.start = start
         self.end = end
     }
+
+    /// Chapter length in seconds (`end - start`), clamped to ≥ 0 so a bad/missing
+    /// `end` in the payload can't produce a negative duration. bug 4xw.4.
+    public var duration: Double { max(0, end - start) }
 }
 
 // MARK: - DTO Layer

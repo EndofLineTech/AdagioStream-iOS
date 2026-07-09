@@ -124,6 +124,29 @@ final class AudiobookTimelineTests: XCTestCase {
         XCTAssertEqual(tl.previousChapterStart(from: 1202), 0 as Double)
     }
 
+    // MARK: - Chapter duration (bug 4xw.4)
+
+    func testChapterDurationIsEndMinusStart() {
+        // The row used to show `start`; it must show length (end - start).
+        let ch = AudiobookChapter(id: "b#0", bookId: "b", title: "001", start: 0, end: 19)
+        XCTAssertEqual(ch.duration, 19, accuracy: 0.001)
+        let mid = AudiobookChapter(id: "b#1", bookId: "b", title: "002", start: 19, end: 500)
+        XCTAssertEqual(mid.duration, 481, accuracy: 0.001)
+    }
+
+    func testChapterDurationClampsNonNegative() {
+        // A missing/zero `end` in the payload must not yield a negative duration.
+        let bad = AudiobookChapter(id: "b#0", bookId: "b", title: "x", start: 100, end: 0)
+        XCTAssertEqual(bad.duration, 0, accuracy: 0.001)
+    }
+
+    func testChapterDurationDecodesFromDTO() throws {
+        let json = #"{ "id": 0, "title": "001", "start": 0, "end": 19 }"#
+        let dto = try JSONDecoder().decode(ABSChapterDTO.self, from: Data(json.utf8))
+        let ch = AudiobookChapter(id: "b#\(dto.id)", bookId: "b", title: dto.title, start: dto.start, end: dto.end)
+        XCTAssertEqual(ch.duration, 19, accuracy: 0.001)
+    }
+
     // MARK: - Session → timeline
 
     func testTimelineBuildsFromSessionDTO() throws {

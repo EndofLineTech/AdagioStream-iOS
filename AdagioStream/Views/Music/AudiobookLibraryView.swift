@@ -309,14 +309,16 @@ struct AudiobookDetailView: View {
                     .accessibilityHidden(true)
                 Text(chapter.title).foregroundStyle(.primary).lineLimit(2)
                 Spacer()
-                Text(Self.formatTimestamp(chapter.start))
+                // Show the chapter's LENGTH (end - start), not its start offset
+                // (bug 4xw.4 — the row previously displayed the start timestamp).
+                Text(Self.formatTimestamp(chapter.duration))
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.plain)
         .accessibilityLabel(chapter.title)
-        .accessibilityHint("Play from \(Self.formatTimestamp(chapter.start))")
+        .accessibilityHint("Play from \(Self.formatTimestamp(chapter.start)), \(Self.formatTimestamp(chapter.duration)) long")
     }
 
     // MARK: - Formatting
