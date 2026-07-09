@@ -53,17 +53,86 @@ struct AudiobookBrowserView: View {
             }
 
         case .loaded:
-            List(viewModel.books, id: \.id) { book in
-                NavigationLink {
-                    AudiobookDetailView(viewModel: viewModel, book: book)
-                } label: {
-                    AudiobookRowView(book: book, coverURL: viewModel.coverURLs[book.id])
+            List {
+                if !viewModel.inProgress.isEmpty {
+                    Section("Continue Listening") {
+                        ContinueListeningShelf(viewModel: viewModel)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                    }
                 }
-                .accessibilityLabel(book.title)
-                .accessibilityHint("Open \(book.title)")
+                Section {
+                    ForEach(viewModel.books, id: \.id) { book in
+                        NavigationLink {
+                            AudiobookDetailView(viewModel: viewModel, book: book)
+                        } label: {
+                            AudiobookRowView(book: book, coverURL: viewModel.coverURLs[book.id])
+                        }
+                        .accessibilityLabel(book.title)
+                        .accessibilityHint("Open \(book.title)")
+                    }
+                }
             }
             .listStyle(.plain)
-            .refreshable { await viewModel.loadBooks() }
+            .refreshable {
+                await viewModel.loadBooks()
+                await viewModel.loadInProgress()
+            }
+            .task { await viewModel.loadInProgress() }
+        }
+    }
+}
+
+// MARK: - Continue Listening shelf (00t)
+
+/// Horizontal shelf of in-progress books; tap resumes via `playAudiobook`.
+private struct ContinueListeningShelf: View {
+    @ObservedObject var viewModel: AudiobookshelfLibraryViewModel
+    @EnvironmentObject private var audioPlayer: AudioPlayerService
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 16) {
+                ForEach(viewModel.inProgress, id: \.id) { book in
+                    Button {
+                        audioPlayer.playAudiobook(book, via: viewModel.audiobookshelfAPI)
+                    } label: {
+                        ContinueListeningCard(book: book, coverURL: viewModel.coverURLs[book.id])
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Resume \(book.title)")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+}
+
+private struct ContinueListeningCard: View {
+    let book: Audiobook
+    let coverURL: URL?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            cover
+            Text(book.title).font(.caption).foregroundStyle(.primary).lineLimit(2)
+            ProgressView(value: min(1, book.progress))
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+        }
+        .frame(width: 120)
+    }
+
+    @ViewBuilder private var cover: some View {
+        if let coverURL {
+            RetryableAsyncImage(url: coverURL, width: 120, height: 120, cornerRadius: 8, persistent: true)
+                .accessibilityHidden(true)
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.secondarySystemBackground))
+                .frame(width: 120, height: 120)
+                .overlay(Image(systemName: "book.closed").foregroundStyle(.secondary))
         }
     }
 }

@@ -19,6 +19,11 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     @Published public private(set) var books: [Audiobook] = []
     @Published public private(set) var booksState: LoadState = .idle
 
+    // MARK: - Continue Listening (00t)
+
+    /// In-progress, not-finished books in server order (GET /api/me/items-in-progress).
+    @Published public private(set) var inProgress: [Audiobook] = []
+
     // MARK: - Book detail (chapters)
 
     @Published public private(set) var selectedBook: Audiobook?
@@ -71,6 +76,27 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         } catch {
             booksState = .error(error.localizedDescription)
         }
+    }
+
+    // MARK: - Continue Listening (00t)
+
+    /// Loads the Continue-Listening shelf from `/api/me/items-in-progress`.
+    /// Keeps server order (most-recently-listened first). Best-effort: leaves the
+    /// shelf empty on failure so the main book list still renders.
+    public func loadInProgress() async {
+        guard let items = try? await api.itemsInProgress() else { return }
+        let now = Int(Date().timeIntervalSince1970)
+        let records = Self.inProgressBooks(from: items, updatedAt: now)
+        inProgress = records
+        await resolveCovers(for: records)
+    }
+
+    /// Maps in-progress DTOs to records, dropping finished/unstarted books.
+    /// Pure so the filter/order is unit-testable. Server order is preserved.
+    static func inProgressBooks(from items: [ABSLibraryItemDTO], updatedAt: Int) -> [Audiobook] {
+        items
+            .map { $0.toRecord(libraryIdFallback: $0.libraryId ?? "", updatedAt: updatedAt) }
+            .filter { !$0.isFinished && $0.progress > 0 }
     }
 
     private func resolveCovers(for books: [Audiobook]) async {
