@@ -73,6 +73,18 @@ extension AudioPlayerService {
         max(0, currentGlobal - last)
     }
 
+    /// The larger of two optional positions, ignoring `nil`. Used to prefer an
+    /// unflushed offline position over the server's `/play` currentTime so a
+    /// reconnect never resumes behind where the user listened offline (ymf.6).
+    static func maxIgnoringNil(_ a: Double?, _ b: Double?) -> Double? {
+        switch (a, b) {
+        case let (x?, y?): return max(x, y)
+        case let (x?, nil): return x
+        case let (nil, y?): return y
+        case (nil, nil): return nil
+        }
+    }
+
     // MARK: - Start / resume
 
     /// Opens a playback session for `book` and starts playing at the server's
@@ -100,16 +112,26 @@ extension AudioPlayerService {
 
         Task { @MainActor in
             do {
+                // ymf.6: flush any offline progress for THIS book before opening a
+                // live session, so the server holds the offline-max position first.
+                // If the flush doesn't land (network), seed the resume from the
+                // still-queued position so the live session can't rewind to an
+                // older server currentTime under last-writer-wins.
+                await ABSProgressSyncQueue.shared.flush(via: api)
+                let offlinePending = await ABSProgressSyncQueue.shared.pendingPosition(forBook: book.id)
+
                 let session = try await api.openPlaybackSession(itemID: book.id, deviceID: AudioPlayerService.absDeviceID)
                 let timeline = AudiobookTimeline(session: session, bookId: book.id)
                 guard !timeline.files.isEmpty else {
                     self.error = "This audiobook has no playable files."
                     return
                 }
-                // Resume point: explicit override → server currentTime → book record.
+                // Resume point: explicit override → offline-max (unflushed) →
+                // server currentTime → book record. Never rewind past a position
+                // the user reached offline (ymf.6).
                 let resume = AudioPlayerService.resumePosition(
                     override: startGlobalTime,
-                    sessionCurrentTime: session.currentTime,
+                    sessionCurrentTime: AudioPlayerService.maxIgnoringNil(offlinePending, session.currentTime),
                     bookCurrentTime: book.currentTime
                 )
                 guard let located = timeline.locate(global: resume) else { return }

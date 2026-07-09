@@ -181,6 +181,20 @@ final class ABSProgressSyncQueueTests: XCTestCase {
         XCTAssertEqual(b1?.currentTime, 90)
     }
 
+    // pendingPosition reads one book's queued offline position (ymf.6 resume seed).
+
+    func testPendingPositionReturnsQueuedTime() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("abs-queue-pos-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let queue = ABSProgressSyncQueue(fileURL: tmp)
+        await queue.enqueue(makeUpdate("b1", currentTime: 815, lastUpdate: 1))
+        let pos = await queue.pendingPosition(forBook: "b1")
+        XCTAssertEqual(pos, 815)
+        let none = await queue.pendingPosition(forBook: "b2")
+        XCTAssertNil(none, "no pending entry → nil")
+    }
+
     func testEmptyQueueFlushIsTrivialSuccess() async throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("abs-queue-empty-\(UUID().uuidString).json")

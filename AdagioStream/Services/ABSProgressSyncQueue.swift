@@ -57,6 +57,13 @@ public actor ABSProgressSyncQueue {
     /// Current pending updates (snapshot).
     public func snapshot() -> [ABSProgressUpdate] { pending }
 
+    /// The queued offline `currentTime` for one book, or `nil` if nothing is
+    /// pending for it. Used to seed a live resume so reconnecting can't rewind to
+    /// an older server position (ymf.6) when the flush hasn't landed yet.
+    public func pendingPosition(forBook id: String) -> Double? {
+        pending.first { $0.libraryItemId == id }?.currentTime
+    }
+
     public var isEmpty: Bool { pending.isEmpty }
 
     /// Flushes the queue via the batch endpoint. On a 2xx the queue is cleared;

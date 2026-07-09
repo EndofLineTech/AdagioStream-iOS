@@ -44,4 +44,25 @@ final class AudiobookSyncTests: XCTestCase {
     func testTimeListenedZeroWhenNoProgress() {
         XCTAssertEqual(AudioPlayerService.timeListened(sinceLastSynced: 300, currentGlobal: 300), 0, accuracy: 0.001)
     }
+
+    // MARK: - Offline-max resume seeding (ymf.6)
+
+    func testMaxIgnoringNilPrefersLarger() {
+        // Offline reached 800; server /play resumes at an older 500 → keep 800.
+        XCTAssertEqual(AudioPlayerService.maxIgnoringNil(800, 500), 800)
+    }
+
+    func testMaxIgnoringNilFallsThroughNil() {
+        XCTAssertEqual(AudioPlayerService.maxIgnoringNil(nil, 500), 500)
+        XCTAssertEqual(AudioPlayerService.maxIgnoringNil(800, nil), 800)
+        XCTAssertNil(AudioPlayerService.maxIgnoringNil(nil, nil))
+    }
+
+    func testResumeUsesOfflineMaxOverOlderServerPosition() {
+        // The offline-max is passed as sessionCurrentTime; a reconnecting live
+        // session that resumed older must not rewind past it.
+        let seeded = AudioPlayerService.maxIgnoringNil(800, 500)
+        let r = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: seeded, bookCurrentTime: 100)
+        XCTAssertEqual(r, 800, accuracy: 0.001)
+    }
 }
