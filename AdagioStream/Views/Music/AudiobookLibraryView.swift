@@ -83,6 +83,83 @@ struct AudiobookBrowserView: View {
     }
 }
 
+// MARK: - Author browser (4xw.1)
+
+/// The Books → Author sub-mode: the same books as `AudiobookBrowserView`,
+/// grouped into sections by author (sorted), each book row unchanged. Pure
+/// presentation over the existing view-model data — no new fetch.
+struct AudiobookAuthorBrowserView: View {
+    @ObservedObject var viewModel: AudiobookshelfLibraryViewModel
+
+    /// Books grouped by author, each group sorted by title, groups sorted by
+    /// author name (unknown author last).
+    private var groups: [(author: String, books: [Audiobook])] {
+        let byAuthor = Dictionary(grouping: viewModel.books) { book -> String in
+            let a = book.author?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return a.isEmpty ? "Unknown Author" : a
+        }
+        return byAuthor
+            .map { (author: $0.key, books: $0.value.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }) }
+            .sorted { lhs, rhs in
+                if lhs.author == "Unknown Author" { return false }
+                if rhs.author == "Unknown Author" { return true }
+                return lhs.author.localizedCaseInsensitiveCompare(rhs.author) == .orderedAscending
+            }
+    }
+
+    var body: some View {
+        switch viewModel.booksState {
+        case .idle, .loading:
+            VStack(spacing: 12) {
+                ProgressView().controlSize(.large)
+                Text("Loading audiobooks…").font(.subheadline).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        case .empty:
+            ScrollView {
+                EmptyStateView(
+                    title: "No Audiobooks",
+                    systemImage: "books.vertical",
+                    description: "Your Audiobookshelf server has no books, or none are in a book library."
+                )
+                .containerRelativeFrame([.horizontal, .vertical])
+            }
+
+        case .error(let message):
+            ScrollView {
+                VStack(spacing: 16) {
+                    EmptyStateView(title: "Couldn't Load Audiobooks", systemImage: "exclamationmark.triangle", description: message)
+                    Button { Task { await viewModel.loadBooks() } } label: {
+                        Label("Retry", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .containerRelativeFrame([.horizontal, .vertical])
+            }
+
+        case .loaded:
+            List {
+                ForEach(groups, id: \.author) { group in
+                    Section(group.author) {
+                        ForEach(group.books, id: \.id) { book in
+                            NavigationLink {
+                                AudiobookDetailView(viewModel: viewModel, book: book)
+                            } label: {
+                                AudiobookRowView(book: book, coverURL: viewModel.coverURLs[book.id])
+                            }
+                            .accessibilityLabel(book.title)
+                            .accessibilityHint("Open \(book.title)")
+                        }
+                    }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .refreshable { await viewModel.loadBooks() }
+        }
+    }
+}
+
 // MARK: - Continue Listening shelf (00t)
 
 /// Horizontal shelf of in-progress books; tap resumes via `playAudiobook`.

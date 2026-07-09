@@ -23,13 +23,28 @@ import SwiftUI
 
 // MARK: - Browse mode
 
-/// Top-level browse mode selector for the Music tab.
+/// Music sub-modes (shown when the top-level section is Music). The former
+/// `.audiobooks` case is gone — books are now their own top-level section
+/// (4xw.1) with their own sub-modes below.
 enum MusicBrowseMode: String, CaseIterable {
     case artists   = "Artists"
     case albums    = "Albums"
     case genres    = "Genres"
     case playlists = "Playlists"
-    case audiobooks = "Books"
+}
+
+/// Top-level library section: Books vs Music (4xw.1). Offered only when the
+/// corresponding provider is configured.
+enum LibrarySection: String, CaseIterable {
+    case books = "Books"
+    case music = "Music"
+}
+
+/// Book sub-modes (shown when the top-level section is Books). `titles` is the
+/// existing flat book list; `author` groups the same books by author (4xw.1).
+enum BookBrowseMode: String, CaseIterable {
+    case author = "Author"
+    case titles = "Titles"
 }
 
 // MARK: - MusicLibraryView
@@ -55,8 +70,11 @@ public struct MusicLibraryView: View {
     @State private var absAPI: AudiobookshelfAPI?
     @State private var absViewModel: AudiobookshelfLibraryViewModel?
 
-    // Current browse mode — persists across tab switches.
+    // Top-level section (Books | Music) and per-section sub-mode. All persist
+    // across tab switches (4xw.1).
+    @State private var section: LibrarySection = .music
     @State private var browseMode: MusicBrowseMode = .artists
+    @State private var bookMode: BookBrowseMode = .titles
 
     // Search query text — bound to the .searchable modifier.
     // Non-empty → show SearchResultsView; empty → show normal browse.
@@ -73,9 +91,12 @@ public struct MusicLibraryView: View {
                 if settingsViewModel.settings.offlineMode {
                     // Offline mode: show downloaded tracks only, suppress network calls.
                     offlineBrowser
-                } else if browseMode == .audiobooks, let absVM = absViewModel {
-                    // Audiobookshelf browsing blends in as a browse mode (yu8.1).
-                    AudiobookBrowserView(viewModel: absVM)
+                } else if section == .books, let absVM = absViewModel {
+                    // Books section (4xw.1): Titles = flat list, Author = grouped.
+                    switch bookMode {
+                    case .titles: AudiobookBrowserView(viewModel: absVM)
+                    case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+                    }
                 } else if let vm = viewModel, let resolvedAPI = api {
                     // Show search results when there is a non-empty query;
                     // otherwise show the normal browse UI unchanged.
@@ -93,10 +114,13 @@ public struct MusicLibraryView: View {
                         )
                         .containerRelativeFrame([.horizontal, .vertical])
                     }
-                } else if providerManager.subsonicAPI == nil {
-                    // ABS-only: default straight into the audiobooks browser.
-                    if let absVM = absViewModel {
-                        AudiobookBrowserView(viewModel: absVM)
+                } else if providerManager.subsonicAPI == nil, let absVM = absViewModel {
+                    // ABS-only: default straight into the audiobooks browser
+                    // (the .task lands `section` on .books, this covers the
+                    // first render before that runs).
+                    switch bookMode {
+                    case .titles: AudiobookBrowserView(viewModel: absVM)
+                    case .author: AudiobookAuthorBrowserView(viewModel: absVM)
                     }
                 } else {
                     ProgressView("Loading library…")
@@ -136,12 +160,13 @@ public struct MusicLibraryView: View {
                 }
 
                 guard let resolved = providerManager.subsonicAPI else {
-                    // ABS-only: land on the audiobooks mode.
-                    if providerManager.subsonicAPI == nil, absViewModel != nil {
-                        browseMode = .audiobooks
-                    }
+                    // ABS-only: land on the Books section (preserves the prior
+                    // ABS-only auto-land behaviour, 4xw.1).
+                    if absViewModel != nil { section = .books }
                     return
                 }
+                // Both providers, or Subsonic-only: default to Music.
+                section = .music
                 if api == nil {
                     api = resolved
                     let vm = NavidromeLibraryViewModel(api: resolved)
@@ -160,34 +185,54 @@ public struct MusicLibraryView: View {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // MARK: - Mode selector
+    // MARK: - Mode selector (4xw.1 — two levels)
 
-    /// Modes offered by the selector: the music modes only when a Subsonic
-    /// provider is configured, plus Audiobooks when an ABS provider is.
-    private var availableModes: [MusicBrowseMode] {
-        var modes: [MusicBrowseMode] = []
-        if providerManager.subsonicAPI != nil {
-            modes += [.artists, .albums, .genres, .playlists]
-        }
-        if absViewModel != nil {
-            modes.append(.audiobooks)
-        }
-        return modes
+    /// Top-level sections actually available: Music when a Subsonic provider is
+    /// configured, Books when an ABS provider is.
+    private var availableSections: [LibrarySection] {
+        var s: [LibrarySection] = []
+        if absViewModel != nil { s.append(.books) }
+        if providerManager.subsonicAPI != nil { s.append(.music) }
+        return s
     }
 
+    /// Two-level selector: the top row picks Books|Music (only when both exist);
+    /// the row below picks the sub-mode for the active section.
     @ViewBuilder
     private var browseModeSelector: some View {
-        // Only show the selector when there's a real choice to make.
-        if availableModes.count > 1 {
-            Picker("Browse", selection: $browseMode) {
-                ForEach(availableModes, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
+        VStack(spacing: 6) {
+            if availableSections.count > 1 {
+                Picker("Section", selection: $section) {
+                    ForEach(availableSections, id: \.self) { s in
+                        Text(s.rawValue).tag(s)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 300)
+                .accessibilityLabel("Library section")
+                .accessibilityHint("Switch between Books and Music")
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 420)
-            .accessibilityLabel("Browse mode")
-            .accessibilityHint("Switch between library sections")
+
+            switch section {
+            case .music:
+                Picker("Browse", selection: $browseMode) {
+                    ForEach(MusicBrowseMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 420)
+                .accessibilityLabel("Music browse mode")
+            case .books:
+                Picker("Books", selection: $bookMode) {
+                    ForEach(BookBrowseMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 300)
+                .accessibilityLabel("Book browse mode")
+            }
         }
     }
 
@@ -287,12 +332,6 @@ public struct MusicLibraryView: View {
             GenreListView(viewModel: vm, api: api)
         case .playlists:
             PlaylistListView(viewModel: vm, api: api)
-        case .audiobooks:
-            // Handled earlier in `body` (needs the ABS view-model, not the
-            // Navidrome one); this case is unreachable but keeps the switch total.
-            if let absVM = absViewModel {
-                AudiobookBrowserView(viewModel: absVM)
-            }
         }
     }
 }
