@@ -24,6 +24,11 @@ struct WelcomeSetupView: View {
     @State private var subsonicUsername = ""
     @State private var subsonicPassword = ""
 
+    // Audiobookshelf fields
+    @State private var absHost = ""
+    @State private var absUsername = ""
+    @State private var absPassword = ""
+
     @State private var error: String?
     @State private var isSaving = false
 
@@ -42,6 +47,7 @@ struct WelcomeSetupView: View {
         case m3u
         case xtreamCodes
         case subsonic
+        case audiobookshelf
     }
 
     var body: some View {
@@ -158,7 +164,7 @@ struct WelcomeSetupView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             } else {
-                Text("Stream your favorite audio channels from M3U playlists, Xtream Codes providers, or your Navidrome music server.")
+                Text("Stream your favorite audio channels from M3U playlists, Xtream Codes providers, your Navidrome music server, or your Audiobookshelf library.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -233,6 +239,15 @@ struct WelcomeSetupView: View {
                     connectionType = .subsonic
                     withAnimation { step = .credentials }
                 }
+
+                connectionCard(
+                    title: "Audiobookshelf",
+                    description: "Connect to an Audiobookshelf server",
+                    icon: "books.vertical"
+                ) {
+                    connectionType = .audiobookshelf
+                    withAnimation { step = .credentials }
+                }
             }
             .padding(.horizontal, 24)
 
@@ -277,6 +292,7 @@ struct WelcomeSetupView: View {
         case .m3u: return "M3U Playlist"
         case .xtreamCodes: return "Xtream Codes"
         case .subsonic: return "Navidrome"
+        case .audiobookshelf: return "Audiobookshelf"
         }
     }
 
@@ -364,6 +380,38 @@ struct WelcomeSetupView: View {
                     }
 
                     if isSubsonicHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
+                    }
+
+                case .audiobookshelf:
+                    Section {
+                        TextField("Server URL", text: $absHost)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Audiobookshelf server URL")
+                        TextField("Username", text: $absUsername)
+                            .textContentType(.init(rawValue: ""))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Audiobookshelf username")
+                        MaskedTextField(placeholder: "Password", text: $absPassword)
+                            .accessibilityLabel("Audiobookshelf password")
+                    } header: {
+                        Text("Server Settings")
+                    } footer: {
+                        Text("Include http:// or https://, e.g. https://abs.example.com. Requires server 2.26.0 or newer.")
+                    }
+
+                    if isAudiobookshelfHTTP {
                         Section {
                             Label(
                                 "This connection is not encrypted. Your credentials and library info could be visible on the network.",
@@ -493,6 +541,13 @@ struct WelcomeSetupView: View {
         return scheme == "http"
     }
 
+    private var isAudiobookshelfHTTP: Bool {
+        guard connectionType == .audiobookshelf,
+              let url = URL(string: absHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
     private var isValid: Bool {
         guard !name.isEmpty else { return false }
         switch connectionType {
@@ -511,6 +566,11 @@ struct WelcomeSetupView: View {
                   let scheme = url.scheme?.lowercased(),
                   Self.allowedSchemes.contains(scheme) else { return false }
             return !subsonicUsername.isEmpty && !subsonicPassword.isEmpty
+        case .audiobookshelf:
+            guard let url = URL(string: absHost),
+                  let scheme = url.scheme?.lowercased(),
+                  Self.allowedSchemes.contains(scheme) else { return false }
+            return !absUsername.isEmpty && !absPassword.isEmpty
         }
     }
 
@@ -549,6 +609,14 @@ struct WelcomeSetupView: View {
                 return
             }
             type = .subsonic(host: host, username: subsonicUsername, password: subsonicPassword)
+
+        case .audiobookshelf:
+            guard let host = URL(string: absHost) else {
+                error = "Invalid server URL"
+                isSaving = false
+                return
+            }
+            type = .audiobookshelf(host: host, username: absUsername, password: absPassword)
         }
 
         let provider = Provider(name: name, type: type)
