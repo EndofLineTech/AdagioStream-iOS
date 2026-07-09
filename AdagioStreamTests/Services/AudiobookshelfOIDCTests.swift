@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import AdagioStream
 
 // wv4.1 — /status discovery parsing (openid availability + button label).
@@ -77,5 +78,77 @@ final class AudiobookshelfOIDCTests: XCTestCase {
         } catch {
             XCTFail("unexpected error: \(error)")
         }
+    }
+
+    // MARK: - PKCE (wv4.2)
+
+    func testPKCEVerifierLengthAndCharset() {
+        let pkce = AudiobookshelfOIDC.makePKCE()
+        // RFC 7636: 43–128 chars. 32 random bytes → 43 base64url chars.
+        XCTAssertGreaterThanOrEqual(pkce.verifier.count, 43)
+        XCTAssertLessThanOrEqual(pkce.verifier.count, 128)
+        let allowed = CharacterSet(charactersIn:
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        XCTAssertTrue(pkce.verifier.unicodeScalars.allSatisfy { allowed.contains($0) },
+                      "verifier must be base64url with no padding")
+        XCTAssertTrue(pkce.challenge.unicodeScalars.allSatisfy { allowed.contains($0) })
+    }
+
+    func testPKCEChallengeIsBase64URLSha256OfVerifier() {
+        let pkce = AudiobookshelfOIDC.makePKCE()
+        let expected = AudiobookshelfOIDC.base64URL(Data(SHA256.hash(data: Data(pkce.verifier.utf8))))
+        XCTAssertEqual(pkce.challenge, expected)
+    }
+
+    func testPKCEIsRandomPerCall() {
+        XCTAssertNotEqual(AudiobookshelfOIDC.makePKCE().verifier,
+                          AudiobookshelfOIDC.makePKCE().verifier)
+    }
+
+    func testBase64URLReplacesPlusSlashAndStripsPadding() {
+        // 0xFB 0xFF → base64 "+/8=" → base64url "-_8".
+        let out = AudiobookshelfOIDC.base64URL(Data([0xFB, 0xFF]))
+        XCTAssertEqual(out, "-_8")
+        XCTAssertFalse(out.contains("+"))
+        XCTAssertFalse(out.contains("/"))
+        XCTAssertFalse(out.contains("="))
+    }
+
+    // MARK: - Callback token parsing (wv4.2)
+
+    func testParseTokensFromCallbackBody() throws {
+        let json = """
+        {"user": {"accessToken": "acc123", "refreshToken": "ref456", "token": "acc123"}}
+        """
+        let tokens = try AudiobookshelfOIDC.parseTokens(from: Data(json.utf8))
+        XCTAssertEqual(tokens.accessToken, "acc123")
+        XCTAssertEqual(tokens.refreshToken, "ref456")
+    }
+
+    func testParseTokensUsesTopLevelRefreshWhenUserOmitsIt() throws {
+        let json = """
+        {"user": {"accessToken": "acc"}, "refreshToken": "topref"}
+        """
+        let tokens = try AudiobookshelfOIDC.parseTokens(from: Data(json.utf8))
+        XCTAssertEqual(tokens.accessToken, "acc")
+        XCTAssertEqual(tokens.refreshToken, "topref")
+    }
+
+    func testParseTokensThrowsWhenAccessMissing() {
+        let json = #"{"user": {"refreshToken": "r"}}"#
+        XCTAssertThrowsError(try AudiobookshelfOIDC.parseTokens(from: Data(json.utf8)))
+    }
+
+    // MARK: - Authorization URL body decoding (wv4.2)
+
+    func testDecodeAuthURLFromJSONObject() {
+        let json = #"{"authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth?x=1"}"#
+        XCTAssertEqual(AudiobookshelfOIDC.decodeAuthURL(from: Data(json.utf8)),
+                       "https://accounts.google.com/o/oauth2/v2/auth?x=1")
+    }
+
+    func testDecodeAuthURLFromBareString() {
+        let raw = "https://idp.example.com/authorize?state=abc"
+        XCTAssertEqual(AudiobookshelfOIDC.decodeAuthURL(from: Data(raw.utf8)), raw)
     }
 }

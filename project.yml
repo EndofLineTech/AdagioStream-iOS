@@ -69,6 +69,12 @@ targets:
         UILaunchStoryboardName: LaunchScreen
         LSApplicationQueriesSchemes:
           - spotify
+        # Custom scheme for the Audiobookshelf OpenID (SSO) callback:
+        # ASWebAuthenticationSession captures adagiostream://oauth?code=&state=.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.adagiostream.oauth
+            CFBundleURLSchemes:
+              - adagiostream
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: com.adagiostream.channel
             UTTypeDescription: Adagio Stream Channel
