@@ -22,7 +22,14 @@ struct MiniPlayerView: View {
                         // d6q.2: for library tracks, render artwork from nowPlaying.artworkURL
                         // (populated by the track's cover-art fetch in play(track:via:)).
                         // For radio, keep existing SXM cover-art → channel logo priority.
-                        if let item = audioPlayer.nowPlaying, !item.isLiveStream,
+                        if audioPlayer.currentAudiobook != nil, let artworkURL = audioPlayer.nowPlayingArtworkURL {
+                            // yu8.4: audiobook cover.
+                            RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: true)
+                        } else if audioPlayer.currentAudiobook != nil {
+                            Image(systemName: "book.closed")
+                                .frame(width: logoSize, height: logoSize)
+                                .foregroundStyle(.secondary)
+                        } else if let item = audioPlayer.nowPlaying, !item.isLiveStream,
                            let artworkURL = audioPlayer.nowPlayingArtworkURL {
                             RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
                         } else if settingsViewModel.settings.artworkDisplayMode == .coverArt,
@@ -46,6 +53,17 @@ struct MiniPlayerView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
+                        // yu8.4: audiobook — chapter title primary, book title secondary.
+                        if let book = audioPlayer.currentAudiobook {
+                            Text(audioPlayer.currentChapter?.title ?? book.title)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                            Text(book.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } else {
                         // d6q.2: use nowPlaying.displayTitle for both radio and library.
                         Text(audioPlayer.nowPlaying?.displayTitle ?? "")
                             .font(.subheadline)
@@ -119,6 +137,7 @@ struct MiniPlayerView: View {
                                 }
                             }
                         }
+                        } // end non-audiobook branch
                     }
 
                     Spacer()

@@ -34,6 +34,11 @@ struct NowPlayingView: View {
         return false
     }
 
+    /// True when an Audiobookshelf book is playing (yu8.4). Audiobooks are their
+    /// own playback path — not a `nowPlaying` item — so they get a dedicated
+    /// player surface: chapter title, book-global seek bar, chapter skip.
+    private var isAudiobookMode: Bool { audioPlayer.currentAudiobook != nil }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 32) {
@@ -43,7 +48,15 @@ struct NowPlayingView: View {
                 // authed cover-art URL resolved at track start), with a music-note
                 // placeholder when the track has none — never the radio icon.
                 // Radio keeps the existing SXM cover-art → channel-logo priority.
-                if let item = audioPlayer.nowPlaying, !item.isLiveStream {
+                if isAudiobookMode {
+                    if let url = audioPlayer.nowPlayingArtworkURL {
+                        RetryableAsyncImage(url: url, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: true)
+                            .shadow(radius: 10)
+                            .id(audioPlayer.currentAudiobook?.id)
+                    } else {
+                        audiobookPlaceholder
+                    }
+                } else if let item = audioPlayer.nowPlaying, !item.isLiveStream {
                     if let artworkURL = audioPlayer.nowPlayingArtworkURL {
                         RetryableAsyncImage(url: artworkURL, width: artworkSize, height: artworkSize, cornerRadius: artworkRadius, persistent: false)
                             .shadow(radius: 10)
@@ -66,8 +79,22 @@ struct NowPlayingView: View {
 
                 // Track / channel info
                 VStack(spacing: 8) {
-                    // d6q.2: library mode — show track title as primary, subtitle as secondary.
-                    if let item = audioPlayer.nowPlaying, !item.isLiveStream {
+                    if isAudiobookMode {
+                        // yu8.4: chapter title primary, book title + author secondary.
+                        Text(audioPlayer.currentChapter?.title ?? audioPlayer.currentAudiobook?.title ?? "Audiobook")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .multilineTextAlignment(.center)
+                        Text(audioPlayer.currentAudiobook?.title ?? "")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if let author = audioPlayer.currentAudiobook?.author, !author.isEmpty {
+                            Text(author)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if let item = audioPlayer.nowPlaying, !item.isLiveStream {
                         Text(item.displayTitle)
                             .font(.title2)
                             .fontWeight(.bold)
@@ -124,12 +151,16 @@ struct NowPlayingView: View {
                 }
 
                 // d6q.6: Seek bar — library only; radio keeps the LIVE status (no seek bar)
-                if isLibraryMode {
+                if isAudiobookMode {
+                    audiobookSeekBar
+                } else if isLibraryMode {
                     librarySeekBar
                 }
 
                 // Playback controls
-                if isLibraryMode {
+                if isAudiobookMode {
+                    audiobookTransportControls
+                } else if isLibraryMode {
                     libraryTransportControls
                 } else {
                     radioTransportControls
@@ -245,6 +276,10 @@ struct NowPlayingView: View {
         .onChange(of: audioPlayer.trackElapsed) { _, newElapsed in
             if !isScrubbing { scrubValue = newElapsed }
         }
+        // yu8.4: same sync for the audiobook book-global position.
+        .onChange(of: audioPlayer.audiobookGlobalTime) { _, newElapsed in
+            if !isScrubbing && isAudiobookMode { scrubValue = newElapsed }
+        }
         // Self-dismiss when playback ends (user stop, or CarPlay disconnect
         // calling stop()). The presenting MiniPlayerView is removed from the
         // hierarchy at the same moment, which would otherwise orphan this sheet
@@ -261,10 +296,18 @@ struct NowPlayingView: View {
         }
         .onChange(of: audioPlayer.isPlaying) { _, _ in
             // Library: dismiss when stopped (isPlaying=false, isBuffering=false,
-            // and no channel or track is set).
+            // and no channel or track is set). Guard on currentAudiobook so a
+            // *paused* audiobook (which has no nowPlaying item) isn't dismissed.
             if !audioPlayer.isPlaying && !audioPlayer.isBuffering
                 && audioPlayer.currentChannel == nil
-                && audioPlayer.nowPlaying == nil {
+                && audioPlayer.nowPlaying == nil
+                && audioPlayer.currentAudiobook == nil {
+                dismiss()
+            }
+        }
+        // yu8.4: dismiss when the audiobook is stopped (currentAudiobook clears).
+        .onChange(of: audioPlayer.currentAudiobook?.id) { _, newID in
+            if newID == nil && audioPlayer.nowPlaying == nil && audioPlayer.currentChannel == nil {
                 dismiss()
             }
         }
@@ -363,6 +406,74 @@ struct NowPlayingView: View {
                 repeatButton
             }
         }
+    }
+
+    // MARK: - Audiobook seek bar + transport (yu8.4)
+
+    @ViewBuilder
+    private var audiobookSeekBar: some View {
+        let duration = audioPlayer.audiobookDuration ?? 1.0
+        let displayElapsed = isScrubbing ? scrubValue : audioPlayer.audiobookGlobalTime
+
+        VStack(spacing: 4) {
+            Slider(
+                value: Binding(
+                    get: { isScrubbing ? scrubValue : audioPlayer.audiobookGlobalTime },
+                    set: { newVal in
+                        scrubValue = newVal
+                        isScrubbing = true
+                    }
+                ),
+                in: 0...max(duration, 1.0)
+            ) {
+                Text("Playback position")
+            } minimumValueLabel: {
+                Text(formatTime(displayElapsed)).font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            } maximumValueLabel: {
+                Text(audioPlayer.audiobookDuration.map(formatTime) ?? "--:--")
+                    .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
+            } onEditingChanged: { editing in
+                isScrubbing = editing
+                if !editing { audioPlayer.seekAudiobook(toGlobal: scrubValue) }
+            }
+            .accessibilityLabel("Seek audiobook")
+            .accessibilityValue("\(Int(displayElapsed)) of \(Int(duration)) seconds")
+        }
+        .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private var audiobookTransportControls: some View {
+        HStack(spacing: controlSpacing) {
+            Button { audioPlayer.skipToPreviousChapter() } label: {
+                Image(systemName: "backward.end.fill").font(.title)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Previous chapter")
+
+            Button { audioPlayer.togglePlayPause() } label: {
+                Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: playButtonSize))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
+
+            Button { audioPlayer.skipToNextChapter() } label: {
+                Image(systemName: "forward.end.fill").font(.title)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Next chapter")
+        }
+        .foregroundStyle(.primary)
+        .glassContainer()
+    }
+
+    private var audiobookPlaceholder: some View {
+        RoundedRectangle(cornerRadius: artworkRadius)
+            .fill(Color(.secondarySystemBackground))
+            .frame(width: artworkSize, height: artworkSize)
+            .overlay(Image(systemName: "book.closed").font(.system(size: artworkSize * 0.3)).foregroundStyle(.secondary))
+            .shadow(radius: 10)
     }
 
     // MARK: - Radio transport controls (unchanged from pre-d6q.6)
