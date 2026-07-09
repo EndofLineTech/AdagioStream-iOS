@@ -119,5 +119,11 @@ final class ExtensionsTests: XCTestCase {
         XCTAssertFalse(redacted.contains(jwt), "the access token must not appear in logs")
         XCTAssertTrue(redacted.contains("token=***"))
         XCTAssertTrue(redacted.contains("width=400"), "non-credential params survive")
+
+        // token= mid-query (not just at start) must also be redacted.
+        let mid = URL(string: "https://abs.example.com/audiobookshelf/api/items/abc/cover?width=400&token=\(jwt)")!
+        let midRedacted = mid.redactedForLog
+        XCTAssertFalse(midRedacted.contains(jwt), "mid-query token must not appear in logs")
+        XCTAssertTrue(midRedacted.contains("token=***"))
     }
 }

@@ -1,5 +1,30 @@
 import Foundation
 
+/// One source of truth for resolving an Audiobookshelf server-relative path
+/// against a host, preserving any reverse-proxy subpath in `host`.
+///
+/// `URL(string:relativeTo:)` can't be used: an absolute-path reference (leading
+/// `/`) REPLACES the base's entire path, so a subpath host like
+/// `https://h/audiobookshelf` loses `/audiobookshelf`. Every ABS URL builder
+/// (API, stream/cover, login, refresh) routes through here so the bug is fixed
+/// in exactly one place (beads_mobilemusic-ymf.1).
+enum AudiobookshelfURL {
+    static func resolve(host: URL, path: String, query: [String: String] = [:]) -> URL? {
+        guard var components = URLComponents(url: host, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        // host.path (trailing "/" trimmed) + request path (leading "/" ensured):
+        // no double slash, and a root host (empty path) still yields "/...".
+        let base = components.path.hasSuffix("/") ? String(components.path.dropLast()) : components.path
+        let suffix = path.hasPrefix("/") ? path : "/" + path
+        components.path = base + suffix
+        if !query.isEmpty {
+            components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        return components.url
+    }
+}
+
 /// Audiobookshelf JWT auth: login, refresh with token rotation, and a
 /// 401 → refresh → retry wrapper. JWT-only (min server 2.26.0); no legacy
 /// static-token fallback per PO decision.
@@ -116,7 +141,7 @@ public actor AudiobookshelfAuth {
     /// the body. Persists the returned token pair and returns the session.
     @discardableResult
     public func login() async throws -> Session {
-        guard let url = URL(string: "/login", relativeTo: host) else { throw AuthError.invalidURL }
+        guard let url = AudiobookshelfURL.resolve(host: host, path: "/login") else { throw AuthError.invalidURL }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -219,7 +244,7 @@ public actor AudiobookshelfAuth {
             forgetTokens()
             throw AuthError.reauthRequired
         }
-        guard let url = URL(string: "/auth/refresh", relativeTo: host) else { throw AuthError.invalidURL }
+        guard let url = AudiobookshelfURL.resolve(host: host, path: "/auth/refresh") else { throw AuthError.invalidURL }
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"

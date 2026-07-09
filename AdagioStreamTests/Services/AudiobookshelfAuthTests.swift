@@ -22,10 +22,11 @@ final class AudiobookshelfAuthTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeAuth(seed: AudiobookshelfAuth.Tokens? = nil) -> AudiobookshelfAuth {
+    private func makeAuth(seed: AudiobookshelfAuth.Tokens? = nil,
+                          host: String = "https://abs.example.com") -> AudiobookshelfAuth {
         if let seed { stored["k"] = seed }
         return AudiobookshelfAuth(
-            host: URL(string: "https://abs.example.com")!,
+            host: URL(string: host)!,
             username: "alice",
             password: "sesame",
             providerID: "PID",
@@ -53,6 +54,33 @@ final class AudiobookshelfAuthTests: XCTestCase {
         XCTAssertEqual(sessionResult.tokens.refreshToken, "R1")
         XCTAssertTrue(sessionResult.canDownload)
         XCTAssertEqual(stored["k"]?.refreshToken, "R1", "tokens must persist to the store")
+    }
+
+    // MARK: - ymf.1: login/refresh preserve a reverse-proxy subpath in the host
+
+    func testLoginHitsSubpath() async throws {
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: #"{"user":{"accessToken":"A1"},"refreshToken":"R1"}"#)
+        ]
+        let auth = makeAuth(host: "https://h/audiobookshelf")
+        _ = try await auth.login()
+
+        let url = MockURLProtocolHandler.capturedRequests.last?.url
+        XCTAssertEqual(url?.absoluteString, "https://h/audiobookshelf/login",
+                       "login must preserve the subpath, not resolve to https://h/login")
+    }
+
+    func testRefreshHitsSubpath() async throws {
+        let auth = makeAuth(seed: .init(accessToken: "A1", refreshToken: "R1"),
+                            host: "https://h/audiobookshelf")
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: #"{"user":{"accessToken":"A2"},"refreshToken":"R2"}"#)
+        ]
+        try await auth.refresh()
+
+        let url = MockURLProtocolHandler.capturedRequests.last?.url
+        XCTAssertEqual(url?.absoluteString, "https://h/audiobookshelf/auth/refresh",
+                       "refresh must preserve the subpath, not resolve to https://h/auth/refresh")
     }
 
     // MARK: - refresh rotates and persists the new refresh token

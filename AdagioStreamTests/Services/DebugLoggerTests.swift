@@ -57,6 +57,12 @@ final class DebugLoggerTests: XCTestCase {
         XCTAssertFalse(result.contains(jwt), "token= (ABS access token) must be redacted")
         XCTAssertTrue(result.contains("token=***"))
         XCTAssertTrue(result.contains("width=400"), "non-credential params must survive")
+
+        // token= mid-query (after another param) must also be redacted.
+        let mid = "url=https://abs.example.com/audiobookshelf/api/items/abc/cover?width=400&token=\(jwt)"
+        let midResult = DebugLogger.redactCredentials(mid)
+        XCTAssertFalse(midResult.contains(jwt), "mid-query token must be redacted")
+        XCTAssertTrue(midResult.contains("token=***"))
     }
 
     /// Exercises the persistent-FileHandle append path plus rotation: writes
