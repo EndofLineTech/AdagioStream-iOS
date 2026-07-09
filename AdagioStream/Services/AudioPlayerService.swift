@@ -121,6 +121,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// chaining) as radio and library tracks.
     internal var audiobookSession: AudiobookSession?
 
+    /// Pending initial per-file seek (f0d). VLCKit ignores a seek issued before
+    /// the media is opened, and has no "ready to seek" callback, so the seek is
+    /// deferred and applied once VLC reports it can seek (`isSeekable` + a known
+    /// length) — observed via `syncState`, which fires on every VLC state change
+    /// and on the poll timer. `pendingAudiobookSeekDeadline` is a bounded
+    /// fallback so a stuck stream can't hang the seek forever.
+    internal var pendingAudiobookSeekMs: Int32?
+    internal var pendingAudiobookSeekDeadline: Date?
+
     /// Book-global playback position in seconds. Published for the UI (chapter
     /// display, scrubber). 0 when no audiobook is playing.
     @Published public internal(set) var audiobookGlobalTime: Double = 0
@@ -1152,6 +1161,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
     internal func syncState() {
         guard isActiveSession else { return }
+
+        // Apply the armed initial audiobook seek once VLC reports it's seekable
+        // (f0d). Cheap no-op when nothing is pending.
+        if audiobookSession != nil { applyPendingAudiobookSeek() }
 
         // While riding out a short interruption, VLC's state may fluctuate
         // as iOS silences its audio output.  Don't react to state changes

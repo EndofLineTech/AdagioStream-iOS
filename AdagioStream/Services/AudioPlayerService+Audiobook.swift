@@ -244,14 +244,16 @@ extension AudioPlayerService {
         listeningStartDate = Date()
 
         mediaPlayer.play()
-        // Seek within the file once VLC has parsed it. VLC ignores a seek issued
-        // before play; a small deferred seek is the pragmatic path (VLCKit has no
-        // reliable "ready to seek" callback for network media).
+        // Seek within the file once VLC actually reports it can seek (f0d). We
+        // arm a pending seek here and apply it from `syncState` when VLC becomes
+        // seekable, instead of a blind wall-clock delay. `applyPendingAudiobookSeek`
+        // carries a bounded fallback so a stuck stream can't hang the seek.
         if fileOffset > 0.5 {
-            let ms = Int32(exactly: (fileOffset * 1000).rounded()) ?? 0
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.mediaPlayer.time = VLCTime(int: ms)
-            }
+            pendingAudiobookSeekMs = Int32(exactly: (fileOffset * 1000).rounded()) ?? 0
+            pendingAudiobookSeekDeadline = Date().addingTimeInterval(AudioPlayerService.audiobookSeekFallbackTimeout)
+        } else {
+            pendingAudiobookSeekMs = nil
+            pendingAudiobookSeekDeadline = nil
         }
         isActiveSession = true
         updateNowPlayingInfoForAudiobook()
@@ -305,6 +307,39 @@ extension AudioPlayerService {
             log.log("audiobook: reached end of book \"\(session.book.title)\"", category: .player)
             stopAudiobook()
         }
+    }
+
+    // MARK: - Initial per-file seek (f0d — state-observed)
+
+    /// Upper bound on how long we wait for VLC to report seekable before applying
+    /// the initial seek anyway. VLCKit has no ready-to-seek callback for network
+    /// media; observing `isSeekable` is the primary signal, this is the ceiling.
+    // ponytail: fixed fallback ceiling; raise only if slow streams miss the seek.
+    static let audiobookSeekFallbackTimeout: TimeInterval = 5.0
+
+    /// Whether the armed initial seek should fire now: apply as soon as VLC says
+    /// it can seek (and has parsed a length), or once the fallback deadline passes.
+    /// Pure so the trigger logic is unit-testable without VLC.
+    nonisolated static func shouldApplyAudiobookSeek(isSeekable: Bool, hasLength: Bool, now: Date, deadline: Date) -> Bool {
+        (isSeekable && hasLength) || now >= deadline
+    }
+
+    /// Called from `syncState` while an audiobook is active: applies the armed
+    /// initial per-file seek once VLC is ready (or the fallback fires), then
+    /// disarms it. No-op when nothing is pending.
+    internal func applyPendingAudiobookSeek() {
+        guard let ms = pendingAudiobookSeekMs, let deadline = pendingAudiobookSeekDeadline else { return }
+        let hasLength = mediaPlayer.media?.length.intValue ?? 0 > 0
+        guard AudioPlayerService.shouldApplyAudiobookSeek(
+            isSeekable: mediaPlayer.isSeekable,
+            hasLength: hasLength,
+            now: Date(),
+            deadline: deadline
+        ) else { return }
+        mediaPlayer.time = VLCTime(int: ms)
+        pendingAudiobookSeekMs = nil
+        pendingAudiobookSeekDeadline = nil
+        log.log("audiobook: applied initial seek to \(ms)ms (seekable=\(mediaPlayer.isSeekable))", category: .player)
     }
 
     // MARK: - Seek (book-global) + chapter skip (yu8.4)
