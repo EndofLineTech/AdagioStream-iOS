@@ -270,14 +270,22 @@ public struct AudiobookshelfAPI {
 
     // MARK: - URL building (server-relative aware)
 
-    /// Builds a URL by resolving `path` against `host` (so reverse-proxy
+    /// Builds a URL by prefixing `host`'s path onto `path` (so reverse-proxy
     /// subpaths in `host` are preserved) and appending query items.
+    ///
+    /// `URL(string:relativeTo:)` can't be used: an absolute-path reference
+    /// (leading `/`) REPLACES the base's entire path, so a subpath host like
+    /// `https://h/audiobookshelf` loses `/audiobookshelf`. Instead the host's
+    /// path is concatenated onto the request path explicitly.
     func buildURL(_ path: String, query: [String: String]) -> URL? {
-        // Resolve the path against the base to honor subpath deployments.
-        guard let resolved = URL(string: path, relativeTo: host)?.absoluteURL,
-              var components = URLComponents(url: resolved, resolvingAgainstBaseURL: false) else {
+        guard var components = URLComponents(url: host, resolvingAgainstBaseURL: false) else {
             return nil
         }
+        // host.path (trailing "/" trimmed) + request path (leading "/" ensured):
+        // no double slash, and a root host (empty path) still yields "/...".
+        let base = components.path.hasSuffix("/") ? String(components.path.dropLast()) : components.path
+        let suffix = path.hasPrefix("/") ? path : "/" + path
+        components.path = base + suffix
         if !query.isEmpty {
             components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
         }

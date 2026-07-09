@@ -220,6 +220,7 @@
 		E032C4F703760B550098655D /* FavoritesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9541EE6203AB2FBFB79CC872 /* FavoritesViewModel.swift */; };
 		E03FF5C68AC593D5C269B29D /* AudioPlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91AC60E1A2F8276CAD83B90F /* AudioPlayerService.swift */; };
 		E0581AB56C0A01DA4AA36FE5 /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAEC5D3D42331FF6DBC36DA /* AudioOutput.swift */; };
+		E0640199D5A5C11EE9A2BC20 /* AudiobookshelfAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE08083D11C9AA6AC229258 /* AudiobookshelfAPITests.swift */; };
 		E30B9AAD862A214E0956261F /* ExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */; };
 		E48AEF35EE680D18631E4571 /* AudioOutputRestartPredicateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A307E5EA37C9E962AF478812 /* AudioOutputRestartPredicateTests.swift */; };
 		E58E85C5EE28042C379F39D4 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74B4DC5538BB2F2E94AFFFA2 /* EmptyStateView.swift */; };
@@ -448,6 +449,7 @@
 		EE137FF651110189C708941D /* PlaybackSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSettingsView.swift; sourceTree = "<group>"; };
 		EE5702869640246914D37C85 /* LoadableContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadableContent.swift; sourceTree = "<group>"; };
 		EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBrowseView.swift; sourceTree = "<group>"; };
+		EEE08083D11C9AA6AC229258 /* AudiobookshelfAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobookshelfAPITests.swift; sourceTree = "<group>"; };
 		F02043870B8775DF9E809C5C /* NavidromeAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeAPITests.swift; sourceTree = "<group>"; };
 		F0AE0DE53F32FA8F7F9BDE3C /* AudioPlayerService+NowPlayingInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioPlayerService+NowPlayingInfo.swift"; sourceTree = "<group>"; };
 		F0BAD5CE4B48BDF183E2DFD2 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsView.swift; sourceTree = "<group>"; };
@@ -510,6 +512,7 @@
 			children = (
 				0E594B98414D60B340DCEFCB /* AudiobookDownloadTests.swift */,
 				9A21E9291F58148C74CFDF5D /* AudiobookSeekTriggerTests.swift */,
+				EEE08083D11C9AA6AC229258 /* AudiobookshelfAPITests.swift */,
 				FF3AC09B2F92CE0D70E6470D /* AudiobookshelfAuthTests.swift */,
 				1CB2B11F049C14407921EAA7 /* AudiobookSyncTests.swift */,
 				A307E5EA37C9E962AF478812 /* AudioOutputRestartPredicateTests.swift */,
@@ -1127,6 +1130,7 @@
 				37DFD80BAD11C6354ED10E85 /* AudiobookSeekTriggerTests.swift in Sources */,
 				EC4420F4B82AFB4A4667A1B9 /* AudiobookSyncTests.swift in Sources */,
 				D402ABE500C66F1793FB700C /* AudiobookTimelineTests.swift in Sources */,
+				E0640199D5A5C11EE9A2BC20 /* AudiobookshelfAPITests.swift in Sources */,
 				7FC9FC3A2AFF4CEA13672679 /* AudiobookshelfAuthTests.swift in Sources */,
 				97B206A065CF6AC83B454AF8 /* AudiobookshelfContinueListeningTests.swift in Sources */,
 				B7F16B6671D32F58982BFA80 /* AudiobookshelfModelsTests.swift in Sources */,
@@ -1406,7 +1410,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 186;
+				CURRENT_PROJECT_VERSION = 187;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1437,7 +1441,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 186;
+				CURRENT_PROJECT_VERSION = 187;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1535,7 +1539,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 186;
+				CURRENT_PROJECT_VERSION = 187;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1565,7 +1569,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 186;
+				CURRENT_PROJECT_VERSION = 187;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1593,7 +1597,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 186;
+				CURRENT_PROJECT_VERSION = 187;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1615,7 +1619,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 186;
+				CURRENT_PROJECT_VERSION = 187;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
