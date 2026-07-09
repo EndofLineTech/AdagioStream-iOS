@@ -29,6 +29,7 @@ enum MusicBrowseMode: String, CaseIterable {
     case albums    = "Albums"
     case genres    = "Genres"
     case playlists = "Playlists"
+    case audiobooks = "Books"
 }
 
 // MARK: - MusicLibraryView
@@ -48,6 +49,12 @@ public struct MusicLibraryView: View {
     // The view-model is created lazily once we have a valid API.
     @State private var viewModel: NavidromeLibraryViewModel?
 
+    // Audiobookshelf (E2 / yu8.1): resolved API + view-model, when an ABS
+    // provider is configured. Independent of the Subsonic API above — either
+    // provider can exist without the other.
+    @State private var absAPI: AudiobookshelfAPI?
+    @State private var absViewModel: AudiobookshelfLibraryViewModel?
+
     // Current browse mode — persists across tab switches.
     @State private var browseMode: MusicBrowseMode = .artists
 
@@ -66,6 +73,9 @@ public struct MusicLibraryView: View {
                 if settingsViewModel.settings.offlineMode {
                     // Offline mode: show downloaded tracks only, suppress network calls.
                     offlineBrowser
+                } else if browseMode == .audiobooks, let absVM = absViewModel {
+                    // Audiobookshelf browsing blends in as a browse mode (yu8.1).
+                    AudiobookBrowserView(viewModel: absVM)
                 } else if let vm = viewModel, let resolvedAPI = api {
                     // Show search results when there is a non-empty query;
                     // otherwise show the normal browse UI unchanged.
@@ -74,14 +84,19 @@ public struct MusicLibraryView: View {
                     } else {
                         libraryBrowser(vm: vm, api: resolvedAPI)
                     }
-                } else if providerManager.subsonicAPI == nil {
+                } else if providerManager.subsonicAPI == nil && absViewModel == nil {
                     ScrollView {
                         EmptyStateView(
                             title: "No Music Library",
                             systemImage: "music.note.house",
-                            description: "Add a Navidrome/Subsonic account in Settings → Accounts."
+                            description: "Add a Navidrome/Subsonic or Audiobookshelf account in Settings → Accounts."
                         )
                         .containerRelativeFrame([.horizontal, .vertical])
+                    }
+                } else if providerManager.subsonicAPI == nil {
+                    // ABS-only: default straight into the audiobooks browser.
+                    if let absVM = absViewModel {
+                        AudiobookBrowserView(viewModel: absVM)
                     }
                 } else {
                     ProgressView("Loading library…")
@@ -110,7 +125,23 @@ public struct MusicLibraryView: View {
                 viewModel?.updateSearch(query: newValue)
             }
             .task {
-                guard let resolved = providerManager.subsonicAPI else { return }
+                // Resolve the Audiobookshelf provider (yu8.1) independently of
+                // Subsonic — either can exist alone. No offline gate: ABS
+                // browsing needs the network.
+                if absViewModel == nil, let absResolved = providerManager.audiobookshelfAPI {
+                    absAPI = absResolved
+                    let absVM = AudiobookshelfLibraryViewModel(api: absResolved)
+                    absViewModel = absVM
+                    await absVM.loadBooks()
+                }
+
+                guard let resolved = providerManager.subsonicAPI else {
+                    // ABS-only: land on the audiobooks mode.
+                    if providerManager.subsonicAPI == nil, absViewModel != nil {
+                        browseMode = .audiobooks
+                    }
+                    return
+                }
                 if api == nil {
                     api = resolved
                     let vm = NavidromeLibraryViewModel(api: resolved)
@@ -131,16 +162,33 @@ public struct MusicLibraryView: View {
 
     // MARK: - Mode selector
 
-    private var browseModeSelector: some View {
-        Picker("Browse", selection: $browseMode) {
-            ForEach(MusicBrowseMode.allCases, id: \.self) { mode in
-                Text(mode.rawValue).tag(mode)
-            }
+    /// Modes offered by the selector: the music modes only when a Subsonic
+    /// provider is configured, plus Audiobooks when an ABS provider is.
+    private var availableModes: [MusicBrowseMode] {
+        var modes: [MusicBrowseMode] = []
+        if providerManager.subsonicAPI != nil {
+            modes += [.artists, .albums, .genres, .playlists]
         }
-        .pickerStyle(.segmented)
-        .frame(maxWidth: 360)
-        .accessibilityLabel("Browse mode")
-        .accessibilityHint("Switch between Artists, Albums, Genres, and Playlists")
+        if absViewModel != nil {
+            modes.append(.audiobooks)
+        }
+        return modes
+    }
+
+    @ViewBuilder
+    private var browseModeSelector: some View {
+        // Only show the selector when there's a real choice to make.
+        if availableModes.count > 1 {
+            Picker("Browse", selection: $browseMode) {
+                ForEach(availableModes, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 420)
+            .accessibilityLabel("Browse mode")
+            .accessibilityHint("Switch between library sections")
+        }
     }
 
     // MARK: - Offline browser (l31.3)
@@ -239,6 +287,12 @@ public struct MusicLibraryView: View {
             GenreListView(viewModel: vm, api: api)
         case .playlists:
             PlaylistListView(viewModel: vm, api: api)
+        case .audiobooks:
+            // Handled earlier in `body` (needs the ABS view-model, not the
+            // Navidrome one); this case is unreachable but keeps the switch total.
+            if let absVM = absViewModel {
+                AudiobookBrowserView(viewModel: absVM)
+            }
         }
     }
 }
