@@ -303,6 +303,23 @@ public final class ProviderManager: ObservableObject {
         return nil
     }
 
+    /// Returns an `AudiobookshelfAPI` client for the first enabled ABS provider,
+    /// or `nil` when none is configured. Mirrors `subsonicAPI`: single-server
+    /// scope, first enabled wins, cheap (no network I/O). The auth actor reuses
+    /// the Keychain tokens persisted under the provider id.
+    public var audiobookshelfAPI: AudiobookshelfAPI? {
+        for provider in providers where provider.isEnabled {
+            if case .audiobookshelf(let host, let username, let password) = provider.type {
+                let auth = AudiobookshelfAuth(
+                    host: host, username: username, password: password,
+                    providerID: provider.id.uuidString
+                )
+                return AudiobookshelfAPI(host: host, auth: auth)
+            }
+        }
+        return nil
+    }
+
     private func saveProviders() async {
         do {
             let data = try JSONEncoder().encode(providers)

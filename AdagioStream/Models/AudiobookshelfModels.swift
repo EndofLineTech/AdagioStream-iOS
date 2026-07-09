@@ -112,6 +112,18 @@ public struct ABSLibrariesResponse: Decodable {
     public let libraries: [ABSLibraryDTO]
 }
 
+/// `GET /api/me/items-in-progress` envelope (Continue Listening).
+public struct ABSItemsInProgressResponse: Decodable {
+    public let libraryItems: [ABSLibraryItemDTO]
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        libraryItems = (try? c.decode([ABSLibraryItemDTO].self, forKey: .libraryItems)) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey { case libraryItems }
+}
+
 /// `GET /api/libraries/{id}/items` envelope. `results` holds the book items.
 public struct ABSLibraryItemsResponse: Decodable {
     public let results: [ABSLibraryItemDTO]
@@ -244,4 +256,162 @@ public struct ABSMediaProgressDTO: Decodable {
     }
 
     enum CodingKeys: String, CodingKey { case currentTime, progress, isFinished, lastUpdate }
+}
+
+// MARK: - Playback Session (E2 / yu8.2)
+
+/// `POST /api/items/{id}/play` response — the playback session.
+///
+/// `currentTime` is the book-global RESUME position (seconds), seeded from the
+/// user's server progress. `audioTracks[]` are the direct-play files, each with
+/// a `startOffset` locating it on the book's single global timeline.
+public struct ABSPlaybackSessionDTO: Decodable {
+    public let id: String
+    /// 0 = direct play, 1 = transcode. We request a wide mime list to force 0.
+    public let playMethod: Int?
+    /// Book-global resume position in seconds.
+    public let currentTime: Double?
+    public let duration: Double?
+    public let chapters: [ABSChapterDTO]?
+    public let audioTracks: [ABSAudioTrackDTO]?
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? ""
+        playMethod = try? c.decodeIfPresent(Int.self, forKey: .playMethod)
+        currentTime = try? c.decodeIfPresent(Double.self, forKey: .currentTime)
+        duration = try? c.decodeIfPresent(Double.self, forKey: .duration)
+        chapters = try? c.decodeIfPresent([ABSChapterDTO].self, forKey: .chapters)
+        audioTracks = try? c.decodeIfPresent([ABSAudioTrackDTO].self, forKey: .audioTracks)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, playMethod, currentTime, duration, chapters, audioTracks
+    }
+}
+
+/// One direct-play file within a playback session. `startOffset` is where this
+/// file begins on the book's global timeline; `contentUrl` is server-relative.
+public struct ABSAudioTrackDTO: Decodable {
+    public let index: Int
+    public let startOffset: Double
+    public let duration: Double
+    public let title: String?
+    public let contentUrl: String
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        index = (try? c.decode(Int.self, forKey: .index)) ?? 0
+        startOffset = (try? c.decode(Double.self, forKey: .startOffset)) ?? 0
+        duration = (try? c.decode(Double.self, forKey: .duration)) ?? 0
+        title = try? c.decodeIfPresent(String.self, forKey: .title)
+        contentUrl = (try? c.decode(String.self, forKey: .contentUrl)) ?? ""
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case index, startOffset, duration, title, contentUrl
+    }
+}
+
+// MARK: - Audiobook Timeline (E2 / yu8.2 — pure, unit-tested core)
+
+/// The book as ONE continuous timeline across its files.
+///
+/// This is the value-type core of audiobook playback: it owns every conversion
+/// between book-global time and (file, offset-within-file), so the player just
+/// asks it "which file plays global time T, and at what per-file position" and
+/// "what plays after this file ends". It has no VLC/UIKit dependency and is
+/// covered by unit tests.
+public struct AudiobookTimeline: Equatable {
+    /// Files in play order, each carrying its global `startOffset` and duration.
+    public struct File: Equatable {
+        public let index: Int
+        public let startOffset: Double
+        public let duration: Double
+        public let contentPath: String
+
+        public init(index: Int, startOffset: Double, duration: Double, contentPath: String) {
+            self.index = index
+            self.startOffset = startOffset
+            self.duration = duration
+            self.contentPath = contentPath
+        }
+
+        /// Global time (exclusive) at which this file ends.
+        public var endOffset: Double { startOffset + duration }
+    }
+
+    public let files: [File]
+    public let chapters: [AudiobookChapter]
+    public let totalDuration: Double
+
+    public init(files: [File], chapters: [AudiobookChapter] = []) {
+        // Keep files sorted by startOffset so lookups are well-defined even if
+        // the server ever returns them out of order.
+        self.files = files.sorted { $0.startOffset < $1.startOffset }
+        self.chapters = chapters
+        self.totalDuration = self.files.map(\.endOffset).max() ?? 0
+    }
+
+    /// Builds a timeline from a play-session response.
+    public init(session: ABSPlaybackSessionDTO, bookId: String) {
+        let files = (session.audioTracks ?? []).map {
+            File(index: $0.index, startOffset: $0.startOffset, duration: $0.duration, contentPath: $0.contentUrl)
+        }
+        let chapters = (session.chapters ?? []).map {
+            AudiobookChapter(id: "\(bookId)#\($0.id)", bookId: bookId, title: $0.title, start: $0.start, end: $0.end)
+        }
+        self.init(files: files, chapters: chapters)
+    }
+
+    /// The file that plays global time `t`, plus the per-file offset to seek to.
+    ///
+    /// `t` is clamped to `[0, totalDuration]`. Returns `nil` only when there are
+    /// no files. For `t` at or past the end, returns the last file at its end.
+    public func locate(global t: Double) -> (file: File, fileOffset: Double)? {
+        guard !files.isEmpty else { return nil }
+        let clamped = max(0, min(t, totalDuration))
+        // First file whose range contains `clamped` (startOffset <= t < endOffset).
+        if let file = files.first(where: { clamped >= $0.startOffset && clamped < $0.endOffset }) {
+            return (file, clamped - file.startOffset)
+        }
+        // Exactly at (or past) the end: sit at the end of the last file.
+        let last = files[files.count - 1]
+        return (last, max(0, clamped - last.startOffset))
+    }
+
+    /// The file that plays after `file` ends, or `nil` at the end of the book.
+    public func fileAfter(_ file: File) -> File? {
+        guard let pos = files.firstIndex(where: { $0.index == file.index }),
+              pos + 1 < files.count else { return nil }
+        return files[pos + 1]
+    }
+
+    /// Maps a per-file position back to book-global time.
+    public func globalTime(file: File, fileOffset: Double) -> Double {
+        file.startOffset + max(0, fileOffset)
+    }
+
+    /// The chapter covering global time `t` (start <= t < end), if any.
+    public func chapter(at t: Double) -> AudiobookChapter? {
+        chapters.first { t >= $0.start && t < $0.end } ?? chapters.last { t >= $0.start }
+    }
+
+    /// Global start time of the next chapter after `t`, or `nil` if none.
+    public func nextChapterStart(after t: Double) -> Double? {
+        chapters.first { $0.start > t + 0.5 }?.start
+    }
+
+    /// Global start time to jump to for "previous chapter" from `t`.
+    ///
+    /// Mirrors iOS Music/Podcasts behaviour: if more than ~3 s into the current
+    /// chapter, previous restarts the current chapter; otherwise it jumps to the
+    /// start of the preceding chapter. Returns `nil` when there are no chapters.
+    public func previousChapterStart(from t: Double) -> Double? {
+        guard let current = chapter(at: t) else {
+            return chapters.last { $0.start < t }?.start
+        }
+        if t - current.start > 3.0 { return current.start }
+        return chapters.last { $0.start < current.start }?.start ?? current.start
+    }
 }

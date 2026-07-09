@@ -101,6 +101,32 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// Artwork loaded for the currently-playing track (cover art from Navidrome).
     internal var currentTrackArtwork: MPMediaItemArtwork?
 
+    // MARK: - Audiobook playback state (Audiobookshelf E2 / yu8.2)
+
+    /// Active audiobook session, or nil when not playing an audiobook.
+    ///
+    /// Audiobooks are a SELF-CONTAINED playback path — not shoehorned into the
+    /// `.library` Track queue, which is Navidrome-coupled (scrobbles, cover-art
+    /// URLs, stream URLs at every step). This holder carries everything the
+    /// audiobook path needs: the timeline (global↔file math), the ABS API for
+    /// progress sync, and the current file being fed to VLC. The player reuses
+    /// the same VLC primitives (retirePlayer, amem bridge, state timer, .ended
+    /// chaining) as radio and library tracks.
+    internal var audiobookSession: AudiobookSession?
+
+    /// Book-global playback position in seconds. Published for the UI (chapter
+    /// display, scrubber). 0 when no audiobook is playing.
+    @Published public internal(set) var audiobookGlobalTime: Double = 0
+
+    /// Total duration of the current book in seconds; nil when none is playing.
+    @Published public internal(set) var audiobookDuration: Double?
+
+    /// The book currently playing (for the mini/full player), or nil.
+    @Published public internal(set) var currentAudiobook: Audiobook?
+
+    /// The current chapter, derived from `audiobookGlobalTime`. nil when none.
+    @Published public internal(set) var currentChapter: AudiobookChapter?
+
     // MARK: - Queue state (d6q.1)
 
     /// The index of the currently-playing track within the `.library` queue.
@@ -778,6 +804,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// Called when the app enters/leaves the background.
     public func setBackgroundMode(_ background: Bool) {
         isInBackground = background
+        // Audiobookshelf E2 (yu8.3): flush progress when backgrounding so the
+        // server has an up-to-date position if the app is suspended.
+        if background, audiobookSession != nil { syncAudiobookProgress(force: true) }
         if background {
             adjustPollRate(to: backgroundPollInterval)
         } else {
@@ -888,6 +917,8 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
     public func pause() {
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
+        // Audiobookshelf E2: flush a progress sync before the stream pauses.
+        if audiobookSession != nil { pauseAudiobook() }
         interruptedChannel = nil
         interruptedSource = nil        // d6q.8
         interruptedQueueAPI = nil      // d6q.8
@@ -918,7 +949,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         sxmService.stopPolling()
         // Update the correct now-playing surface: library tracks need elapsed/rate
         // cleared to 0 immediately on pause so the scrubber doesn't keep advancing.
-        if currentTrack != nil {
+        if audiobookSession != nil {
+            updateNowPlayingInfoForAudiobook()
+        } else if currentTrack != nil {
             updateNowPlayingInfoForTrack()
         } else {
             updateNowPlayingInfo()
@@ -935,6 +968,15 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     public func resume() {
+        // Audiobookshelf E2: a paused audiobook reloads its current file at the
+        // saved book-global position (pause() called mediaPlayer.stop()).
+        if let session = audiobookSession,
+           let located = session.timeline.locate(global: audiobookGlobalTime) {
+            log.log("resume() audiobook \"\(session.book.title)\" @\(String(format: "%.1f", audiobookGlobalTime))s", category: .player)
+            loadAudiobookFile(located.file, fileOffset: located.fileOffset)
+            return
+        }
+
         // bug 9nf: pause() leaves playbackSource/queueAPI untouched (only
         // stop() clears them), so a paused library track is still
         // identifiable here. Without this check resume() fell through to
@@ -988,6 +1030,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
     public func stop() {
         log.log("stop() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
+        // Audiobookshelf E2: close the server session (releases transcode
+        // resources) and clear audiobook state. stopAudiobook is a no-op when
+        // no audiobook is playing.
+        if audiobookSession != nil { stopAudiobook() }
         // Note: do NOT clear interruptedChannel / interruptedSource here —
         // stop() is called by the interruption handler after saving the source
         // to resume.  Only pause() and play() should clear them (explicit user
@@ -1294,6 +1340,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
                         timeShiftBuffer.cancelAndCleanup()
                         play(channel: channel, userInitiated: false)
                     }
+                } else if audiobookSession != nil {
+                    // Audiobookshelf E2: a book file finished — chain to the next
+                    // file on the global timeline, or close the session at end.
+                    audiobookFileEnded()
                 } else if case .library = playbackSource {
                     // d6q.3: Library track reached natural end-of-media.
                     //
@@ -1354,7 +1404,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
 
         updateStreamStats()
         // Dispatch to the correct now-playing updater based on playback mode.
-        if currentTrack != nil {
+        if audiobookSession != nil {
+            tickAudiobook()
+            updateNowPlayingInfoForAudiobook()
+        } else if currentTrack != nil {
             updateNowPlayingInfoForTrack()
         } else {
             updateNowPlayingInfo()
