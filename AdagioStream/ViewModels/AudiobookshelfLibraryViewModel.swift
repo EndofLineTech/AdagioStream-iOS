@@ -149,44 +149,71 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
 
     // MARK: - Offline download (E3 / mkj.1)
 
-    /// Builds the download manifest for a book from its expanded item detail and
-    /// starts the per-file downloads via `DownloadManager`. Each file's global
-    /// `startOffset` is the cumulative sum of preceding file durations — exactly
-    /// how ABS lays out the streaming timeline — so offline playback rebuilds the
-    /// same `AudiobookTimeline`. Returns silently if the item has no audio files.
+    /// Builds the download manifest for a book and starts the per-file downloads
+    /// via `DownloadManager`.
+    ///
+    /// ymf.4: each file's global `startOffset` is captured from a live `/play`
+    /// session's server-authoritative `audioTracks[]` — NOT recomputed from
+    /// `media.audioFiles[].duration`. The two can diverge: the play session drops
+    /// `exclude`d audioFiles and re-sums offsets over only the included ones
+    /// (`Book.getTracklist` uses `includedAudioFiles`, while the item-detail JSON
+    /// serializes ALL audioFiles). Recomputing would then include phantom
+    /// durations and skew every offset. We join `audioTracks[].startOffset`
+    /// (offline-timeline truth) with `audioFiles[].ino` (the download key) by
+    /// `index`. Returns silently if the book can't be direct-played (no session,
+    /// no tracks, or transcode — which collapses to one track with no per-file ino).
     public func downloadBook(_ book: Audiobook, using downloadManager: DownloadManager) async {
         let item: ABSLibraryItemDTO
+        let session: ABSPlaybackSessionDTO
         do {
             item = try await api.item(id: book.id)
+            session = try await api.openPlaybackSession(itemID: book.id, deviceID: AudioPlayerService.absDeviceID)
         } catch {
             return
         }
-        let audioFiles = item.audioFiles().sorted { $0.index < $1.index }
-        guard !audioFiles.isEmpty else { return }
 
-        var offset = 0.0
-        let files: [AudiobookDownloadFile] = audioFiles.map { af in
-            let duration = af.duration ?? 0
-            let file = AudiobookDownloadFile(
-                index: af.index,
-                ino: af.ino,
-                startOffset: offset,
-                duration: duration
-            )
-            offset += duration
-            return file
-        }
+        guard let files = Self.downloadFiles(session: session, audioFiles: item.audioFiles()) else { return }
         let chapters = item.chapters()
+        let total = files.map { $0.startOffset + $0.duration }.max() ?? 0
 
         downloadManager.downloadBook(
             itemID: book.id,
             title: book.title,
             author: book.author,
             coverPath: book.coverPath,
-            duration: book.duration ?? offset,
+            duration: book.duration ?? session.duration ?? total,
             files: files,
             chapters: chapters,
             via: api
         )
+    }
+
+    /// Joins the play session's server-authoritative `audioTracks[].startOffset`
+    /// with each file's downloadable `ino` (matched by `index`) into a download
+    /// manifest. Pure so the join/skip logic is unit-testable.
+    ///
+    /// Returns `nil` (book not downloadable per-file) when the session transcodes
+    /// (`playMethod == 1`), has no tracks, or no track can be paired with an
+    /// `ino` — none of those can be reassembled from per-file downloads offline.
+    nonisolated static func downloadFiles(session: ABSPlaybackSessionDTO, audioFiles: [ABSAudioFileDTO]) -> [AudiobookDownloadFile]? {
+        // Transcode sessions return a single synthetic track with no per-file ino.
+        guard session.playMethod != 1 else { return nil }
+        let tracks = (session.audioTracks ?? []).sorted { $0.startOffset < $1.startOffset }
+        guard !tracks.isEmpty else { return nil }
+
+        let inoByIndex = Dictionary(audioFiles.map { ($0.index, $0.ino) }, uniquingKeysWith: { first, _ in first })
+        let files: [AudiobookDownloadFile] = tracks.compactMap { track in
+            guard let ino = inoByIndex[track.index], !ino.isEmpty else { return nil }
+            return AudiobookDownloadFile(
+                index: track.index,
+                ino: ino,
+                startOffset: track.startOffset,   // server-authoritative
+                duration: track.duration
+            )
+        }
+        // Every track must map to a downloadable file, or offline playback would
+        // have a hole in the timeline.
+        guard files.count == tracks.count else { return nil }
+        return files
     }
 }

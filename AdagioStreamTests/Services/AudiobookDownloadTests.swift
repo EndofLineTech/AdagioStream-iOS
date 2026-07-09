@@ -46,6 +46,59 @@ final class AudiobookDownloadTests: XCTestCase {
         XCTAssertEqual(offset, 350, "total duration is the sum")
     }
 
+    // ymf.4: manifest offsets come from the /play session's audioTracks
+    // (server-authoritative), joined to each file's ino by index — NOT recomputed
+    // from audioFiles durations (which include exclude'd files).
+
+    private func session(json: String) -> ABSPlaybackSessionDTO {
+        try! JSONDecoder().decode(ABSPlaybackSessionDTO.self, from: Data(json.utf8))
+    }
+    private func audioFiles(json: String) -> [ABSAudioFileDTO] {
+        try! JSONDecoder().decode([ABSAudioFileDTO].self, from: Data(json.utf8))
+    }
+
+    func testDownloadFilesUsesServerStartOffsets() {
+        // Play session already dropped an exclude'd file: audioFiles has 3 entries
+        // (indices 0,1,2), tracks has 2 (indices 0,2) with server offsets 0 and 100.
+        // Cumulative-summing audioFiles would put file 2 at 300, not 100.
+        let s = session(json: """
+        {"id":"s","playMethod":0,"audioTracks":[
+          {"index":0,"startOffset":0,"duration":100,"contentUrl":"/a"},
+          {"index":2,"startOffset":100,"duration":50,"contentUrl":"/c"}
+        ]}
+        """)
+        let afs = audioFiles(json: """
+        [{"index":0,"ino":"a","duration":100},
+         {"index":1,"ino":"b","duration":200},
+         {"index":2,"ino":"c","duration":50}]
+        """)
+        let files = AudiobookshelfLibraryViewModel.downloadFiles(session: s, audioFiles: afs)
+        XCTAssertEqual(files?.map(\.index), [0, 2])
+        XCTAssertEqual(files?.map(\.startOffset), [0, 100], "offsets are the server's, not a re-sum of audioFiles")
+        XCTAssertEqual(files?.map(\.ino), ["a", "c"], "each track paired to its file ino by index")
+    }
+
+    func testDownloadFilesNilOnTranscode() {
+        let s = session(json: """
+        {"id":"s","playMethod":1,"audioTracks":[{"index":0,"startOffset":0,"duration":100,"contentUrl":"/x"}]}
+        """)
+        let afs = audioFiles(json: #"[{"index":0,"ino":"a","duration":100}]"#)
+        XCTAssertNil(AudiobookshelfLibraryViewModel.downloadFiles(session: s, audioFiles: afs),
+                     "a transcode session can't be downloaded per-file")
+    }
+
+    func testDownloadFilesNilWhenTrackHasNoIno() {
+        // A track with no matching audioFile ino → hole in the offline timeline → bail.
+        let s = session(json: """
+        {"id":"s","playMethod":0,"audioTracks":[
+          {"index":0,"startOffset":0,"duration":100,"contentUrl":"/a"},
+          {"index":9,"startOffset":100,"duration":50,"contentUrl":"/z"}
+        ]}
+        """)
+        let afs = audioFiles(json: #"[{"index":0,"ino":"a","duration":100}]"#)
+        XCTAssertNil(AudiobookshelfLibraryViewModel.downloadFiles(session: s, audioFiles: afs))
+    }
+
     // The persisted manifest rebuilds the SAME timeline as streaming would,
     // using local file paths as contentPath.
 
