@@ -226,6 +226,15 @@ struct AddProviderView: View {
                         } footer: {
                             Text("Enter a name above, then sign in through your identity provider. No password is stored.")
                         }
+
+                        Section {
+                            DisclosureGroup("SSO setup & requirements") {
+                                Text(Self.ssoSetupHelp)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("Single sign-on setup and requirements")
+                        }
                     }
 
                     if isAudiobookshelfHTTP {
@@ -299,6 +308,18 @@ struct AddProviderView: View {
               Self.allowedSchemes.contains(scheme) else { return nil }
         return url
     }
+
+    /// Server-side setup the app cannot do itself, surfaced in the SSO section
+    /// (wv4.4). See docs/design/audiobookshelf-sso-setup.md.
+    static let ssoSetupHelp = """
+    Single sign-on needs the server configured for it — the app can't do this part:
+
+    • In Audiobookshelf admin, add adagiostream://oauth to "Allowed Mobile Redirect URIs".
+    • Your identity provider must allow-list the server's HTTPS callback and mobile-redirect URIs (not the adagiostream:// scheme).
+    • A reverse proxy in front of Audiobookshelf must send X-Forwarded-Proto: https.
+    • Requires Audiobookshelf server 2.26.0 or newer.
+    • SSO can't be used behind an untrusted self-signed certificate. Use a trusted certificate (e.g. Let's Encrypt), or sign in with a username and password instead.
+    """
 
     // MARK: - Audiobookshelf OpenID / SSO (wv4.3)
 
