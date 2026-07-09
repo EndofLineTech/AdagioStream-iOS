@@ -1433,9 +1433,14 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
             updateNowPlayingInfo()
         }
 
-        // Adaptive timer: background → very slow, stable play → slow, transitions → fast
+        // Adaptive timer: background → very slow, stable play → slow, transitions → fast.
+        // Audiobooks keep the fast poll while foregrounded so the primary
+        // elapsed-time + scrubber advance smoothly (bug 4xw.2) — the slow 3s
+        // poll made audiobookGlobalTime jump only every few seconds.
         if isInBackground {
             adjustPollRate(to: backgroundPollInterval)
+        } else if audiobookSession != nil {
+            adjustPollRate(to: fastPollInterval)
         } else if isPlaying && !isBuffering && error == nil {
             adjustPollRate(to: slowPollInterval)
         } else {
