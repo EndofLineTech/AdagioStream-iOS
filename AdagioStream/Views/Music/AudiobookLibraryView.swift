@@ -115,6 +115,7 @@ struct AudiobookDetailView: View {
     @ObservedObject var viewModel: AudiobookshelfLibraryViewModel
     let book: Audiobook
     @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var downloadManager: DownloadManager
 
     /// The live record (progress refreshed by loadDetail), falling back to the
     /// list record.
@@ -166,9 +167,54 @@ struct AudiobookDetailView: View {
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 4)
                 .accessibilityLabel(resumeLabel)
+
+                downloadControl
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Download / downloading / delete affordance (E3). Shown only when the user
+    /// has download permission (or a download already exists on this device).
+    @ViewBuilder private var downloadControl: some View {
+        let record = downloadManager.audiobookDownloads.first { $0.id == current.id }
+        if viewModel.canDownload || record != nil {
+            switch record?.status {
+            case .completed:
+                Button(role: .destructive) {
+                    downloadManager.deleteBookDownload(itemID: current.id)
+                } label: {
+                    Label("Remove Download", systemImage: "trash")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Remove download")
+            case .downloading, .queued:
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Downloading…").font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            case .failed:
+                Button {
+                    Task { await viewModel.downloadBook(current, using: downloadManager) }
+                } label: {
+                    Label("Retry Download", systemImage: "arrow.clockwise")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Retry download")
+            default:
+                Button {
+                    Task { await viewModel.downloadBook(current, using: downloadManager) }
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel("Download for offline listening")
+            }
+        }
     }
 
     private var resumeLabel: String {

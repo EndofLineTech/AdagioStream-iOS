@@ -88,6 +88,10 @@ public final class DownloadManager: NSObject, ObservableObject {
     /// Snapshot of all known download records.  Refreshed after every state change.
     @Published public private(set) var downloads: [DownloadRecord] = []
 
+    /// Snapshot of all audiobook download records (E3 / mkj.1). Separate from
+    /// `downloads` (music tracks) so the two offline lists never mix.
+    @Published public private(set) var audiobookDownloads: [AudiobookDownloadRecord] = []
+
     // MARK: - Private state
 
     private let store: NavidromeStore
@@ -168,8 +172,9 @@ public final class DownloadManager: NSObject, ObservableObject {
 
         super.init()
 
-        // Hydrate the observable snapshot on init.
+        // Hydrate the observable snapshots on init.
         refreshDownloads()
+        refreshAudiobookDownloads()
 
         // Reconcile the background session with the DB — running tasks are
         // left alive; stuck rows (no live task) are marked .failed.
@@ -397,6 +402,154 @@ public final class DownloadManager: NSObject, ObservableObject {
         task.resume()
     }
 
+    // MARK: - Audiobook downloads (E3 / mkj.1)
+
+    /// taskDescription marker for a book file: `abs#<bookId>#<ino>`. Music tasks
+    /// use the bare trackID, so the `abs#` prefix cleanly disambiguates the two
+    /// in the shared URLSession delegate.
+    nonisolated static func bookTaskDescription(bookID: String, ino: String) -> String {
+        "abs#\(bookID)#\(ino)"
+    }
+
+    /// Parses a book-file taskDescription back into `(bookID, ino)`, or `nil`
+    /// when the description is a plain music trackID.
+    nonisolated static func parseBookTaskDescription(_ desc: String) -> (bookID: String, ino: String)? {
+        guard desc.hasPrefix("abs#") else { return nil }
+        let parts = desc.dropFirst(4).split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        return (String(parts[0]), String(parts[1]))
+    }
+
+    /// On-disk path for one book file. Books live under `Downloads/abs/<bookId>/`
+    /// so a whole book deletes as a directory and never collides with music.
+    nonisolated static func bookFilePath(bookID: String, ino: String) -> String {
+        downloadsDirectory()
+            .appendingPathComponent("abs", isDirectory: true)
+            .appendingPathComponent(bookID, isDirectory: true)
+            .appendingPathComponent("\(ino).audio")
+            .path
+    }
+
+    /// Starts downloading every file of a book. `files` carry the global
+    /// `startOffset`/`duration` from the streaming session joined with each
+    /// file's `ino`; the manifest is persisted immediately so a relaunch can
+    /// reconcile in-flight file tasks and offline playback can rebuild the
+    /// timeline. Completed / in-progress books are a no-op.
+    public func downloadBook(
+        itemID: String,
+        title: String,
+        author: String?,
+        coverPath: String?,
+        duration: Double?,
+        files: [AudiobookDownloadFile],
+        chapters: [AudiobookChapter],
+        via api: AudiobookshelfAPI
+    ) {
+        guard !files.isEmpty else { return }
+
+        if let existing = try? store.audiobookDownload(forBook: itemID),
+           existing.status == .completed || existing.status == .downloading {
+            return
+        }
+
+        // Ensure the book directory exists.
+        let bookDir = Self.downloadsDirectory()
+            .appendingPathComponent("abs", isDirectory: true)
+            .appendingPathComponent(itemID, isDirectory: true)
+        try? FileManager.default.createDirectory(at: bookDir, withIntermediateDirectories: true)
+
+        let now = Int(Date().timeIntervalSince1970)
+        let record = AudiobookDownloadRecord(
+            id: itemID,
+            title: title,
+            author: author,
+            coverPath: coverPath,
+            duration: duration,
+            status: .downloading,
+            files: files,          // localPath nil until each file lands
+            chapters: chapters,
+            error: nil,
+            createdAt: now,
+            updatedAt: now
+        )
+        try? store.upsert(audiobookDownload: record)
+        refreshAudiobookDownloads()
+
+        // Fetch a live token once, then enqueue a task per file with the Bearer
+        // header. Token-in-header keeps short-lived JWTs out of URLs/logs.
+        Task { @MainActor in
+            let token = await api.currentAccessToken()
+            for file in files {
+                guard let url = api.fileDownloadURL(itemID: itemID, ino: file.ino) else { continue }
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 300
+                if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+                let task = self.backgroundSession.downloadTask(with: request)
+                task.taskDescription = Self.bookTaskDescription(bookID: itemID, ino: file.ino)
+                task.resume()
+            }
+        }
+    }
+
+    /// Deletes a downloaded book: cancels any in-flight file tasks, removes the
+    /// on-disk directory + manifest row.
+    public func deleteBookDownload(itemID: String) {
+        backgroundSession.getAllTasks { tasks in
+            for task in tasks {
+                if let desc = task.taskDescription,
+                   Self.parseBookTaskDescription(desc)?.bookID == itemID {
+                    task.cancel()
+                }
+            }
+        }
+        // Remove the whole book directory (covers files not yet in the manifest).
+        let bookDir = Self.downloadsDirectory()
+            .appendingPathComponent("abs", isDirectory: true)
+            .appendingPathComponent(itemID, isDirectory: true)
+        try? FileManager.default.removeItem(at: bookDir)
+        try? store.deleteAudiobookDownload(forBook: itemID)
+        refreshAudiobookDownloads()
+    }
+
+    /// The offline `AudiobookTimeline` for a fully-downloaded book, or `nil` if
+    /// the book isn't completely downloaded. Used by offline playback (mkj.2).
+    public func downloadedBook(itemID: String) -> AudiobookDownloadRecord? {
+        guard let record = try? store.audiobookDownload(forBook: itemID),
+              record.status == .completed, record.allFilesPresent
+        else { return nil }
+        return record
+    }
+
+    /// True when a book is fully downloaded and present on disk.
+    public func isBookDownloaded(itemID: String) -> Bool {
+        downloadedBook(itemID: itemID) != nil
+    }
+
+    /// Records that one book file finished downloading: stamps its `localPath`
+    /// in the manifest and, when every file is present, flips the book to
+    /// `.completed`. Called from the shared download delegate.
+    fileprivate func markBookFileComplete(bookID: String, ino: String, localPath: String) {
+        guard var record = try? store.audiobookDownload(forBook: bookID) else { return }
+        if let idx = record.files.firstIndex(where: { $0.ino == ino }) {
+            record.files[idx].localPath = localPath
+        }
+        record.updatedAt = Int(Date().timeIntervalSince1970)
+        if record.allFilesPresent { record.status = .completed }
+        try? store.upsert(audiobookDownload: record)
+        refreshAudiobookDownloads()
+    }
+
+    /// Marks a book download failed (a file task errored). Best-effort.
+    fileprivate func markBookFileFailed(bookID: String, error: String) {
+        guard var record = try? store.audiobookDownload(forBook: bookID),
+              record.status != .completed else { return }
+        record.status = .failed
+        record.error = error
+        record.updatedAt = Int(Date().timeIntervalSince1970)
+        try? store.upsert(audiobookDownload: record)
+        refreshAudiobookDownloads()
+    }
+
     // MARK: - Launch reconciliation
 
     /// Re-attaches to the background session and reconciles in-flight tasks
@@ -437,6 +590,27 @@ public final class DownloadManager: NSObject, ObservableObject {
             didChange = true
         }
         if didChange { refreshDownloads() }
+
+        // Same for audiobook downloads: a book stuck in .downloading with no
+        // live file task (and not all files on disk) is genuinely interrupted.
+        let liveBookIDs = Set(tasks.compactMap {
+            $0.taskDescription.flatMap { Self.parseBookTaskDescription($0)?.bookID }
+        })
+        let stuckBooks = (try? store.audiobookDownloads(withStatus: .downloading)) ?? []
+        var didChangeBooks = false
+        for var book in stuckBooks {
+            if liveBookIDs.contains(book.id) { continue }
+            if book.allFilesPresent {
+                book.status = .completed        // all files landed before quit
+            } else {
+                book.status = .failed
+                book.error = "Interrupted — tap to retry"
+            }
+            book.updatedAt = Int(Date().timeIntervalSince1970)
+            try? store.upsert(audiobookDownload: book)
+            didChangeBooks = true
+        }
+        if didChangeBooks { refreshAudiobookDownloads() }
     }
 
     // MARK: - Helpers
@@ -444,6 +618,11 @@ public final class DownloadManager: NSObject, ObservableObject {
     /// Refreshes the `downloads` published array from the store.
     private func refreshDownloads() {
         downloads = (try? store.allDownloads()) ?? []
+    }
+
+    /// Refreshes the `audiobookDownloads` published array from the store.
+    func refreshAudiobookDownloads() {
+        audiobookDownloads = (try? store.allAudiobookDownloads()) ?? []
     }
 }
 
@@ -458,6 +637,13 @@ extension DownloadManager: URLSessionDownloadDelegate {
         didFinishDownloadingTo location: URL
     ) {
         guard let trackID = downloadTask.taskDescription else { return }
+
+        // Audiobook file? Handle on the book path and return (music logic below
+        // is keyed by the single `downloads` table row).
+        if let (bookID, ino) = Self.parseBookTaskDescription(trackID) {
+            finishBookFileDownload(bookID: bookID, ino: ino, task: downloadTask, location: location)
+            return
+        }
 
         // Derive the destination path from the DB record (contains the
         // correct extension from the original Track.suffix).
@@ -548,6 +734,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
         totalBytesExpectedToWrite: Int64
     ) {
         guard let trackID = downloadTask.taskDescription else { return }
+        // Book files aren't tracked in the music `progress` dict (keyed by trackID).
+        if Self.parseBookTaskDescription(trackID) != nil { return }
         let snapshot = DownloadProgress(
             bytesReceived: totalBytesWritten,
             totalBytes: totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : nil
@@ -568,6 +756,18 @@ extension DownloadManager: URLSessionDownloadDelegate {
     ) {
         guard let error else { return }   // success handled in didFinishDownloadingTo
         guard let trackID = task.taskDescription else { return }
+
+        // Audiobook file error → mark the book failed (unless user-cancelled).
+        if let (bookID, _) = Self.parseBookTaskDescription(trackID) {
+            let nsErr = error as NSError
+            let isCancelled = nsErr.domain == NSURLErrorDomain && nsErr.code == NSURLErrorCancelled
+            if !isCancelled {
+                Task { @MainActor [weak self] in
+                    self?.markBookFileFailed(bookID: bookID, error: error.localizedDescription)
+                }
+            }
+            return
+        }
 
         // Attempt to capture resume data from the error userInfo.
         let resumeData = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
@@ -601,6 +801,52 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 )
                 self.refreshDownloads()
             }
+        }
+    }
+
+    /// Moves a finished book file to its on-disk home and updates the manifest.
+    /// A non-2xx status (e.g. 403 when the user lacks `canDownload`) fails the
+    /// whole book with a clear message.
+    private nonisolated func finishBookFileDownload(
+        bookID: String,
+        ino: String,
+        task: URLSessionDownloadTask,
+        location: URL
+    ) {
+        if let http = task.response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            try? FileManager.default.removeItem(at: location)
+            let message = http.statusCode == 403
+                ? "Download not permitted for this account."
+                : "Download failed (HTTP \(http.statusCode))."
+            Task { @MainActor [weak self] in
+                self?.markBookFileFailed(bookID: bookID, error: message)
+            }
+            return
+        }
+
+        let localPath = Self.bookFilePath(bookID: bookID, ino: ino)
+        let destination = URL(fileURLWithPath: localPath)
+        try? FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: destination)
+        do {
+            try FileManager.default.moveItem(at: location, to: destination)
+        } catch {
+            Task { @MainActor [weak self] in
+                self?.markBookFileFailed(bookID: bookID, error: error.localizedDescription)
+            }
+            return
+        }
+        // Match music downloads' file protection.
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: localPath
+        )
+
+        Task { @MainActor [weak self] in
+            self?.markBookFileComplete(bookID: bookID, ino: ino, localPath: localPath)
         }
     }
 

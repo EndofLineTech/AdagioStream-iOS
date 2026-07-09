@@ -30,6 +30,11 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// Resolved cover URLs keyed by book id. Populated as `loadBooks` completes.
     @Published public private(set) var coverURLs: [String: URL] = [:]
 
+    /// Whether the signed-in user may download (gates the download affordance,
+    /// E3 / mkj.1). Populated on first `loadBooks`. The server still 403s the
+    /// file endpoint if this is wrong, which the download path handles.
+    @Published public private(set) var canDownload = false
+
     private let api: AudiobookshelfAPI
 
     public init(api: AudiobookshelfAPI) {
@@ -43,6 +48,8 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
 
     public func loadBooks() async {
         guard booksState != .loading else { return }
+        // Reconnect point: flush any progress queued while offline (E3 / mkj.2).
+        await ABSProgressSyncQueue.shared.flush(via: api)
         booksState = .loading
         do {
             let libraries = try await api.bookLibraries()
@@ -57,6 +64,7 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
             // Cache to the shared store (E1 tables) so offline/other screens read it.
             try? NavidromeStore.shared.upsert(audiobooks: all)
             booksState = all.isEmpty ? .empty : .loaded
+            canDownload = await api.canDownload()
             await resolveCovers(for: all)
         } catch let apiErr as AudiobookshelfAPI.APIError {
             booksState = .error(apiErr.errorDescription ?? "Unknown error")
@@ -105,5 +113,48 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         selectedBook = nil
         chapters = []
         detailState = .idle
+    }
+
+    // MARK: - Offline download (E3 / mkj.1)
+
+    /// Builds the download manifest for a book from its expanded item detail and
+    /// starts the per-file downloads via `DownloadManager`. Each file's global
+    /// `startOffset` is the cumulative sum of preceding file durations — exactly
+    /// how ABS lays out the streaming timeline — so offline playback rebuilds the
+    /// same `AudiobookTimeline`. Returns silently if the item has no audio files.
+    public func downloadBook(_ book: Audiobook, using downloadManager: DownloadManager) async {
+        let item: ABSLibraryItemDTO
+        do {
+            item = try await api.item(id: book.id)
+        } catch {
+            return
+        }
+        let audioFiles = item.audioFiles().sorted { $0.index < $1.index }
+        guard !audioFiles.isEmpty else { return }
+
+        var offset = 0.0
+        let files: [AudiobookDownloadFile] = audioFiles.map { af in
+            let duration = af.duration ?? 0
+            let file = AudiobookDownloadFile(
+                index: af.index,
+                ino: af.ino,
+                startOffset: offset,
+                duration: duration
+            )
+            offset += duration
+            return file
+        }
+        let chapters = item.chapters()
+
+        downloadManager.downloadBook(
+            itemID: book.id,
+            title: book.title,
+            author: book.author,
+            coverPath: book.coverPath,
+            duration: book.duration ?? offset,
+            files: files,
+            chapters: chapters,
+            via: api
+        )
     }
 }

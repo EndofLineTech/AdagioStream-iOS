@@ -176,6 +176,9 @@ public struct ABSLibraryItemDTO: Decodable {
     /// Server-relative cover path for `GET /api/items/{id}/cover`.
     public var coverPath: String { "/api/items/\(id)/cover" }
 
+    /// The expanded item's audio files (index + ino), empty on minified lists.
+    public func audioFiles() -> [ABSAudioFileDTO] { media?.audioFiles ?? [] }
+
     /// Transforms `media.chapters[]` into `[AudiobookChapter]` records. Start/end
     /// are already global-timeline seconds in the ABS payload — passed through.
     public func chapters() -> [AudiobookChapter] {
@@ -196,15 +199,45 @@ public struct ABSMediaDTO: Decodable {
     public let duration: Double?
     public let metadata: ABSMetadataDTO?
     public let chapters: [ABSChapterDTO]?
+    /// Present on the expanded item-detail shape; carries each file's `ino`
+    /// (needed for the per-file download endpoint). Absent on minified lists.
+    public let audioFiles: [ABSAudioFileDTO]?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         duration = try? c.decodeIfPresent(Double.self, forKey: .duration)
         metadata = try? c.decodeIfPresent(ABSMetadataDTO.self, forKey: .metadata)
         chapters = try? c.decodeIfPresent([ABSChapterDTO].self, forKey: .chapters)
+        audioFiles = try? c.decodeIfPresent([ABSAudioFileDTO].self, forKey: .audioFiles)
     }
 
-    enum CodingKeys: String, CodingKey { case duration, metadata, chapters }
+    enum CodingKeys: String, CodingKey { case duration, metadata, chapters, audioFiles }
+}
+
+/// A `media.audioFiles[]` entry from the expanded item detail. `ino` is the
+/// server file inode used by `GET /api/items/{id}/file/{ino}/download`; `index`
+/// matches the playback session's `audioTracks[].index` so the two can be joined
+/// to pair each track's global `startOffset` with its downloadable `ino`.
+public struct ABSAudioFileDTO: Decodable {
+    public let index: Int
+    public let ino: String
+    public let duration: Double?
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        index = (try? c.decode(Int.self, forKey: .index)) ?? 0
+        // `ino` is a string on ABS; some server versions emit it as a number.
+        if let s = try? c.decode(String.self, forKey: .ino) {
+            ino = s
+        } else if let n = try? c.decode(Int64.self, forKey: .ino) {
+            ino = String(n)
+        } else {
+            ino = ""
+        }
+        duration = try? c.decodeIfPresent(Double.self, forKey: .duration)
+    }
+
+    enum CodingKeys: String, CodingKey { case index, ino, duration }
 }
 
 /// `media.metadata` — title and author display fields.
@@ -256,6 +289,31 @@ public struct ABSMediaProgressDTO: Decodable {
     }
 
     enum CodingKeys: String, CodingKey { case currentTime, progress, isFinished, lastUpdate }
+}
+
+// MARK: - Offline progress update (E3 / mkj.2)
+
+/// One book's progress, queued while offline and flushed via
+/// `PATCH /api/me/progress/batch/update` on reconnect. Fields mirror the ABS
+/// per-item progress payload. `Codable` so the pending queue persists to disk
+/// across app launches.
+public struct ABSProgressUpdate: Codable, Equatable {
+    public let libraryItemId: String
+    public let currentTime: Double
+    public let duration: Double
+    public let progress: Double
+    public let isFinished: Bool
+    /// Client wall-clock (Unix millis) — the server uses it for last-writer-wins.
+    public let lastUpdate: Int64
+
+    public init(libraryItemId: String, currentTime: Double, duration: Double, isFinished: Bool = false, lastUpdate: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) {
+        self.libraryItemId = libraryItemId
+        self.currentTime = currentTime
+        self.duration = duration
+        self.progress = duration > 0 ? min(1.0, max(0.0, currentTime / duration)) : 0
+        self.isFinished = isFinished
+        self.lastUpdate = lastUpdate
+    }
 }
 
 // MARK: - Playback Session (E2 / yu8.2)

@@ -290,6 +290,40 @@ public final class NavidromeStore {
                 """)
         }
 
+        // ── v5: Audiobookshelf offline downloads (E3 / mkj.1) ────────────────
+        // One row per downloaded book. `filesJSON` is the per-file timeline
+        // manifest (index, ino, startOffset, duration, localPath) so offline
+        // playback rebuilds the exact same AudiobookTimeline as streaming;
+        // `chaptersJSON` carries the global-timeline chapters. Kept in a
+        // SEPARATE table from `downloads` (music tracks) so the two offline
+        // lists never cross-contaminate. No FK to audiobooks — survives a cache
+        // wipe like the music download index.
+        m.registerMigration("createAudiobookDownloads") { db in
+            try db.execute(sql: """
+                CREATE TABLE audiobook_downloads (
+                    id           TEXT PRIMARY KEY NOT NULL,
+                    title        TEXT NOT NULL,
+                    author       TEXT,
+                    coverPath    TEXT,
+                    duration     REAL,
+                    status       TEXT NOT NULL CHECK(
+                                     status IN (
+                                         'queued',
+                                         'downloading',
+                                         'paused',
+                                         'completed',
+                                         'failed'
+                                     )
+                                 ),
+                    filesJSON    TEXT NOT NULL,
+                    chaptersJSON TEXT NOT NULL,
+                    error        TEXT,
+                    createdAt    INTEGER NOT NULL,
+                    updatedAt    INTEGER NOT NULL
+                )
+                """)
+        }
+
         return m
     }()
 }
@@ -446,6 +480,52 @@ extension NavidromeStore {
                 .filter(Column("bookId") == bookId)
                 .order(Column("start"))
                 .fetchAll(db)
+        }
+    }
+
+    // MARK: - Audiobook download CRUD (v5 schema — E3 / mkj.1)
+
+    /// Upserts a book download record (INSERT OR REPLACE by book id).
+    public func upsert(audiobookDownload record: AudiobookDownloadRecord) throws {
+        try writer.write { db in try record.save(db) }
+    }
+
+    /// Fetches the download record for a book, or `nil` if not downloaded.
+    public func audiobookDownload(forBook bookId: String) throws -> AudiobookDownloadRecord? {
+        try writer.read { db in
+            try AudiobookDownloadRecord.fetchOne(db, key: bookId)
+        }
+    }
+
+    /// All book download records, newest first.
+    public func allAudiobookDownloads() throws -> [AudiobookDownloadRecord] {
+        try writer.read { db in
+            try AudiobookDownloadRecord
+                .order(Column("createdAt").desc)
+                .fetchAll(db)
+        }
+    }
+
+    /// Book download records in the given status.
+    public func audiobookDownloads(withStatus status: DownloadStatus) throws -> [AudiobookDownloadRecord] {
+        try writer.read { db in
+            try AudiobookDownloadRecord
+                .filter(Column("status") == status.rawValue)
+                .fetchAll(db)
+        }
+    }
+
+    /// Deletes a book download row and every on-disk file in its manifest.
+    public func deleteAudiobookDownload(forBook bookId: String) throws {
+        if let record = try audiobookDownload(forBook: bookId) {
+            for file in record.files {
+                if let path = file.localPath {
+                    try? FileManager.default.removeItem(atPath: path)
+                }
+            }
+        }
+        try writer.write { db in
+            _ = try AudiobookDownloadRecord.deleteOne(db, key: bookId)
         }
     }
 

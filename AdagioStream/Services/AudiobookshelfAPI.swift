@@ -71,6 +71,14 @@ public struct AudiobookshelfAPI {
         try await get("/api/items/\(id)", query: ["expanded": "1", "include": "progress"])
     }
 
+    /// `GET /api/me` — the current user, including `permissions.download`. Used
+    /// to gate the download affordance (E3 / mkj.1). The server still 403s the
+    /// file endpoint if the permission is missing, so this is a UI hint only.
+    public func canDownload() async -> Bool {
+        guard let me: ABSUserDTO = try? await get("/api/me") else { return false }
+        return me.permissions?.download ?? false
+    }
+
     // MARK: - Media URLs (token-in-query — no headers possible)
 
     /// Cover art URL: `GET /api/items/{id}/cover?width=&format=&token=`.
@@ -90,6 +98,55 @@ public struct AudiobookshelfAPI {
     public func streamURL(contentPath: String) async -> URL? {
         guard let token = await auth.currentAccessToken() else { return nil }
         return buildURL(contentPath, query: ["token": token])
+    }
+
+    // MARK: - Per-file download (E3 / mkj.1)
+
+    /// URL for `GET /api/items/{id}/file/{ino}/download`. The access token goes
+    /// on the `Authorization: Bearer` header (set by the download task), not the
+    /// query — short-lived JWTs shouldn't leak into URLs/logs.
+    public func fileDownloadURL(itemID: String, ino: String) -> URL? {
+        buildURL("/api/items/\(itemID)/file/\(ino)/download", query: [:])
+    }
+
+    /// Current access token for authorizing a background download task. Returns
+    /// `nil` before first login; routes through the auth actor so a live token
+    /// (post-refresh) is used.
+    public func currentAccessToken() async -> String? {
+        await auth.currentAccessToken()
+    }
+
+    // MARK: - Batched progress sync (E3 / mkj.2)
+
+    /// `PATCH /api/me/progress/batch/update` — flushes queued offline progress in
+    /// one request. Body is a BARE JSON array of per-book progress objects
+    /// (confirmed against the ABS `MeController.batchUpdateMediaProgress`
+    /// source). Returns the HTTP status; does not throw on non-2xx so the caller
+    /// can decide whether to keep the queue.
+    @discardableResult
+    public func batchUpdateProgress(_ updates: [ABSProgressUpdate]) async throws -> Int {
+        guard !updates.isEmpty else { return 200 }
+        let payload = updates.map { u -> [String: Any] in
+            [
+                "libraryItemId": u.libraryItemId,
+                "currentTime": u.currentTime,
+                "duration": u.duration,
+                "progress": u.progress,
+                "isFinished": u.isFinished,
+                "lastUpdate": u.lastUpdate,
+            ]
+        }
+        guard let url = buildURL("/api/me/progress/batch/update", query: [:]) else { throw APIError.invalidURL }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        do {
+            let (_, http) = try await auth.authorizedData(for: req)
+            return http.statusCode
+        } catch let authError as AudiobookshelfAuth.AuthError {
+            throw APIError.auth(authError)
+        }
     }
 
     // MARK: - Playback session (E2 / yu8.2, yu8.3)
