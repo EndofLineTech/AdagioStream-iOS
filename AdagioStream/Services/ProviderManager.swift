@@ -155,7 +155,12 @@ public final class ProviderManager: ObservableObject {
                     host: host, username: username, password: password,
                     providerID: provider.id.uuidString
                 )
-                _ = try await auth.login()
+                // OIDC/SSO providers have no password — their tokens are already
+                // seeded in the Keychain by the sign-in flow. Skip login() and
+                // validate directly; authorizedData uses the seeded tokens.
+                if !provider.type.isAudiobookshelfOIDC {
+                    _ = try await auth.login()
+                }
                 let api = AudiobookshelfAPI(host: host, auth: auth)
                 _ = try await api.bookLibraries()
                 DebugLogger.shared.log(

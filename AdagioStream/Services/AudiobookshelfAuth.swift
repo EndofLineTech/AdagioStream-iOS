@@ -216,6 +216,14 @@ public actor AudiobookshelfAuth {
     /// art) where headers can't be set. `nil` until first login.
     public func currentAccessToken() -> String? { tokens?.accessToken }
 
+    /// Seeds a token pair obtained out-of-band (the OpenID/SSO flow) into the
+    /// same Keychain storage a password login uses. After this, refresh/rotation
+    /// and 401-retry work identically — an OIDC provider never calls `login()`
+    /// (it has no password). See `AudiobookshelfOIDC`.
+    public func seedTokens(_ pair: Tokens) {
+        persist(pair)
+    }
+
     // MARK: - Refresh (rotates the refresh token)
 
     /// Refreshes at most once for a wave of concurrent 401s. If someone already

@@ -34,6 +34,13 @@ struct AddProviderView: View {
     @State private var absUsername = ""
     @State private var absPassword = ""
 
+    // Audiobookshelf OpenID/SSO discovery (wv4.3)
+    @State private var absDiscovery: AudiobookshelfOIDC.Discovery?
+    @State private var isDiscovering = false
+    @State private var isSigningIn = false
+    /// Retains the ASWebAuthenticationSession driver for the flow's lifetime.
+    @State private var oidcSession = AudiobookshelfOIDCSession()
+
     @State private var error: String?
     @State private var isSaving = false
 
@@ -186,6 +193,7 @@ struct AddProviderView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Audiobookshelf server URL")
+                            .onChange(of: absHost) { discoverSSO() }
                         TextField("Username", text: $absUsername)
                             .textContentType(.init(rawValue: ""))
                             .autocorrectionDisabled()
@@ -197,6 +205,27 @@ struct AddProviderView: View {
                         Text("Audiobookshelf Settings")
                     } footer: {
                         Text("Include http:// or https://, e.g. https://abs.example.com. Requires server 2.26.0 or newer.")
+                    }
+
+                    if !isEditing, let discovery = absDiscovery, discovery.supportsOpenID {
+                        Section {
+                            Button {
+                                signInWithSSO()
+                            } label: {
+                                HStack {
+                                    if isSigningIn {
+                                        ProgressView().controlSize(.small)
+                                    } else {
+                                        Image(systemName: "person.badge.key")
+                                    }
+                                    Text(discovery.buttonText)
+                                }
+                            }
+                            .disabled(isSigningIn || name.isEmpty || absSSOHost == nil)
+                            .accessibilityLabel("Sign in with single sign-on")
+                        } footer: {
+                            Text("Enter a name above, then sign in through your identity provider. No password is stored.")
+                        }
                     }
 
                     if isAudiobookshelfHTTP {
@@ -261,6 +290,74 @@ struct AddProviderView: View {
               let url = URL(string: absHost),
               let scheme = url.scheme?.lowercased() else { return false }
         return scheme == "http"
+    }
+
+    /// Valid http/https ABS host, or nil. Used for SSO discovery + sign-in.
+    private var absSSOHost: URL? {
+        guard let url = URL(string: absHost),
+              let scheme = url.scheme?.lowercased(),
+              Self.allowedSchemes.contains(scheme) else { return nil }
+        return url
+    }
+
+    // MARK: - Audiobookshelf OpenID / SSO (wv4.3)
+
+    /// Debounced `GET /status` discovery. Clears any prior result, waits for the
+    /// user to stop typing, then shows the SSO button only if the server offers
+    /// openid. Discovery failures are silent — the user can still use password.
+    private func discoverSSO() {
+        absDiscovery = nil
+        guard formProviderType == .audiobookshelf, let host = absSSOHost else { return }
+        isDiscovering = true
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Bail if the host changed while we waited.
+            guard absSSOHost == host else { return }
+            let result = try? await AudiobookshelfOIDC.discover(host: host)
+            await MainActor.run {
+                isDiscovering = false
+                if absSSOHost == host { absDiscovery = result }
+            }
+        }
+    }
+
+    /// Runs the OpenID flow, seeds the returned tokens into the Keychain, then
+    /// creates a token-only ABS provider (empty username/password). The provider
+    /// validation reuses the seeded tokens (no password login).
+    private func signInWithSSO() {
+        guard let host = absSSOHost, !name.isEmpty else { return }
+        error = nil
+        isSigningIn = true
+        Task {
+            do {
+                let tokens = try await oidcSession.signIn(host: host)
+                let provider = Provider(
+                    name: name,
+                    type: .audiobookshelf(host: host, username: "", password: ""),
+                    stripStreamIDs: false
+                )
+                // Seed BEFORE addProvider so its validation uses these tokens.
+                let auth = AudiobookshelfAuth(
+                    host: host, username: "", password: "",
+                    providerID: provider.id.uuidString
+                )
+                await auth.seedTokens(tokens)
+                await providerManager.addProvider(provider)
+                await MainActor.run {
+                    isSigningIn = false
+                    if let loadError = providerManager.error {
+                        error = loadError
+                    } else {
+                        dismiss()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isSigningIn = false
+                    self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
     }
 
     private var isValid: Bool {

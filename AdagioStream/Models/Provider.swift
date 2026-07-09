@@ -43,3 +43,17 @@ public struct Provider: Codable, Identifiable {
         case audiobookshelf(host: URL, username: String, password: String)
     }
 }
+
+public extension Provider.ProviderType {
+    /// An Audiobookshelf provider authenticated via OpenID/SSO rather than a
+    /// password. Represented as an ABS case with an empty username+password —
+    /// the access/refresh tokens live in the Keychain (seeded by the OIDC flow),
+    /// so no credentials are stored. Lets validation skip the password `login()`
+    /// path and rely on the pre-seeded tokens instead.
+    var isAudiobookshelfOIDC: Bool {
+        if case .audiobookshelf(_, let username, let password) = self {
+            return username.isEmpty && password.isEmpty
+        }
+        return false
+    }
+}
