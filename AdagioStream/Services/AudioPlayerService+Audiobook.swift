@@ -18,6 +18,10 @@ final class AudiobookSession {
     let timeline: AudiobookTimeline
     let api: AudiobookshelfAPI
 
+    /// Offline session (E3 / mkj.2): files play from local `file://` URLs and
+    /// progress is queued via `ABSProgressSyncQueue` instead of `/session/sync`.
+    let isOffline: Bool
+
     /// The file currently loaded into VLC.
     var currentFile: AudiobookTimeline.File
 
@@ -30,11 +34,12 @@ final class AudiobookSession {
     /// Wall-clock of the last successful sync, to throttle to ~20s.
     var lastSyncDate: Date
 
-    init(book: Audiobook, sessionID: String, timeline: AudiobookTimeline, api: AudiobookshelfAPI, startFile: AudiobookTimeline.File, startGlobalTime: Double) {
+    init(book: Audiobook, sessionID: String, timeline: AudiobookTimeline, api: AudiobookshelfAPI, startFile: AudiobookTimeline.File, startGlobalTime: Double, isOffline: Bool = false) {
         self.book = book
         self.sessionID = sessionID
         self.timeline = timeline
         self.api = api
+        self.isOffline = isOffline
         self.currentFile = startFile
         self.lastSyncedGlobalTime = startGlobalTime
         self.lastSyncDate = Date()
@@ -72,8 +77,27 @@ extension AudioPlayerService {
 
     /// Opens a playback session for `book` and starts playing at the server's
     /// resume position (or `startGlobalTime` if given). Reuses the VLC pipeline.
+    ///
+    /// Offline routing (E3 / mkj.2): if the book is fully downloaded AND either
+    /// offline mode is on or the server session can't be opened, play from local
+    /// files instead. Respects the existing `offlineMode` app setting.
     public func playAudiobook(_ book: Audiobook, via api: AudiobookshelfAPI, startGlobalTime: Double? = nil) {
         log.log("playAudiobook: \"\(book.title)\" id=\(book.id)", category: .player)
+
+        let offlineMode = settingsViewModel?.settings.offlineMode ?? false
+        let downloaded = DownloadManager.shared.downloadedBook(itemID: book.id)
+
+        // Offline mode + a local copy → play offline directly, no network.
+        if offlineMode, let downloaded {
+            playDownloadedAudiobook(book, download: downloaded, via: api, startGlobalTime: startGlobalTime)
+            return
+        }
+        // Offline mode but no local copy → surface a clear error.
+        if offlineMode {
+            self.error = "This audiobook isn't downloaded for offline listening."
+            return
+        }
+
         Task { @MainActor in
             do {
                 let session = try await api.openPlaybackSession(itemID: book.id, deviceID: AudioPlayerService.absDeviceID)
@@ -109,10 +133,52 @@ extension AudioPlayerService {
                 self.loadAudiobookArtwork(itemID: book.id, api: api)
                 self.loadAudiobookFile(located.file, fileOffset: located.fileOffset)
             } catch {
+                // Server unreachable but we have a local copy → play offline.
+                if let downloaded {
+                    self.log.log("playAudiobook: server failed, falling back to offline", category: .player)
+                    self.playDownloadedAudiobook(book, download: downloaded, via: api, startGlobalTime: startGlobalTime)
+                    return
+                }
                 self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 self.log.log("playAudiobook failed: \(error)", category: .player)
             }
         }
+    }
+
+    /// Plays a fully-downloaded book from local files. Rebuilds the SAME
+    /// `AudiobookTimeline` as streaming from the persisted manifest (each file's
+    /// global `startOffset`), so chaining, seeking, and chapter math are
+    /// identical — only the URLs are `file://` and progress is queued offline.
+    public func playDownloadedAudiobook(_ book: Audiobook, download: AudiobookDownloadRecord, via api: AudiobookshelfAPI, startGlobalTime: Double? = nil) {
+        let timeline = download.timeline()
+        guard !timeline.files.isEmpty else {
+            self.error = "This download is incomplete."
+            return
+        }
+        let resume = AudioPlayerService.resumePosition(
+            override: startGlobalTime,
+            sessionCurrentTime: nil,
+            bookCurrentTime: book.currentTime
+        )
+        guard let located = timeline.locate(global: resume) else { return }
+
+        let abs = AudiobookSession(
+            book: book,
+            sessionID: "",            // no server session offline
+            timeline: timeline,
+            api: api,
+            startFile: located.file,
+            startGlobalTime: resume,
+            isOffline: true
+        )
+        self.audiobookSession = abs
+        self.currentAudiobook = book
+        self.audiobookDuration = timeline.totalDuration
+        self.audiobookGlobalTime = resume
+        self.currentChapter = timeline.chapter(at: resume)
+        self.currentTrackArtwork = nil
+        self.nowPlayingArtworkURL = nil
+        loadAudiobookFile(located.file, fileOffset: located.fileOffset)
     }
 
     /// Loads one file into VLC seeked to `fileOffset` seconds. Mirrors the
@@ -120,6 +186,12 @@ extension AudioPlayerService {
     /// / probe / interruption-fallback machinery.
     internal func loadAudiobookFile(_ file: AudiobookTimeline.File, fileOffset: Double) {
         guard let session = audiobookSession else { return }
+        // Offline: contentPath is an absolute local file path → play it directly.
+        if session.isOffline {
+            session.currentFile = file
+            startAudiobookStream(url: URL(fileURLWithPath: file.contentPath), seekTo: fileOffset)
+            return
+        }
         Task { @MainActor in
             guard let url = await session.api.streamURL(contentPath: file.contentPath) else {
                 self.error = "Could not build audiobook stream URL."
@@ -284,6 +356,20 @@ extension AudioPlayerService {
         let sessionID = session.sessionID
         let api = session.api
         let book = session.book
+
+        // Offline session → queue the progress for a batched flush on reconnect.
+        if session.isOffline {
+            let update = ABSProgressUpdate(
+                libraryItemId: book.id,
+                currentTime: global,
+                duration: duration,
+                isFinished: duration > 0 && global >= duration - 1.0
+            )
+            Task { await ABSProgressSyncQueue.shared.enqueue(update) }
+            _ = force
+            return
+        }
+
         Task { @MainActor in
             do {
                 let status = try await api.syncSession(
@@ -336,9 +422,11 @@ extension AudioPlayerService {
     public func stopAudiobook() {
         guard let session = audiobookSession else { return }
         syncAudiobookProgress(force: true)
-        let sessionID = session.sessionID
-        let api = session.api
-        Task { await api.closeSession(sessionID: sessionID) }
+        if !session.isOffline {
+            let sessionID = session.sessionID
+            let api = session.api
+            Task { await api.closeSession(sessionID: sessionID) }
+        }
         audiobookSession = nil
         currentAudiobook = nil
         audiobookDuration = nil
