@@ -34,6 +34,23 @@ struct DownloadsView: View {
         downloadManager.downloads.filter { $0.status == .completed }
     }
 
+    // MARK: - Audiobook / podcast downloads (E4 / 6b5.2)
+    //
+    // `audiobookDownloads` (GRDB `audiobook_downloads` table) holds BOTH books
+    // and podcast episodes — an episode's id is namespaced
+    // "ep#<showId>#<episodeId>" (`AudiobookDownloadRecord.isEpisodeDownload`),
+    // so splitting on that flag distinguishes the two without a second table.
+    // Purely additive to this view: the music-track section/state above is
+    // completely untouched.
+
+    private var completedBookDownloads: [AudiobookDownloadRecord] {
+        downloadManager.audiobookDownloads.filter { $0.status == .completed && !$0.isEpisodeDownload }
+    }
+
+    private var completedEpisodeDownloads: [AudiobookDownloadRecord] {
+        downloadManager.audiobookDownloads.filter { $0.status == .completed && $0.isEpisodeDownload }
+    }
+
     var body: some View {
         List {
             // Offline mode toggle (l31.3)
@@ -81,6 +98,35 @@ struct DownloadsView: View {
                 }
             } header: {
                 Text("Downloaded Tracks")
+            }
+
+            // Audiobook downloads (E4 / 6b5.2) — additive; music section above unchanged.
+            if !completedBookDownloads.isEmpty {
+                Section {
+                    ForEach(completedBookDownloads, id: \.id) { record in
+                        DownloadedAudiobookRow(record: record) {
+                            downloadManager.deleteBookDownload(itemID: record.id)
+                        }
+                    }
+                } header: {
+                    Text("Audiobooks")
+                }
+            }
+
+            // Podcast episode downloads (E4 / 6b5.2) — shows show title + episode
+            // title so an episode reads distinctly from an audiobook row.
+            if !completedEpisodeDownloads.isEmpty {
+                Section {
+                    ForEach(completedEpisodeDownloads, id: \.id) { record in
+                        DownloadedEpisodeRow(record: record) {
+                            if let ids = AudiobookDownloadRecord.parseEpisodeRecordID(record.id) {
+                                downloadManager.deleteEpisodeDownload(showID: ids.showID, episodeID: ids.episodeID)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Podcasts")
+                }
             }
 
             // Clear all
@@ -258,6 +304,76 @@ private struct DownloadedTrackRow: View {
         .accessibilityHint("Tap to play")
         .accessibilityAction(named: "Play") { onPlay() }
         .accessibilityAction(named: "Delete") { onDelete() }
+    }
+}
+
+// MARK: - Downloaded audiobook / episode rows (E4 / 6b5.2)
+
+/// One downloaded audiobook. No play action here (tapping into
+/// AudiobookLibraryView already covers playback) — this screen is
+/// manage/delete only, matching the storage-management scope of this view.
+private struct DownloadedAudiobookRow: View {
+    let record: AudiobookDownloadRecord
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "book.closed.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.title).font(.body).foregroundStyle(.primary).lineLimit(1)
+                if let author = record.author, !author.isEmpty {
+                    Text(author).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            Spacer()
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundStyle(.red)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete \(record.title)")
+            .accessibilityHint("Removes this audiobook from your device")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(record.title), downloaded audiobook")
+        .accessibilityAction(named: "Delete", onDelete)
+    }
+}
+
+/// One downloaded podcast episode — shows the SHOW title (in `record.author`,
+/// set from `AudiobookDownloadRecord.forEpisode`'s `showTitle` param) above the
+/// episode title, so it reads distinctly from an audiobook row at a glance.
+private struct DownloadedEpisodeRow: View {
+    let record: AudiobookDownloadRecord
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mic.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                if let showTitle = record.author, !showTitle.isEmpty {
+                    Text(showTitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text(record.title).font(.body).foregroundStyle(.primary).lineLimit(2)
+            }
+            Spacer()
+            Button(role: .destructive, action: onDelete) {
+                Image(systemName: "trash")
+                    .foregroundStyle(.red)
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete \(record.title)")
+            .accessibilityHint("Removes this episode from your device")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(record.title), downloaded episode\(record.author.map { " of \($0)" } ?? "")")
+        .accessibilityAction(named: "Delete", onDelete)
     }
 }
 
