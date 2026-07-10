@@ -160,6 +160,14 @@ extension AudiobookDownloadRecord {
         Self.parseEpisodeRecordID(id) != nil
     }
 
+    /// The SERVER library-item id for a given download-record id — the id the
+    /// ABS file-download endpoint (`/api/items/<id>/file/<ino>/download`) expects.
+    /// For an episode record `ep#<showID>#<episodeID>` the server item is the
+    /// SHOW (`showID`); for a book the record id IS the server item id. Pure.
+    public static func serverItemID(forRecordID recordID: String) -> String {
+        parseEpisodeRecordID(recordID)?.showID ?? recordID
+    }
+
     /// Maps one podcast episode into a 1-file download manifest: index 0,
     /// startOffset 0, empty chapters — the whole episode is a single audio file
     /// with no internal chapter structure (E2 scope), so `timeline()` rebuilds

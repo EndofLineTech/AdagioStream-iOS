@@ -25,11 +25,55 @@ final class AudiobookDownloadTests: XCTestCase {
     }
 
     func testBookIDWithHashInInoStillParses() {
-        // ino has no '#', but maxSplits keeps a defensive tail intact.
+        // Components are percent-encoded, so a '#' inside one round-trips.
         let desc = DownloadManager.bookTaskDescription(bookID: "book1", ino: "ino#weird")
         let parsed = DownloadManager.parseBookTaskDescription(desc)
         XCTAssertEqual(parsed?.bookID, "book1")
         XCTAssertEqual(parsed?.ino, "ino#weird")
+    }
+
+    // A plain book id + numeric ino encode to themselves — book task
+    // descriptions stay byte-identical, so in-flight/resumed book tasks from an
+    // older build still parse (no migration).
+    func testPlainBookTaskDescriptionIsUnchangedOnTheWire() {
+        XCTAssertEqual(
+            DownloadManager.bookTaskDescription(bookID: "li_abc", ino: "649644248522215260"),
+            "abs#li_abc#649644248522215260"
+        )
+    }
+
+    // BUG 2 regression: an episode's composite record id contains '#', which the
+    // old maxSplits(1) scheme could not round-trip. Percent-encoding fixes it.
+    func testEpisodeTaskDescriptionRoundTrips() {
+        let bookID = AudiobookDownloadRecord.episodeRecordID(showID: "show-1", episodeID: "ep-1")
+        let desc = DownloadManager.bookTaskDescription(bookID: bookID, ino: "12345")
+        let parsed = DownloadManager.parseBookTaskDescription(desc)
+        XCTAssertEqual(parsed?.bookID, bookID, "the ep#<show>#<episode> id must survive the round-trip intact")
+        XCTAssertEqual(parsed?.ino, "12345")
+    }
+
+    // BUG 1 regression: the file-download URL for an episode must hit the SHOW's
+    // server item id, never the "ep#<show>#<episode>" DB record id (which 404s —
+    // it isn't a real ABS library item).
+    func testEpisodeFileDownloadURLUsesShowIDNotRecordID() {
+        let recordID = AudiobookDownloadRecord.episodeRecordID(showID: "show-1", episodeID: "ep-1")
+        let serverItemID = AudiobookDownloadRecord.serverItemID(forRecordID: recordID)
+        XCTAssertEqual(serverItemID, "show-1")
+
+        let api = AudiobookshelfAPI(
+            host: URL(string: "http://localhost")!,
+            auth: AudiobookshelfAuth(host: URL(string: "http://localhost")!, username: "u", password: "p", providerID: "pid")
+        )
+        let url = api.fileDownloadURL(itemID: serverItemID, ino: "12345")
+        let urlString = url?.absoluteString ?? ""
+        XCTAssertTrue(urlString.contains("/api/items/show-1/file/12345/download"), "got \(urlString)")
+        XCTAssertFalse(urlString.contains("ep#"), "the server URL must never contain the ep# composite record id")
+    }
+
+    // A book's server item id IS its record id — no episode indirection.
+    func testBookFileDownloadURLUsesRecordIDDirectly() {
+        let serverItemID = AudiobookDownloadRecord.serverItemID(forRecordID: "li_abc")
+        XCTAssertEqual(serverItemID, "li_abc")
     }
 
     // startOffset = cumulative sum of preceding file durations (mirrors ABS).
@@ -259,6 +303,22 @@ final class PodcastEpisodeDownloadTests: XCTestCase {
         XCTAssertEqual(located?.file.contentPath, "/x/ep-1.audio")
         XCTAssertNil(tl.chapter(at: 100), "episodes carry no chapters")
     }
+
+    // MARK: Regression — server id vs record id (the two E4 download bugs)
+
+    // BUG 1: the file-download URL must be built from the SERVER item id (the
+    // SHOW id), never the "ep#..." record id, or the request 404s.
+    func testServerItemIDForEpisodeIsTheShowNotTheRecordID() {
+        let recordID = AudiobookDownloadRecord.episodeRecordID(showID: "li_show", episodeID: "ep-7")
+        XCTAssertEqual(AudiobookDownloadRecord.serverItemID(forRecordID: recordID), "li_show")
+    }
+
+    func testServerItemIDForBookIsTheRecordIDUnchanged() {
+        XCTAssertEqual(AudiobookDownloadRecord.serverItemID(forRecordID: "li_book"), "li_book")
+    }
+    // The URL-build + task-description round-trip regressions live in
+    // AudiobookDownloadTests (testEpisodeFileDownloadURLUsesShowIDNotRecordID /
+    // testEpisodeTaskDescriptionRoundTrips) next to the existing book cases.
 }
 
 // MARK: - E4 / 6b5.3: bulk "latest N" episode selection

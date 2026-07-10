@@ -415,8 +415,14 @@ public final class DownloadManager: NSObject, ObservableObject {
     /// taskDescription marker for a book file: `abs#<bookId>#<ino>`. Music tasks
     /// use the bare trackID, so the `abs#` prefix cleanly disambiguates the two
     /// in the shared URLSession delegate.
+    ///
+    /// The `bookId` and `ino` components are percent-encoded so a `#` inside them
+    /// (an EPISODE record id is `ep#<show>#<episode>`) doesn't collide with the
+    /// `#` field separator. A book's plain `li_...` id and a numeric `ino` contain
+    /// no reserved characters, so they encode to themselves — book task
+    /// descriptions stay byte-identical (no in-flight/resumed-task migration).
     nonisolated static func bookTaskDescription(bookID: String, ino: String) -> String {
-        "abs#\(bookID)#\(ino)"
+        "abs#\(encodeTaskComponent(bookID))#\(encodeTaskComponent(ino))"
     }
 
     /// Parses a book-file taskDescription back into `(bookID, ino)`, or `nil`
@@ -425,7 +431,21 @@ public final class DownloadManager: NSObject, ObservableObject {
         guard desc.hasPrefix("abs#") else { return nil }
         let parts = desc.dropFirst(4).split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
         guard parts.count == 2 else { return nil }
-        return (String(parts[0]), String(parts[1]))
+        return (decodeTaskComponent(String(parts[0])), decodeTaskComponent(String(parts[1])))
+    }
+
+    /// Percent-encodes a task-description component so `#` (the field separator)
+    /// survives the round-trip. Reserved-char-free ids encode to themselves.
+    private static let taskComponentAllowed: CharacterSet = {
+        var set = CharacterSet.alphanumerics
+        set.insert(charactersIn: "_-.")   // typical id chars, kept literal
+        return set
+    }()
+    nonisolated private static func encodeTaskComponent(_ s: String) -> String {
+        s.addingPercentEncoding(withAllowedCharacters: taskComponentAllowed) ?? s
+    }
+    nonisolated private static func decodeTaskComponent(_ s: String) -> String {
+        s.removingPercentEncoding ?? s
     }
 
     /// On-disk path for one book file. Books live under `Downloads/abs/<bookId>/`
@@ -498,8 +518,13 @@ public final class DownloadManager: NSObject, ObservableObject {
 
     /// Enqueues one book file's background download task with a Bearer token.
     /// Shared by the initial download and the 401 re-auth retry (ymf.5).
+    ///
+    /// `bookID` is the DB record id (which is `ep#<show>#<episode>` for an
+    /// episode); the file-download URL must use the SERVER item id — the SHOW id
+    /// for an episode, the record id itself for a book — via `serverItemID`.
     private func enqueueBookFileTask(bookID: String, ino: String, token: String?, api: AudiobookshelfAPI) {
-        guard let url = api.fileDownloadURL(itemID: bookID, ino: ino) else { return }
+        let serverItemID = AudiobookDownloadRecord.serverItemID(forRecordID: bookID)
+        guard let url = api.fileDownloadURL(itemID: serverItemID, ino: ino) else { return }
         var request = URLRequest(url: url)
         request.timeoutInterval = 300
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
