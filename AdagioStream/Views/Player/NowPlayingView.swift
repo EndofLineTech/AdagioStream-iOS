@@ -160,6 +160,7 @@ struct NowPlayingView: View {
                 // Playback controls
                 if isAudiobookMode {
                     audiobookTransportControls
+                    playbackSpeedMenu
                 } else if isLibraryMode {
                     libraryTransportControls
                 } else {
@@ -524,6 +525,41 @@ struct NowPlayingView: View {
         }
         .foregroundStyle(.primary)
         .glassContainer()
+    }
+
+    // MARK: - Playback speed (E2 / 72i.3 — supersedes bead alr; audiobooks + podcasts)
+
+    /// Speed menu, Apple-Podcasts style: a button showing the current rate
+    /// that opens a menu of step values. Shown for both audiobook and podcast
+    /// episode playback — both populate `currentAudiobook`, so `isAudiobookMode`
+    /// already covers the podcast case with no extra branch needed.
+    @ViewBuilder
+    private var playbackSpeedMenu: some View {
+        Menu {
+            ForEach(AudioPlayerService.playbackRateSteps, id: \.self) { step in
+                Button {
+                    audioPlayer.setPlaybackRate(step)
+                } label: {
+                    if step == AudioPlayerService.playbackRate {
+                        Label(speedLabel(step), systemImage: "checkmark")
+                    } else {
+                        Text(speedLabel(step))
+                    }
+                }
+            }
+        } label: {
+            Text(speedLabel(AudioPlayerService.playbackRate))
+                .font(.subheadline.weight(.semibold))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color(.secondarySystemBackground)))
+        }
+        .accessibilityLabel("Playback speed")
+        .accessibilityValue(speedLabel(AudioPlayerService.playbackRate))
+    }
+
+    private func speedLabel(_ rate: Float) -> String {
+        rate == rate.rounded() ? "\(Int(rate))x" : String(format: "%.2gx", rate)
     }
 
     private var audiobookPlaceholder: some View {

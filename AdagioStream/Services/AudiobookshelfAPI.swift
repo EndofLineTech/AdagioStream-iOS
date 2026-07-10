@@ -184,10 +184,13 @@ public struct AudiobookshelfAPI {
         "audio/ogg", "audio/opus",
     ]
 
-    /// `POST /api/items/{id}/play` — opens a playback session. The response
-    /// carries the book-global resume `currentTime`, the direct-play
-    /// `audioTracks[]`, chapters, and the session id used for sync/close.
-    public func openPlaybackSession(itemID: String, deviceID: String) async throws -> ABSPlaybackSessionDTO {
+    /// `POST /api/items/{id}/play` (books) or `POST /api/items/{id}/play/{episodeId}`
+    /// (podcast episodes, E2 / 72i.1) — opens a playback session. Routes through
+    /// `ABSEpisodeProgressKey.playPath` so the episode-vs-book path difference
+    /// lives in the one adapter, not duplicated here. The response carries the
+    /// global resume `currentTime`, the direct-play `audioTracks[]`, chapters,
+    /// and the session id used for sync/close.
+    public func openPlaybackSession(itemID: String, episodeID: String? = nil, deviceID: String) async throws -> ABSPlaybackSessionDTO {
         let body: [String: Any] = [
             "deviceInfo": [
                 "deviceId": deviceID,
@@ -199,7 +202,8 @@ public struct AudiobookshelfAPI {
             "forceDirectPlay": false,
             "forceTranscode": false,
         ]
-        return try await post("/api/items/\(itemID)/play", body: body)
+        let path = ABSEpisodeProgressKey(libraryItemId: itemID, episodeId: episodeID).playPath
+        return try await post(path, body: body)
     }
 
     /// `POST /api/session/{id}/sync` — reports progress. `currentTime` is

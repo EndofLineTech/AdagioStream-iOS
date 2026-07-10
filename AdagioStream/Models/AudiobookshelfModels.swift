@@ -592,3 +592,59 @@ public struct AudiobookTimeline: Equatable {
         return chapters.last { $0.start < current.start }?.start ?? current.start
     }
 }
+
+// MARK: - Podcast whole-show auto-play (E2 / 72i.2)
+
+/// Which direction "next episode" advances through a show's episode list.
+///
+/// ABS returns `media.episodes[]` newest-first by server convention, so
+/// `.newestFirst` (the default) walks the list in server order; `.oldestFirst`
+/// walks it reversed. c2s.4 will add a user setting that drives this — the
+/// hookup point is the `order:` parameter on `PodcastPlaybackContext.nextEpisode`
+/// below, so wiring a setting in later is a one-line call-site change.
+public enum PodcastEpisodeOrder: String, Codable, CaseIterable {
+    case newestFirst
+    case oldestFirst
+}
+
+/// The show's episode list + a pointer to what's currently playing — enough
+/// state to answer "what plays after this episode ends" without re-fetching.
+/// Pure/value-type so auto-play selection is unit-testable without VLC or the
+/// network.
+public struct PodcastPlaybackContext: Equatable {
+    public let libraryItemId: String
+    public let showTitle: String?
+    /// Episodes in the server's native (newest-first) order.
+    public let episodes: [ABSEpisodeDTO]
+    public let order: PodcastEpisodeOrder
+
+    public init(libraryItemId: String, showTitle: String?, episodes: [ABSEpisodeDTO], order: PodcastEpisodeOrder = .newestFirst) {
+        self.libraryItemId = libraryItemId
+        self.showTitle = showTitle
+        self.episodes = episodes
+        self.order = order
+    }
+
+    public static func == (lhs: PodcastPlaybackContext, rhs: PodcastPlaybackContext) -> Bool {
+        lhs.libraryItemId == rhs.libraryItemId
+            && lhs.showTitle == rhs.showTitle
+            && lhs.order == rhs.order
+            && lhs.episodes.map(\.id) == rhs.episodes.map(\.id)
+    }
+
+    /// The episode that plays after `currentEpisodeId` ends, honoring `order`.
+    /// `nil` at the end of the show (or if `currentEpisodeId` isn't found).
+    ///
+    /// Pure — the whole seam a future newest/oldest setting needs to reach.
+    public static func nextEpisode(in episodes: [ABSEpisodeDTO], after currentEpisodeId: String, order: PodcastEpisodeOrder) -> ABSEpisodeDTO? {
+        let ordered = order == .newestFirst ? episodes : episodes.reversed()
+        guard let pos = ordered.firstIndex(where: { $0.id == currentEpisodeId }) else { return nil }
+        let nextPos = ordered.index(after: pos)
+        return nextPos < ordered.endIndex ? ordered[nextPos] : nil
+    }
+
+    /// Instance convenience over this context's own `episodes`/`order`.
+    public func nextEpisode(after currentEpisodeId: String) -> ABSEpisodeDTO? {
+        Self.nextEpisode(in: episodes, after: currentEpisodeId, order: order)
+    }
+}

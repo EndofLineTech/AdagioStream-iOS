@@ -11,12 +11,26 @@ import MediaPlayer
 // the pure global↔file math (unit-tested); this file wires it to VLC + the ABS
 // server (open session, sync progress, close).
 
-/// Mutable session state for one playing audiobook.
+/// Distinguishes a book session from a podcast-episode session sharing the
+/// SAME `AudiobookSession`/`AudiobookTimeline` machinery (E2 / 72i.1, 72i.2).
+/// A podcast episode is modeled as a one-file, no-chapter "book" — this is the
+/// one flag callers branch on instead of forking a parallel session type.
+enum AudiobookSessionKind: Equatable {
+    case book
+    /// `episodeId` is this episode's id within `context`; `context` carries the
+    /// show's episode list + order for whole-show auto-play (72i.2).
+    case podcast(episodeId: String, context: PodcastPlaybackContext)
+}
+
+/// Mutable session state for one playing audiobook (or podcast episode).
 final class AudiobookSession {
     let book: Audiobook
     let sessionID: String
     let timeline: AudiobookTimeline
     let api: AudiobookshelfAPI
+    /// book vs. podcast-episode (E2 / 72i.1) — drives end-of-media chaining and
+    /// progress keying without a parallel session type.
+    let kind: AudiobookSessionKind
 
     /// Offline session (E3 / mkj.2): files play from local `file://` URLs and
     /// progress is queued via `ABSProgressSyncQueue` instead of `/session/sync`.
@@ -34,7 +48,17 @@ final class AudiobookSession {
     /// Wall-clock of the last successful sync, to throttle to ~20s.
     var lastSyncDate: Date
 
-    init(book: Audiobook, sessionID: String, timeline: AudiobookTimeline, api: AudiobookshelfAPI, startFile: AudiobookTimeline.File, startGlobalTime: Double, isOffline: Bool = false) {
+    /// The `ABSEpisodeProgressKey` for this session: episode-scoped for a
+    /// podcast, item-scoped (nil episodeId) for a book. The one seam progress
+    /// sync and session-open route through (E2 / 72i.1).
+    var progressKey: ABSEpisodeProgressKey {
+        switch kind {
+        case .book: return ABSEpisodeProgressKey(libraryItemId: book.id)
+        case .podcast(let episodeId, _): return ABSEpisodeProgressKey(libraryItemId: book.id, episodeId: episodeId)
+        }
+    }
+
+    init(book: Audiobook, sessionID: String, timeline: AudiobookTimeline, api: AudiobookshelfAPI, startFile: AudiobookTimeline.File, startGlobalTime: Double, isOffline: Bool = false, kind: AudiobookSessionKind = .book) {
         self.book = book
         self.sessionID = sessionID
         self.timeline = timeline
@@ -43,6 +67,7 @@ final class AudiobookSession {
         self.currentFile = startFile
         self.lastSyncedGlobalTime = startGlobalTime
         self.lastSyncDate = Date()
+        self.kind = kind
     }
 }
 
@@ -56,6 +81,52 @@ extension AudioPlayerService {
         let fresh = UUID().uuidString
         UserDefaults.standard.set(fresh, forKey: key)
         return fresh
+    }
+
+    // MARK: - Playback speed (E2 / 72i.3 — supersedes bead alr)
+    //
+    // One global rate applied to both audiobooks and podcast episodes (VLC's
+    // `mediaPlayer.rate`). Persisted directly to UserDefaults — same
+    // lightweight pattern as `absDeviceID` above — rather than routing through
+    // `AppSettings`/`PersistenceService`/`SettingsViewModel`: it's a single
+    // scalar with no migration story, and this keeps it synchronously
+    // testable with no I/O mocking. Music/radio don't read this (only the
+    // audiobook/podcast VLC stream applies it), matching the task scope.
+
+    private static let playbackRateKey = "abs.playbackRate"
+    static let defaultPlaybackRate: Float = 1.0
+    static let playbackRateRange: ClosedRange<Float> = 0.5...3.0
+    /// Menu steps surfaced in NowPlayingView, Apple-Podcasts style.
+    static let playbackRateSteps: [Float] = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 3.0]
+
+    /// Clamps `rate` to `playbackRateRange`. Pure — unit-tested directly.
+    static func clampPlaybackRate(_ rate: Float) -> Float {
+        min(max(rate, playbackRateRange.lowerBound), playbackRateRange.upperBound)
+    }
+
+    /// The persisted playback rate, clamped on read so a bad/legacy stored
+    /// value can never escape the valid range. Defaults to 1.0x when unset.
+    public static var playbackRate: Float {
+        get {
+            let stored = UserDefaults.standard.object(forKey: playbackRateKey) as? Float ?? defaultPlaybackRate
+            return clampPlaybackRate(stored)
+        }
+        set { UserDefaults.standard.set(clampPlaybackRate(newValue), forKey: playbackRateKey) }
+    }
+
+    /// Sets the rate, persists it, and applies it to the live VLC player
+    /// immediately (if an audiobook/podcast stream is active).
+    public func setPlaybackRate(_ rate: Float) {
+        AudioPlayerService.playbackRate = rate
+        applyPlaybackRateToPlayer()
+    }
+
+    /// Re-applies the persisted rate to `mediaPlayer.rate`. Called after every
+    /// new audiobook/podcast file load so a chained file (chapter file, next
+    /// podcast episode, reopened session) keeps the user's chosen speed — VLC
+    /// resets `rate` to 1.0 whenever `media` is replaced.
+    internal func applyPlaybackRateToPlayer() {
+        mediaPlayer.rate = AudioPlayerService.playbackRate
     }
 
     // MARK: - Pure helpers (unit-tested)
@@ -203,6 +274,72 @@ extension AudioPlayerService {
         loadAudiobookFile(located.file, fileOffset: located.fileOffset)
     }
 
+    // MARK: - Podcast episode playback (E2 / 72i.1, 72i.2)
+
+    /// Plays one episode of `context.libraryItemId`'s show as a single-file,
+    /// no-chapter "book" — reuses the exact `AudiobookTimeline`/`AudiobookSession`
+    /// machinery `playAudiobook` uses, only the session-open path and progress
+    /// keying differ (both routed through `ABSEpisodeProgressKey`, see
+    /// `AudiobookSession.progressKey`). `context` carries the show's episode
+    /// list + order so `audiobookFileEnded()` can auto-play the next episode
+    /// (72i.2) when this one ends.
+    public func playPodcastEpisode(_ episode: ABSEpisodeDTO, via api: AudiobookshelfAPI, context: PodcastPlaybackContext, startGlobalTime: Double? = nil) {
+        log.log("playPodcastEpisode: \"\(episode.title ?? episode.id)\" show=\(context.showTitle ?? context.libraryItemId)", category: .player)
+
+        Task { @MainActor in
+            do {
+                let session = try await api.openPlaybackSession(itemID: context.libraryItemId, episodeID: episode.id, deviceID: AudioPlayerService.absDeviceID)
+                let timeline = AudiobookTimeline(session: session, bookId: context.libraryItemId)
+                guard !timeline.files.isEmpty else {
+                    self.error = "This episode has no playable audio."
+                    return
+                }
+                let resume = AudioPlayerService.resumePosition(
+                    override: startGlobalTime,
+                    sessionCurrentTime: session.currentTime,
+                    bookCurrentTime: episode.userMediaProgress?.currentTime ?? 0
+                )
+                guard let located = timeline.locate(global: resume) else { return }
+
+                // A display-only record — never written to the audiobooks DB table.
+                // `currentAudiobook` is what NowPlayingView reads for title/author/
+                // artwork, so an episode is represented the same way a book is.
+                let episodeRecord = Audiobook(
+                    id: episode.id,
+                    libraryItemId: context.libraryItemId,
+                    libraryId: "",
+                    title: episode.title ?? "Episode",
+                    author: context.showTitle,
+                    duration: timeline.totalDuration,
+                    currentTime: resume,
+                    updatedAt: Int(Date().timeIntervalSince1970)
+                )
+
+                let abs = AudiobookSession(
+                    book: episodeRecord,
+                    sessionID: session.id,
+                    timeline: timeline,
+                    api: api,
+                    startFile: located.file,
+                    startGlobalTime: resume,
+                    kind: .podcast(episodeId: episode.id, context: context)
+                )
+                self.audiobookSession = abs
+                self.currentAudiobook = episodeRecord
+                self.audiobookDuration = timeline.totalDuration
+                self.audiobookGlobalTime = resume
+                self.currentChapter = nil // podcast episodes carry no chapters (E2 scope)
+                self.currentTrackArtwork = nil
+                self.nowPlayingArtworkURL = await api.coverURL(itemID: context.libraryItemId)
+                self.loadAudiobookArtwork(itemID: context.libraryItemId, api: api)
+                self.loadAudiobookFile(located.file, fileOffset: located.fileOffset)
+            } catch {
+                self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                self.log.log("playPodcastEpisode failed: \(error)", category: .player)
+            }
+        }
+    }
+
     /// Loads one file into VLC seeked to `fileOffset` seconds. Mirrors the
     /// library-track VLC bootstrap; audiobooks never use the radio-only reconnect
     /// / probe / interruption-fallback machinery.
@@ -266,6 +403,7 @@ extension AudioPlayerService {
         listeningStartDate = Date()
 
         mediaPlayer.play()
+        applyPlaybackRateToPlayer()
         // Seek within the file once VLC actually reports it can seek (f0d). We
         // arm a pending seek here and apply it from `syncState` when VLC becomes
         // seekable, instead of a blind wall-clock delay. `applyPendingAudiobookSeek`
@@ -316,12 +454,31 @@ extension AudioPlayerService {
         }
     }
 
-    /// Called from the VLC `.ended` branch when an audiobook file finishes:
-    /// chain to the next file, or close the session at end-of-book.
+    /// Called from the VLC `.ended` branch when an audiobook file (or podcast
+    /// episode) finishes.
+    ///
+    /// Branches on `session.kind` (E2 / 72i.2): a podcast episode is always a
+    /// single file, so `timeline.fileAfter` is always nil for it — auto-play
+    /// to the next episode in the show is handled here, BEFORE the book
+    /// multi-file chaining path, so books are completely untouched. A book
+    /// keeps its exact pre-72i.2 chain-next-file-or-stop behavior.
     internal func audiobookFileEnded() {
         guard let session = audiobookSession else { return }
-        // Report the file boundary as progress before chaining.
+        // Report the file/episode boundary as progress before chaining.
         syncAudiobookProgress(force: true)
+
+        if case .podcast(let episodeId, let context) = session.kind {
+            let api = session.api
+            if let next = context.nextEpisode(after: episodeId) {
+                log.log("podcast: episode \(episodeId) ended — auto-playing next episode \(next.id)", category: .player)
+                playPodcastEpisode(next, via: api, context: context)
+            } else {
+                log.log("podcast: reached end of show \"\(context.showTitle ?? context.libraryItemId)\"", category: .player)
+                stopAudiobook()
+            }
+            return
+        }
+
         if let next = session.timeline.fileAfter(session.currentFile) {
             log.log("audiobook: file \(session.currentFile.index) ended — chaining to \(next.index)", category: .player)
             loadAudiobookFile(next, fileOffset: 0)
@@ -413,11 +570,13 @@ extension AudioPlayerService {
         let sessionID = session.sessionID
         let api = session.api
         let book = session.book
+        let kind = session.kind
 
         // Offline session → queue the progress for a batched flush on reconnect.
+        // Routes through `progressKey` (E2 / 72i.1) so a podcast episode's
+        // queued update carries `episodeId`; a book's is unchanged (nil).
         if session.isOffline {
-            let update = ABSProgressUpdate(
-                libraryItemId: book.id,
+            let update = session.progressKey.progressUpdate(
                 currentTime: global,
                 duration: duration,
                 isFinished: duration > 0 && global >= duration - 1.0
@@ -439,7 +598,7 @@ extension AudioPlayerService {
                     self.log.log("audiobook sync 404 — session expired, reopening", category: .player)
                     // Only reopen if we're still playing this same book.
                     if self.audiobookSession?.sessionID == sessionID {
-                        self.reopenAudiobookSession(book: book, api: api, atGlobal: global)
+                        self.reopenAudiobookSession(book: book, api: api, atGlobal: global, kind: kind)
                     }
                 }
             } catch {
@@ -451,15 +610,18 @@ extension AudioPlayerService {
 
     /// Reopens a fresh `/play` session (after a 404) keeping the current
     /// position, without tearing down VLC if the current file still matches.
-    private func reopenAudiobookSession(book: Audiobook, api: AudiobookshelfAPI, atGlobal global: Double) {
+    /// `kind` is threaded through so a podcast episode reopens via the
+    /// episode-scoped path (72i.1) and keeps its show context for auto-play.
+    private func reopenAudiobookSession(book: Audiobook, api: AudiobookshelfAPI, atGlobal global: Double, kind: AudiobookSessionKind) {
+        let episodeID: String? = { if case .podcast(let episodeId, _) = kind { return episodeId }; return nil }()
         Task { @MainActor in
-            guard let fresh = try? await api.openPlaybackSession(itemID: book.id, deviceID: AudioPlayerService.absDeviceID) else { return }
+            guard let fresh = try? await api.openPlaybackSession(itemID: book.id, episodeID: episodeID, deviceID: AudioPlayerService.absDeviceID) else { return }
             guard self.audiobookSession != nil else { return }
             let timeline = AudiobookTimeline(session: fresh, bookId: book.id)
             guard let located = timeline.locate(global: global) else { return }
             let abs = AudiobookSession(
                 book: book, sessionID: fresh.id, timeline: timeline, api: api,
-                startFile: located.file, startGlobalTime: global
+                startFile: located.file, startGlobalTime: global, kind: kind
             )
             self.audiobookSession = abs
             // VLC keeps playing the same file if it matches; only the session id
