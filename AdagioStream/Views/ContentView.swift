@@ -31,7 +31,7 @@ struct ContentView: View {
 
                 if audioPlayer.hasActivePlayback {
                     MiniPlayerView()
-                        .padding(.bottom, 49)
+                        .padding(.bottom, Self.tabBarContentHeight)
                 }
             }
             .glassContainer()
@@ -51,18 +51,7 @@ struct ContentView: View {
                 .opacity(splashOpacity)
                 .allowsHitTesting(splashOpacity > 0)
         }
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                withAnimation(.easeOut(duration: 0.8)) {
-                    splashOpacity = 0
-                }
-                if !settingsViewModel.settings.hasCompletedSetup {
-                    showingSetup = true
-                } else if !settingsViewModel.settings.hasSeenTabReorgTip {
-                    showingTabReorgTip = true
-                }
-            }
-        }
+        .task { await dismissSplashWhenReady() }
         .task { await performStartupStream() }
         .onChange(of: scenePhase) { _, newValue in
             if newValue == .active {
@@ -75,6 +64,7 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showingSetup) {
             WelcomeSetupView {
                 showingSetup = false
+                routeToTabForOnboardedProviders()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .didDeleteAllData)) { _ in
@@ -121,8 +111,45 @@ struct ContentView: View {
 
     // MARK: - Helpers
 
+    /// Standard compact-height iOS tab bar content height (Apple HIG), used to
+    /// float the MiniPlayer above the tab bar. SwiftUI does not expose the
+    /// real, Dynamic-Type-aware tab bar height here, so this is a named
+    /// approximation rather than a hardcoded magic number (beads_mobilemusic-3h6.13).
+    // ponytail: fixed approximation, not measured. Ceiling: drifts under very
+    // large Dynamic Type sizes that grow tab bar item text/icons, or if Apple
+    // changes the standard tab bar height. Upgrade path: read the actual
+    // TabView's bar height via a UIKit-bridged background geometry reader if
+    // this ever visibly mismatches.
+    private static let tabBarContentHeight: CGFloat = 49
+
+    /// Extra bottom margin so scroll content clears both the tab bar and the
+    /// floating MiniPlayer above it. Approximates the MiniPlayer's own
+    /// (intrinsically-sized, not fixed-height) rendered height plus the tab
+    /// bar — see `tabBarContentHeight` for the same SwiftUI-measurement
+    /// limitation.
+    // ponytail: same measurement ceiling as tabBarContentHeight — this is the
+    // tab bar height plus a small margin for the MiniPlayer's own content,
+    // not a real measurement of MiniPlayerView's rendered size.
+    private static let miniPlayerClearanceHeight: CGFloat = tabBarContentHeight + 11
+
     private var miniPlayerBottomInset: CGFloat {
-        audioPlayer.hasActivePlayback ? 60 : 0
+        audioPlayer.hasActivePlayback ? Self.miniPlayerClearanceHeight : 0
+    }
+
+    /// After first-run setup, land on the tab matching what the user actually
+    /// added — a user who only set up Navidrome/Audiobookshelf shouldn't see
+    /// an empty Live tab (beads_mobilemusic-3h6.3). Defaults to Live (current
+    /// behavior) whenever a channel source exists or nothing was added.
+    private func routeToTabForOnboardedProviders() {
+        let hasChannelSource = providerManager.providers.contains { provider in
+            switch provider.type {
+            case .m3u, .xtreamCodes: return true
+            case .subsonic, .audiobookshelf: return false
+            }
+        }
+        if !hasChannelSource && !providerManager.providers.isEmpty {
+            selectedTab = Tab.music
+        }
     }
 
     private func checkForSharedURLs() {
@@ -144,6 +171,40 @@ struct ContentView: View {
         }
 
         sharedURLEntry = SharedURLEntry(name: name, url: url)
+    }
+
+    /// Cross-fades the splash out as soon as first content is ready, capped at
+    /// 2.5s so a slow/unreachable provider never strands the user on the splash
+    /// (beads_mobilemusic-3h6.12). "Ready" = settings loaded and the initial
+    /// provider/channel load (if any) has settled.
+    private func dismissSplashWhenReady() async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+            }
+            group.addTask { @MainActor in
+                await settingsViewModel.loadSettings()
+                // ProviderManager kicks off its initial load from its own
+                // init() Task, which may not have started yet when we
+                // subscribe here — give it a beat to flip `isLoading` true
+                // before treating an already-`false` read as "done".
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                for await isLoading in providerManager.$isLoading.values {
+                    if !isLoading { break }
+                }
+            }
+            await group.next()
+            group.cancelAll()
+        }
+
+        withAnimation(.easeOut(duration: 0.8)) {
+            splashOpacity = 0
+        }
+        if !settingsViewModel.settings.hasCompletedSetup {
+            showingSetup = true
+        } else if !settingsViewModel.settings.hasSeenTabReorgTip {
+            showingTabReorgTip = true
+        }
     }
 
     private func performStartupStream() async {
