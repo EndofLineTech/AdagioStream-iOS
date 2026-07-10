@@ -129,6 +129,73 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
     }
 }
 
+// MARK: - Podcast episode downloads (E4 / 6b5.1)
+//
+// An episode is a downloaded book with exactly ONE file — index 0, startOffset
+// 0, no chapters — riding the same manifest/timeline/DownloadManager machinery
+// books use. `id` is namespaced "ep#<showId>#<episodeId>" (mirrors
+// `DownloadManager.bookTaskDescription`'s "abs#<bookId>#<ino>" convention) so
+// an episode's row can never collide with a book's plain-libraryItemId `id` in
+// the same `audiobook_downloads` table, and so a completed row can be parsed
+// back into its show/episode ids for display + progress-keyed deletion.
+extension AudiobookDownloadRecord {
+    private static let episodeIDPrefix = "ep#"
+
+    /// Builds the composite `AudiobookDownloadRecord.id` for one episode.
+    public static func episodeRecordID(showID: String, episodeID: String) -> String {
+        "\(episodeIDPrefix)\(showID)#\(episodeID)"
+    }
+
+    /// Parses a record id back into `(showID, episodeID)`, or `nil` when the id
+    /// is a plain book libraryItemId (no prefix).
+    public static func parseEpisodeRecordID(_ id: String) -> (showID: String, episodeID: String)? {
+        guard id.hasPrefix(episodeIDPrefix) else { return nil }
+        let parts = id.dropFirst(episodeIDPrefix.count).split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        return (String(parts[0]), String(parts[1]))
+    }
+
+    /// True when this record is a downloaded podcast episode (vs. a book).
+    public var isEpisodeDownload: Bool {
+        Self.parseEpisodeRecordID(id) != nil
+    }
+
+    /// Maps one podcast episode into a 1-file download manifest: index 0,
+    /// startOffset 0, empty chapters — the whole episode is a single audio file
+    /// with no internal chapter structure (E2 scope), so `timeline()` rebuilds
+    /// it as a one-file book. `nil` when the episode has no downloadable audio
+    /// file (e.g. a minified/undecoded episode shape).
+    public static func forEpisode(
+        showID: String,
+        showTitle: String?,
+        episodeID: String,
+        episodeTitle: String?,
+        coverPath: String?,
+        audioFile: ABSAudioFileDTO?
+    ) -> AudiobookDownloadRecord? {
+        guard let audioFile, !audioFile.ino.isEmpty else { return nil }
+        let now = Int(Date().timeIntervalSince1970)
+        let file = AudiobookDownloadFile(
+            index: 0,
+            ino: audioFile.ino,
+            startOffset: 0,
+            duration: audioFile.duration ?? 0
+        )
+        return AudiobookDownloadRecord(
+            id: episodeRecordID(showID: showID, episodeID: episodeID),
+            title: episodeTitle ?? "Episode",
+            author: showTitle,
+            coverPath: coverPath,
+            duration: audioFile.duration,
+            status: .downloading,
+            files: [file],
+            chapters: [],
+            createdAt: now,
+            updatedAt: now
+        )
+    }
+}
+
 // MARK: - Timeline reconstruction (offline mirror of the streaming session)
 
 extension AudiobookDownloadRecord {

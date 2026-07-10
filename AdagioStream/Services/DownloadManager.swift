@@ -558,6 +558,29 @@ public final class DownloadManager: NSObject, ObservableObject {
         downloadedBook(itemID: itemID) != nil
     }
 
+    // MARK: - Podcast episode downloads (E4 / 6b5.1)
+    //
+    // An episode is stored as an `AudiobookDownloadRecord` under the composite
+    // id `AudiobookDownloadRecord.episodeRecordID(showID:episodeID:)` — same
+    // table, same background-task machinery, same directory-per-record layout
+    // as a book. These are thin id-composing wrappers over the book methods
+    // above; no separate download engine.
+
+    /// The offline record for one episode, or `nil` if not fully downloaded.
+    public func downloadedEpisode(showID: String, episodeID: String) -> AudiobookDownloadRecord? {
+        downloadedBook(itemID: AudiobookDownloadRecord.episodeRecordID(showID: showID, episodeID: episodeID))
+    }
+
+    /// True when the given episode is fully downloaded and present on disk.
+    public func isEpisodeDownloaded(showID: String, episodeID: String) -> Bool {
+        downloadedEpisode(showID: showID, episodeID: episodeID) != nil
+    }
+
+    /// Deletes one episode's download (file + record).
+    public func deleteEpisodeDownload(showID: String, episodeID: String) {
+        deleteBookDownload(itemID: AudiobookDownloadRecord.episodeRecordID(showID: showID, episodeID: episodeID))
+    }
+
     /// Records that one book file finished downloading: stamps its `localPath`
     /// in the manifest and, when every file is present, flips the book to
     /// `.completed`. Called from the shared download delegate.

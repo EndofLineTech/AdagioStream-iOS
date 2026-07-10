@@ -352,4 +352,36 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         guard files.count == tracks.count else { return nil }
         return files
     }
+
+    // MARK: - Podcast episode download (E4 / 6b5.1)
+
+    /// Downloads one episode: builds its 1-file manifest (`AudiobookDownloadRecord.forEpisode`)
+    /// and enqueues it via the SAME `DownloadManager.downloadBook` path books use —
+    /// an episode has its `ino`/`duration` right on `ABSEpisodeDTO.audioFile`
+    /// already, so unlike a book download there's no `/play` session needed just
+    /// to join offsets. No-op if the episode has no audio file. `static` (no
+    /// view-model instance needed) so download buttons on episode rows can call
+    /// it directly with just the `AudiobookshelfAPI` from `ProviderManager`.
+    @MainActor
+    public static func downloadEpisode(_ episode: ABSEpisodeDTO, show: PodcastShow, using downloadManager: DownloadManager, via api: AudiobookshelfAPI) {
+        guard let record = AudiobookDownloadRecord.forEpisode(
+            showID: show.id,
+            showTitle: show.title,
+            episodeID: episode.id,
+            episodeTitle: episode.title,
+            coverPath: "/api/items/\(show.id)/cover",
+            audioFile: episode.audioFile
+        ) else { return }
+
+        downloadManager.downloadBook(
+            itemID: record.id,
+            title: record.title,
+            author: record.author,
+            coverPath: record.coverPath,
+            duration: record.duration,
+            files: record.files,
+            chapters: record.chapters,
+            via: api
+        )
+    }
 }

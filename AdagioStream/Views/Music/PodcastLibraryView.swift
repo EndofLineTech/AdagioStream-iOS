@@ -79,6 +79,8 @@ struct PodcastEpisodeListView: View {
     @ObservedObject var viewModel: AudiobookshelfLibraryViewModel
     let show: PodcastShow
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
+    @EnvironmentObject private var downloadManager: DownloadManager
+    @EnvironmentObject private var providerManager: ProviderManager
 
     private var order: PodcastEpisodeOrder { settingsViewModel.settings.podcastEpisodeSortOrder.podcastEpisodeOrder }
 
@@ -109,7 +111,11 @@ struct PodcastEpisodeListView: View {
                 NavigationLink {
                     PodcastEpisodeDetailView(episode: episode, show: show, context: context)
                 } label: {
-                    PodcastEpisodeRowView(episode: episode)
+                    HStack {
+                        PodcastEpisodeRowView(episode: episode)
+                        Spacer(minLength: 8)
+                        EpisodeDownloadButton(show: show, episode: episode, compact: true)
+                    }
                 }
                 .accessibilityLabel(episode.title ?? "Episode")
             }
@@ -118,8 +124,52 @@ struct PodcastEpisodeListView: View {
         }
         .navigationTitle(show.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if !sortedEpisodes.isEmpty {
+                    Menu {
+                        Button {
+                            bulkDownload(episodes: sortedEpisodes)
+                        } label: {
+                            Label("Download All", systemImage: "arrow.down.circle")
+                        }
+                        Button {
+                            bulkDownload(episodes: PodcastBulkDownload.latest(sortedEpisodes, count: 5))
+                        } label: {
+                            Label("Download Latest 5", systemImage: "arrow.down.circle")
+                        }
+                    } label: {
+                        Image(systemName: "arrow.down.circle")
+                    }
+                    .accessibilityLabel("Download episodes")
+                }
+            }
+        }
         .task { await viewModel.loadShowDetail(show) }
         .onDisappear { viewModel.resetShowDetail() }
+    }
+
+    private func bulkDownload(episodes: [ABSEpisodeDTO]) {
+        guard let api = providerManager.audiobookshelfAPI else { return }
+        for episode in episodes {
+            AudiobookshelfLibraryViewModel.downloadEpisode(episode, show: show, using: downloadManager, via: api)
+        }
+    }
+}
+
+// MARK: - Bulk download selection (E4 / 6b5.3)
+
+/// Pure "which episodes does a bulk action download" selection, so it's
+/// unit-testable without the view/DownloadManager. `episodes` is expected
+/// already sorted in the order "latest" means (caller passes
+/// `PodcastPlaybackContext.sortedEpisodes(..., order: .newestFirst)`-derived
+/// order — whatever order the episode list is currently showing).
+enum PodcastBulkDownload {
+    /// The first `count` episodes of an already-ordered list. Clamps to the
+    /// list's size; `count <= 0` or an empty list returns `[]`.
+    static func latest(_ episodes: [ABSEpisodeDTO], count: Int) -> [ABSEpisodeDTO] {
+        guard count > 0, !episodes.isEmpty else { return [] }
+        return Array(episodes.prefix(count))
     }
 }
 
@@ -296,12 +346,82 @@ struct PodcastEpisodeDetailView: View {
             .buttonStyle(.borderedProminent)
             .disabled(providerManager.audiobookshelfAPI == nil)
             .accessibilityLabel(resumeLabel)
+
+            EpisodeDownloadButton(show: show, episode: episode, compact: false)
         }
         .padding(.vertical, 4)
     }
 
     private var resumeLabel: String {
         entry.progress > 0 && !entry.isFinished ? "Resume" : "Play"
+    }
+}
+
+// MARK: - Episode download control (E4 / 6b5.1)
+
+/// Download / downloading / delete affordance for one episode — same
+/// visual language + status switch as `AudiobookLibraryView.downloadControl`,
+/// just compacted to an icon-only control when used on a list row (`compact`).
+struct EpisodeDownloadButton: View {
+    let show: PodcastShow
+    let episode: ABSEpisodeDTO
+    var compact: Bool
+
+    @EnvironmentObject private var downloadManager: DownloadManager
+    @EnvironmentObject private var providerManager: ProviderManager
+
+    private var record: AudiobookDownloadRecord? {
+        downloadManager.audiobookDownloads.first {
+            $0.id == AudiobookDownloadRecord.episodeRecordID(showID: show.id, episodeID: episode.id)
+        }
+    }
+
+    var body: some View {
+        switch record?.status {
+        case .completed:
+            button(systemImage: "checkmark.circle.fill", tint: .green, label: "Remove Download") {
+                downloadManager.deleteEpisodeDownload(showID: show.id, episodeID: episode.id)
+            }
+        case .downloading, .queued:
+            if compact {
+                ProgressView().controlSize(.mini)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Downloading…").font(.caption).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        case .failed:
+            button(systemImage: "arrow.clockwise", tint: .red, label: "Retry Download", startDownload)
+        default:
+            button(systemImage: "arrow.down.circle", tint: .accentColor, label: "Download Episode", startDownload)
+        }
+    }
+
+    private func startDownload() {
+        guard let api = providerManager.audiobookshelfAPI else { return }
+        AudiobookshelfLibraryViewModel.downloadEpisode(episode, show: show, using: downloadManager, via: api)
+    }
+
+    @ViewBuilder
+    private func button(systemImage: String, tint: Color, label: String, _ action: @escaping () -> Void) -> some View {
+        if compact {
+            Button(action: action) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(tint)
+                    .frame(width: 32, height: 32)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+        } else {
+            Button(role: label == "Remove Download" ? .destructive : nil, action: action) {
+                Label(label, systemImage: systemImage)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(label)
+        }
     }
 }
 

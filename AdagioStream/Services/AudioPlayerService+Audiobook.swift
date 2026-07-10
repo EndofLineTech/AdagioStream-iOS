@@ -285,8 +285,24 @@ extension AudioPlayerService {
     /// `AudiobookSession.progressKey`). `context` carries the show's episode
     /// list + order so `audiobookFileEnded()` can auto-play the next episode
     /// (72i.2) when this one ends.
+    ///
+    /// Offline routing (E4 / 6b5.1): mirrors `playAudiobook`'s offline check —
+    /// if this exact episode is downloaded AND either offline mode is on or the
+    /// server session can't be opened, play from the local file instead.
     public func playPodcastEpisode(_ episode: ABSEpisodeDTO, via api: AudiobookshelfAPI, context: PodcastPlaybackContext, startGlobalTime: Double? = nil) {
         log.log("playPodcastEpisode: \"\(episode.title ?? episode.id)\" show=\(context.showTitle ?? context.libraryItemId)", category: .player)
+
+        let offlineMode = settingsViewModel?.settings.offlineMode ?? false
+        let downloaded = DownloadManager.shared.downloadedEpisode(showID: context.libraryItemId, episodeID: episode.id)
+
+        if offlineMode, let downloaded {
+            playDownloadedEpisode(episode, download: downloaded, via: api, context: context, startGlobalTime: startGlobalTime)
+            return
+        }
+        if offlineMode {
+            self.error = "This episode isn't downloaded for offline listening."
+            return
+        }
 
         Task { @MainActor in
             do {
@@ -336,10 +352,64 @@ extension AudioPlayerService {
                 self.loadAudiobookArtwork(itemID: context.libraryItemId, api: api)
                 self.loadAudiobookFile(located.file, fileOffset: located.fileOffset)
             } catch {
+                // Server unreachable but we have a local copy → play offline.
+                if let downloaded {
+                    self.log.log("playPodcastEpisode: server failed, falling back to offline", category: .player)
+                    self.playDownloadedEpisode(episode, download: downloaded, via: api, context: context, startGlobalTime: startGlobalTime)
+                    return
+                }
                 self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 self.log.log("playPodcastEpisode failed: \(error)", category: .player)
             }
         }
+    }
+
+    /// Plays a downloaded episode from its local file. Mirrors
+    /// `playDownloadedAudiobook` exactly (single-file `timeline()` rebuild,
+    /// `isOffline` session, offline progress queueing) with `kind: .podcast`
+    /// so `progressKey`/auto-play-next keep working offline.
+    public func playDownloadedEpisode(_ episode: ABSEpisodeDTO, download: AudiobookDownloadRecord, via api: AudiobookshelfAPI, context: PodcastPlaybackContext, startGlobalTime: Double? = nil) {
+        let timeline = download.timeline()
+        guard !timeline.files.isEmpty else {
+            self.error = "This download is incomplete."
+            return
+        }
+        let resume = AudioPlayerService.resumePosition(
+            override: startGlobalTime,
+            sessionCurrentTime: nil,
+            bookCurrentTime: episode.userMediaProgress?.currentTime ?? 0
+        )
+        guard let located = timeline.locate(global: resume) else { return }
+
+        let episodeRecord = Audiobook(
+            id: episode.id,
+            libraryItemId: context.libraryItemId,
+            libraryId: "",
+            title: episode.title ?? "Episode",
+            author: context.showTitle,
+            duration: timeline.totalDuration,
+            currentTime: resume,
+            updatedAt: Int(Date().timeIntervalSince1970)
+        )
+
+        let abs = AudiobookSession(
+            book: episodeRecord,
+            sessionID: "",            // no server session offline
+            timeline: timeline,
+            api: api,
+            startFile: located.file,
+            startGlobalTime: resume,
+            isOffline: true,
+            kind: .podcast(episodeId: episode.id, context: context)
+        )
+        self.audiobookSession = abs
+        self.currentAudiobook = episodeRecord
+        self.audiobookDuration = timeline.totalDuration
+        self.audiobookGlobalTime = resume
+        self.currentChapter = nil
+        self.currentTrackArtwork = nil
+        self.nowPlayingArtworkURL = nil
+        loadAudiobookFile(located.file, fileOffset: located.fileOffset)
     }
 
     /// Loads one file into VLC seeked to `fileOffset` seconds. Mirrors the
