@@ -210,6 +210,7 @@
 		C965370ECE1E010BA7E9DF37 /* EPGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AADD31B9F7FB59E72E4726 /* EPGParser.swift */; };
 		CAE6D92CBA3B1131CDF25782 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 9CEDCCDBA46AF67C4F407B61 /* LaunchScreen.storyboard */; };
 		CB5A676A08CF467E5A9F5776 /* EPGEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB48AA0ED798A16E7B0671F2 /* EPGEntry.swift */; };
+		CDF88EB4E4C4C36BBA70D94B /* AudiobookProgressKeyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D406B2206F0FC611B6B8D10 /* AudiobookProgressKeyTests.swift */; };
 		D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A879148E50912620B26D03 /* ProviderManagerTests.swift */; };
 		D1C6975823782DAB7458EB59 /* CustomPlaylistGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 177BA74ED38FC5FDB1D2E62C /* CustomPlaylistGroup.swift */; };
 		D1C76F1CD2D28EE66E9402CB /* APISession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB841CFC2467C1D28656B19 /* APISession.swift */; };
@@ -375,6 +376,7 @@
 		79C66CE94686CD52A6CD0AC6 /* GroupManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupManagementView.swift; sourceTree = "<group>"; };
 		7AE0ADC1022CB548CC8480DF /* AudioPlayerService+Reconnect.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioPlayerService+Reconnect.swift"; sourceTree = "<group>"; };
 		7C7642DA09DCBAEB0F4EC649 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		7D406B2206F0FC611B6B8D10 /* AudiobookProgressKeyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobookProgressKeyTests.swift; sourceTree = "<group>"; };
 		7DD913E9A26B3322688E877D /* ShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareSheet.swift; sourceTree = "<group>"; };
 		7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeAPI.swift; sourceTree = "<group>"; };
 		7EF216E8A56DB9AB8E0B123E /* AudiobooksTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobooksTabView.swift; sourceTree = "<group>"; };
@@ -527,6 +529,7 @@
 			isa = PBXGroup;
 			children = (
 				0E594B98414D60B340DCEFCB /* AudiobookDownloadTests.swift */,
+				7D406B2206F0FC611B6B8D10 /* AudiobookProgressKeyTests.swift */,
 				9A21E9291F58148C74CFDF5D /* AudiobookSeekTriggerTests.swift */,
 				EEE08083D11C9AA6AC229258 /* AudiobookshelfAPITests.swift */,
 				FF3AC09B2F92CE0D70E6470D /* AudiobookshelfAuthTests.swift */,
@@ -1150,6 +1153,7 @@
 				E48AEF35EE680D18631E4571 /* AudioOutputRestartPredicateTests.swift in Sources */,
 				C4C0DF0BC89D7EA049A1E1A9 /* AudioPlayerServiceTests.swift in Sources */,
 				63D8C99CC026C4356F96D15B /* AudiobookDownloadTests.swift in Sources */,
+				CDF88EB4E4C4C36BBA70D94B /* AudiobookProgressKeyTests.swift in Sources */,
 				37DFD80BAD11C6354ED10E85 /* AudiobookSeekTriggerTests.swift in Sources */,
 				EC4420F4B82AFB4A4667A1B9 /* AudiobookSyncTests.swift in Sources */,
 				D402ABE500C66F1793FB700C /* AudiobookTimelineTests.swift in Sources */,

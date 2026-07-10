@@ -53,8 +53,10 @@ final class AudiobookSession {
     /// sync and session-open route through (E2 / 72i.1).
     var progressKey: ABSEpisodeProgressKey {
         switch kind {
-        case .book: return ABSEpisodeProgressKey(libraryItemId: book.id)
-        case .podcast(let episodeId, _): return ABSEpisodeProgressKey(libraryItemId: book.id, episodeId: episodeId)
+        // For a book `libraryItemId == id`; for a podcast `book.id` is the
+        // EPISODE id and the show/library-item id lives in `libraryItemId`.
+        case .book: return ABSEpisodeProgressKey(libraryItemId: book.libraryItemId)
+        case .podcast(let episodeId, _): return ABSEpisodeProgressKey(libraryItemId: book.libraryItemId, episodeId: episodeId)
         }
     }
 
@@ -614,10 +616,15 @@ extension AudioPlayerService {
     /// episode-scoped path (72i.1) and keeps its show context for auto-play.
     private func reopenAudiobookSession(book: Audiobook, api: AudiobookshelfAPI, atGlobal global: Double, kind: AudiobookSessionKind) {
         let episodeID: String? = { if case .podcast(let episodeId, _) = kind { return episodeId }; return nil }()
+        // The reopen's item id must be the SHOW / library-item id, not the
+        // episode id: for a podcast `book.id` is the episode id and the show id
+        // is `book.libraryItemId` (matches the initial open's `context.libraryItemId`).
+        // For a book `libraryItemId == id`, so books reopen unchanged.
+        let itemID = book.libraryItemId
         Task { @MainActor in
-            guard let fresh = try? await api.openPlaybackSession(itemID: book.id, episodeID: episodeID, deviceID: AudioPlayerService.absDeviceID) else { return }
+            guard let fresh = try? await api.openPlaybackSession(itemID: itemID, episodeID: episodeID, deviceID: AudioPlayerService.absDeviceID) else { return }
             guard self.audiobookSession != nil else { return }
-            let timeline = AudiobookTimeline(session: fresh, bookId: book.id)
+            let timeline = AudiobookTimeline(session: fresh, bookId: itemID)
             guard let located = timeline.locate(global: global) else { return }
             let abs = AudiobookSession(
                 book: book, sessionID: fresh.id, timeline: timeline, api: api,
