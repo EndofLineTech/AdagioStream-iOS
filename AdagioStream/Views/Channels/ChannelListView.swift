@@ -64,7 +64,7 @@ struct ChannelListView: View {
                     channelList
                 }
             }
-            .navigationTitle("Channels")
+            .navigationTitle("Live")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

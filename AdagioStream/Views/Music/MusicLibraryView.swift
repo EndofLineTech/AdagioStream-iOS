@@ -8,7 +8,7 @@
 //
 // Self-contained NavigationStack — does NOT expect to be embedded in one.
 //
-// Browse modes (segmented Picker in the toolbar):
+// Browse modes (nav-bar trailing Menu, 3h6.6):
 //   • Artists  — artist list → ArtistDetailView → AlbumDetailView (0xy.3)
 //   • Albums   — BrowseAlbumsView with a type picker (newest/recent/frequent/random/A–Z)
 //   • Genres   — GenreListView → GenreDetailView (0xy.4)
@@ -90,11 +90,13 @@ public struct MusicLibraryView: View {
 
     public var body: some View {
         NavigationStack {
-            // The two-level selector renders as an inline header pinned above the
-            // content (b42) — NOT in the nav-bar .principal, where two stacked
+            // The section switch renders as an inline header pinned above the
+            // content (b42) — NOT in the nav-bar .principal, where stacked
             // pills overflowed into the status bar / Dynamic Island and over the
             // large title. VStack(spacing: 0) keeps the header inside the safe
-            // area below the nav bar; the content sits beneath it.
+            // area below the nav bar; the content sits beneath it. The per-section
+            // sub-mode picker lives in the nav-bar trailing Menu instead (3h6.6),
+            // so this header is just the single Books|Music row now.
             VStack(spacing: 0) {
                 // Hide the selector header in offline mode and while searching.
                 if !settingsViewModel.settings.offlineMode && !isSearchActive {
@@ -102,8 +104,19 @@ public struct MusicLibraryView: View {
                 }
                 content
             }
-            .navigationTitle(navigationTitle)
+            .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // Sub-mode picker (Apple Music / Books pattern) — replaces the
+                // second segmented-control row that used to stack under the
+                // Books|Music switch (3h6.6). Hidden in offline mode and while
+                // searching, matching the Books|Music header above.
+                if !settingsViewModel.settings.offlineMode && !isSearchActive {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        subModeMenu
+                    }
+                }
+            }
             .searchableIfMusic(
                 isMusic: showsSearch,
                 text: $searchText,
@@ -206,12 +219,6 @@ public struct MusicLibraryView: View {
         }
     }
 
-    /// Navigation title reflects the top-level section (b42): "Books" in the
-    /// Books section, "Music" otherwise.
-    private var navigationTitle: String {
-        section == .books ? "Books" : "Music"
-    }
-
     /// Search applies in both sections (3h6.9): Music does a server search via
     /// the view-model, Books filters the already-loaded list client-side.
     /// Hidden in offline mode (b42) — no network browse/search there.
@@ -235,51 +242,68 @@ public struct MusicLibraryView: View {
         return s
     }
 
-    /// Two-level selector, rendered as an inline header pinned above the content
-    /// (b42): the top row picks Books|Music (only when both exist); the row below
-    /// picks the sub-mode for the active section.
+    /// Section switch, rendered as an inline header pinned above the content
+    /// (b42): picks Books|Music (only shown when both exist — a single
+    /// available section needs no switch). The per-section sub-mode picker
+    /// lives in the nav-bar trailing menu instead (3h6.6, see `subModeMenu`).
     @ViewBuilder
     private var browseModeSelector: some View {
-        VStack(spacing: 6) {
-            if availableSections.count > 1 {
-                Picker("Section", selection: $section) {
-                    ForEach(availableSections, id: \.self) { s in
-                        Text(s.rawValue).tag(s)
-                    }
+        if availableSections.count > 1 {
+            Picker("Section", selection: $section) {
+                ForEach(availableSections, id: \.self) { s in
+                    Text(s.rawValue).tag(s)
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 300)
-                .accessibilityLabel("Library section")
-                .accessibilityHint("Switch between Books and Music")
             }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 300)
+            .accessibilityLabel("Library section")
+            .accessibilityHint("Switch between Books and Music")
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+            .frame(maxWidth: .infinity)
+            .background(Color(.systemBackground))
+            .overlay(alignment: .bottom) { Divider() }
+        }
+    }
 
-            switch section {
-            case .music:
+    /// Nav-bar trailing sub-mode picker (3h6.6) — the Apple Music / Books
+    /// pattern: a Menu button showing the active sub-mode for whichever
+    /// section is current, replacing the second segmented-control row that
+    /// used to stack under the Books|Music switch. Provider-gating doesn't
+    /// apply here — sub-modes are always the full case set for the active
+    /// section (only whether a section is offered at all is gated, in
+    /// `availableSections`).
+    @ViewBuilder
+    private var subModeMenu: some View {
+        switch section {
+        case .music:
+            Menu {
                 Picker("Browse", selection: $browseMode) {
                     ForEach(MusicBrowseMode.allCases, id: \.self) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
-                .accessibilityLabel("Music browse mode")
-            case .books:
+            } label: {
+                Label(browseMode.rawValue, systemImage: "chevron.up.chevron.down")
+                    .labelStyle(.titleAndIcon)
+            }
+            .accessibilityLabel("Music browse mode")
+            .accessibilityHint("Switch between Artists, Albums, Genres, and Playlists")
+        case .books:
+            Menu {
                 Picker("Books", selection: $bookMode) {
                     ForEach(BookBrowseMode.allCases, id: \.self) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 300)
-                .accessibilityLabel("Book browse mode")
+            } label: {
+                Label(bookMode.rawValue, systemImage: "chevron.up.chevron.down")
+                    .labelStyle(.titleAndIcon)
             }
+            .accessibilityLabel("Book browse mode")
+            .accessibilityHint("Switch between Author and Titles")
         }
-        .padding(.horizontal)
-        .padding(.top, 8)
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity)
-        .background(Color(.systemBackground))
-        .overlay(alignment: .bottom) { Divider() }
     }
 
     // MARK: - Offline browser (l31.3)

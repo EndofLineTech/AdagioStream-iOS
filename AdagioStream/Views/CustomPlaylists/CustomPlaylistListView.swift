@@ -90,7 +90,7 @@ struct CustomPlaylistListView: View {
             .navigationDestination(for: UUID.self) { playlistID in
                 CustomPlaylistDetailView(playlistID: playlistID)
             }
-            .navigationTitle("Playlists")
+            .navigationTitle("Custom M3Us")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
