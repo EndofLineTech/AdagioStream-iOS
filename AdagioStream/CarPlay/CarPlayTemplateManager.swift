@@ -476,9 +476,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // mirroring the Navidrome-music gating. Pushes the book list on tap.
         let audiobookItems = providerManager.audiobookshelfAPI != nil ? [makeAudiobooksCategoryItem()] : []
 
+        // hky.1: Podcasts category — same ABS-provider gate as Audiobooks (there's
+        // no synchronous "has a podcast library" signal at root-menu-build time,
+        // same constraint Audiobooks has); an empty/no-podcast-library server just
+        // shows "No podcasts" on tap rather than hiding the category.
+        let podcastItems = providerManager.audiobookshelfAPI != nil ? [makePodcastsCategoryItem()] : []
+
         // No secondary source (no Navidrome, no ABS): preserve the historical
         // single, header-less section so channel-only users see no change.
-        if musicItems.isEmpty && audiobookItems.isEmpty {
+        if musicItems.isEmpty && audiobookItems.isEmpty && podcastItems.isEmpty {
             if items.isEmpty {
                 let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
                 placeholder.handler = { _, completion in completion() }
@@ -515,6 +521,11 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // of the carPlaySourceOrder toggle, which only covers streaming↔Navidrome).
         if !audiobookItems.isEmpty {
             sections.append(CPListSection(items: audiobookItems, header: "Audiobooks", sectionIndexTitle: nil))
+        }
+        // Podcasts trails Audiobooks for the same reason (not part of the
+        // streaming↔Navidrome ordering toggle).
+        if !podcastItems.isEmpty {
+            sections.append(CPListSection(items: podcastItems, header: "Podcasts", sectionIndexTitle: nil))
         }
         return sections
     }

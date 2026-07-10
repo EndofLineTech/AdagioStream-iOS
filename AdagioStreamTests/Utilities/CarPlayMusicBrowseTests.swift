@@ -186,5 +186,42 @@ final class CarPlayMusicBrowseTests: XCTestCase {
         let book = makeBook(author: "", progress: 0, isFinished: false)
         XCTAssertNil(CarPlayTemplateManager.audiobookRowDetail(book))
     }
+
+    // MARK: - podcastEpisodeRowDetail (hky.1)
+
+    private func makeEpisode(pubDate: String?, duration: Double?) -> ABSEpisodeDTO {
+        var fields = ["\"id\": \"e1\"", "\"title\": \"An Episode\""]
+        if let pubDate { fields.append("\"pubDate\": \"\(pubDate)\"") }
+        if let duration { fields.append("\"duration\": \(duration)") }
+        let json = "{\(fields.joined(separator: ","))}"
+        return try! JSONDecoder().decode(ABSEpisodeDTO.self, from: Data(json.utf8))
+    }
+
+    // pubDate is parsed as GMT then rendered via the local-timezone
+    // DateFormatter, so a midnight-GMT fixture could shift to the prior day
+    // in western-hemisphere timezones. Noon-GMT is safe across every real
+    // UTC offset (-12...+14).
+    func testPodcastEpisodeRowDetailDateAndDuration() {
+        let episode = makeEpisode(pubDate: "Mon, 01 Jan 2024 12:00:00 GMT", duration: 90)
+        XCTAssertEqual(
+            CarPlayTemplateManager.podcastEpisodeRowDetail(episode),
+            "Jan 1, 2024 · 1m"
+        )
+    }
+
+    func testPodcastEpisodeRowDetailDateOnlyWhenNoDuration() {
+        let episode = makeEpisode(pubDate: "Mon, 01 Jan 2024 12:00:00 GMT", duration: nil)
+        XCTAssertEqual(CarPlayTemplateManager.podcastEpisodeRowDetail(episode), "Jan 1, 2024")
+    }
+
+    func testPodcastEpisodeRowDetailDurationOnlyWhenNoDate() {
+        let episode = makeEpisode(pubDate: nil, duration: 90)
+        XCTAssertEqual(CarPlayTemplateManager.podcastEpisodeRowDetail(episode), "1m")
+    }
+
+    func testPodcastEpisodeRowDetailNilWhenNeither() {
+        let episode = makeEpisode(pubDate: nil, duration: nil)
+        XCTAssertNil(CarPlayTemplateManager.podcastEpisodeRowDetail(episode))
+    }
 }
 #endif

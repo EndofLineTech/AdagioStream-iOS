@@ -17,6 +17,14 @@ struct RootTabView: View {
                         .tabItem { Label("Audiobooks", systemImage: "books.vertical") }
                 }
 
+                // hky.2: podcasts tab, same ABS-provider gate as Audiobooks (no
+                // synchronous "has a podcast library" signal at tab-build time;
+                // a server with no podcast library just shows an empty state).
+                if providerManager.audiobookshelfAPI != nil {
+                    PodcastsTabView()
+                        .tabItem { Label("Podcasts", systemImage: "mic") }
+                }
+
                 NowPlayingTabView()
                     .tabItem { Label("Now Playing", systemImage: "play.circle") }
 
