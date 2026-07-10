@@ -663,7 +663,7 @@ extension AudioPlayerService {
         let global = audiobookGlobalTime
         let chapterTitle = currentChapter?.title
         let title = chapterTitle ?? session.book.title
-        let rate: Double = isPlaying ? 1.0 : 0.0
+        let rate: Double = isPlaying ? Double(AudioPlayerService.playbackRate) : 0.0
         let state: MPNowPlayingPlaybackState = (isPlaying || isBuffering) ? .playing : .paused
 
         var info: [String: Any] = [

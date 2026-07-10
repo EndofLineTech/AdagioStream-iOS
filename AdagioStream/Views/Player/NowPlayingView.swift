@@ -559,7 +559,7 @@ struct NowPlayingView: View {
     }
 
     private func speedLabel(_ rate: Float) -> String {
-        rate == rate.rounded() ? "\(Int(rate))x" : String(format: "%.2gx", rate)
+        rate == rate.rounded() ? "\(Int(rate))x" : String(format: "%gx", rate)
     }
 
     private var audiobookPlaceholder: some View {
