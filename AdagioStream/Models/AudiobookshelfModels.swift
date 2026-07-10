@@ -696,23 +696,50 @@ public struct PodcastEpisodeEntry: Equatable, Identifiable {
     public let showLibraryItemId: String
     public let showTitle: String?
 
+    /// Per-episode progress fetched separately from `GET /api/me/progress/
+    /// {libraryItemId}/{episodeId}`. ABS embeds episode progress NOWHERE in the
+    /// episode object itself — neither `media.episodes[]` (item detail) nor
+    /// `recentEpisode` (items-in-progress) carry `userMediaProgress`; progress
+    /// lives only in the user's `mediaProgress[]`, keyed by (item, episode). So
+    /// this is the only real source, hydrated after the fact. `nil` until
+    /// hydrated (or when the episode has never been started → server 404s).
+    public let hydratedProgress: ABSMediaProgressDTO?
+
     public var id: String { episode.id }
 
-    public init(episode: ABSEpisodeDTO, showLibraryItemId: String, showTitle: String?) {
+    public init(episode: ABSEpisodeDTO, showLibraryItemId: String, showTitle: String?, hydratedProgress: ABSMediaProgressDTO? = nil) {
         self.episode = episode
         self.showLibraryItemId = showLibraryItemId
         self.showTitle = showTitle
+        self.hydratedProgress = hydratedProgress
     }
 
     public static func == (lhs: PodcastEpisodeEntry, rhs: PodcastEpisodeEntry) -> Bool {
-        lhs.episode.id == rhs.episode.id && lhs.showLibraryItemId == rhs.showLibraryItemId
+        lhs.episode.id == rhs.episode.id
+            && lhs.showLibraryItemId == rhs.showLibraryItemId
+            && lhs.hydratedProgress?.progress == rhs.hydratedProgress?.progress
+            && lhs.hydratedProgress?.isFinished == rhs.hydratedProgress?.isFinished
     }
 
-    /// Progress fraction 0.0-1.0 for the unplayed badge, from the episode's
-    /// embedded `userMediaProgress` (present when the item was fetched with
-    /// `?include=progress`, e.g. via `AudiobookshelfAPI.item(id:)`).
-    public var progress: Double { episode.userMediaProgress?.progress ?? 0 }
-    public var isFinished: Bool { episode.userMediaProgress?.isFinished ?? false }
+    /// Returns a copy carrying `progress` as the authoritative source. Pure —
+    /// the seam `loadInProgress` and its test both call through. Passing `nil`
+    /// (the server's 404 for a never-started episode) leaves the entry unplayed.
+    public func withProgress(_ progress: ABSMediaProgressDTO?) -> PodcastEpisodeEntry {
+        PodcastEpisodeEntry(episode: episode, showLibraryItemId: showLibraryItemId, showTitle: showTitle, hydratedProgress: progress)
+    }
+
+    /// The authoritative progress record: the separately-fetched
+    /// `hydratedProgress` if present, else the (in practice always-nil) embedded
+    /// one, so By-Show rows that never hydrate simply read as unplayed rather
+    /// than showing a fabricated value.
+    private var activeProgress: ABSMediaProgressDTO? { hydratedProgress ?? episode.userMediaProgress }
+
+    /// Progress fraction 0.0-1.0 for the badge/bar.
+    public var progress: Double { activeProgress?.progress ?? 0 }
+    public var isFinished: Bool { activeProgress?.isFinished ?? false }
+    /// Absolute resume position in seconds — what a Continue-Listening tap
+    /// passes to `playPodcastEpisode(startGlobalTime:)`. `nil` when unplayed.
+    public var resumeTime: Double? { activeProgress?.currentTime }
     /// True when the episode has never been started — drives the unplayed badge.
     public var isUnplayed: Bool { !isFinished && progress <= 0 }
 }
@@ -801,10 +828,12 @@ public enum PodcastContinueListening {
     /// episodes, preserving server order within each group. Pure — the single
     /// seam c2s.3's shelf and its tests both go through.
     ///
-    /// Podcast episode ⇔ `item.recentEpisode != nil`; its progress is read from
-    /// `recentEpisode.userMediaProgress` (this endpoint does NOT put episode
-    /// progress under the item's top-level `userMediaProgress`). Everything else
-    /// is a book, subject to the same started/not-finished filter as before.
+    /// Podcast episode ⇔ `item.recentEpisode != nil`. `recentEpisode` carries NO
+    /// progress (ABS's `episode.toOldJSON` omits it), so each entry's progress is
+    /// hydrated separately by `AudiobookshelfLibraryViewModel.loadInProgress` via
+    /// `GET /api/me/progress/{item}/{episode}` — see `PodcastEpisodeEntry
+    /// .withProgress`. Everything else is a book, subject to the same
+    /// started/not-finished filter as before.
     public static func partition(items: [ABSLibraryItemDTO], updatedAt: Int) -> (books: [Audiobook], episodes: [PodcastEpisodeEntry]) {
         var books: [Audiobook] = []
         var episodes: [PodcastEpisodeEntry] = []

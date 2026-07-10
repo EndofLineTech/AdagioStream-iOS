@@ -195,7 +195,10 @@ private struct ContinueListeningShelf: View {
                             episodes: [entry.episode],
                             order: order
                         )
-                        audioPlayer.playPodcastEpisode(entry.episode, via: viewModel.audiobookshelfAPI, context: context)
+                        // Resume from the hydrated progress — `entry.episode`
+                        // itself carries none (ABS omits episode progress from
+                        // the item response), so pass it explicitly.
+                        audioPlayer.playPodcastEpisode(entry.episode, via: viewModel.audiobookshelfAPI, context: context, startGlobalTime: entry.resumeTime)
                     } label: {
                         ContinueListeningCard(
                             title: entry.episode.title ?? "Episode",

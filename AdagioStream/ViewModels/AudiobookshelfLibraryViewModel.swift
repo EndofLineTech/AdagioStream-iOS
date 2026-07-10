@@ -134,7 +134,14 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         let now = Int(Date().timeIntervalSince1970)
         let (books, episodes) = PodcastContinueListening.partition(items: items, updatedAt: now)
         inProgress = books
-        inProgressEpisodes = episodes
+        // `recentEpisode` carries no progress — hydrate each episode's real
+        // progress/resume position from /api/me/progress/{item}/{episode}.
+        var hydrated: [PodcastEpisodeEntry] = []
+        for entry in episodes {
+            let progress = await api.episodeProgress(libraryItemId: entry.showLibraryItemId, episodeId: entry.episode.id)
+            hydrated.append(entry.withProgress(progress))
+        }
+        inProgressEpisodes = hydrated
         await resolveCovers(for: books)
         await resolveShowCovers(for: episodes.map(\.showLibraryItemId))
     }

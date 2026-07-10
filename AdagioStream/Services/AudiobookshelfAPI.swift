@@ -231,6 +231,17 @@ public struct AudiobookshelfAPI {
         return response.libraryItems
     }
 
+    /// `GET /api/me/progress/{libraryItemId}/{episodeId}` — this user's progress
+    /// for one podcast episode. ABS embeds episode progress nowhere in the
+    /// episode object (not `media.episodes[]`, not `recentEpisode`); it lives
+    /// only in the user's `mediaProgress[]`, so Continue-Listening episodes must
+    /// fetch it here to show real progress / resume position. Returns `nil` when
+    /// the server 404s (episode never started) or on any error, so a missing
+    /// record reads as "unplayed" rather than propagating a failure.
+    public func episodeProgress(libraryItemId: String, episodeId: String) async -> ABSMediaProgressDTO? {
+        try? await get("/api/me/progress/\(libraryItemId)/\(episodeId)")
+    }
+
     // MARK: - Core POST
 
     /// Authenticated POST that decodes the JSON response as `T`.

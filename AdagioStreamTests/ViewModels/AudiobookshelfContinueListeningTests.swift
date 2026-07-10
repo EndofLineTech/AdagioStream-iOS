@@ -23,8 +23,10 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
     /// A podcast-episode-in-progress entry in the REAL ABS shape that
     /// `GET /api/me/items-in-progress` sends: a MINIFIED show item (`numEpisodes`,
     /// NO `media.episodes[]`) with the played episode under a TOP-LEVEL
-    /// `recentEpisode` field carrying its OWN `userMediaProgress`.
-    private func episodeItem(showId: String, showTitle: String, episodeId: String, progress: Double, finished: Bool) -> ABSLibraryItemDTO {
+    /// `recentEpisode` field. Critically, `recentEpisode` carries NO
+    /// `userMediaProgress` — ABS's `PodcastEpisode.toOldJSON` omits it, so
+    /// progress must be hydrated separately (see the hydration test below).
+    private func episodeItem(showId: String, showTitle: String, episodeId: String) -> ABSLibraryItemDTO {
         let json = """
         {
           "id": "\(showId)",
@@ -34,8 +36,7 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
             "numEpisodes": 12
           },
           "recentEpisode": {
-            "id": "\(episodeId)", "title": "Episode Title",
-            "userMediaProgress": { "currentTime": 5.0, "progress": \(progress), "isFinished": \(finished) }
+            "id": "\(episodeId)", "title": "Episode Title"
           }
         }
         """
@@ -78,9 +79,9 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
     func testPartitionSeparatesBooksFromEpisodes() {
         let items = [
             item(id: "book-a", progress: 0.4, finished: false),
-            episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1", progress: 0.2, finished: false),
+            episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1"),
             item(id: "book-b", progress: 0.1, finished: false),
-            episodeItem(showId: "show-b", showTitle: "Show B", episodeId: "ep-2", progress: 0.9, finished: false),
+            episodeItem(showId: "show-b", showTitle: "Show B", episodeId: "ep-2"),
         ]
         let (books, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
         XCTAssertEqual(books.map(\.id), ["book-a", "book-b"])
@@ -91,7 +92,7 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
 
     func testPartitionPreservesServerOrderAcrossBooksAndEpisodes() {
         let items = [
-            episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1", progress: 0.2, finished: false),
+            episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1"),
             item(id: "book-a", progress: 0.4, finished: false),
         ]
         let (books, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
@@ -106,7 +107,7 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
         // client-side re-filter is applied to them.
         let items = [
             item(id: "finished-book", progress: 1.0, finished: true),
-            episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1", progress: 0.2, finished: false),
+            episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1"),
         ]
         let (books, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
         XCTAssertTrue(books.isEmpty)
@@ -129,13 +130,44 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
         XCTAssertTrue(episodes.isEmpty)
     }
 
-    /// Episode progress is read from `recentEpisode.userMediaProgress`, not the
-    /// item's top-level `userMediaProgress` (which this endpoint omits for
-    /// episodes).
-    func testPartitionReadsEpisodeProgressFromRecentEpisode() {
-        let items = [episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1", progress: 0.6, finished: false)]
+    /// The real server shape carries NO progress in `recentEpisode`, so a
+    /// freshly-partitioned episode entry reads as unplayed (0 / no resume time)
+    /// until progress is hydrated. Guards against re-introducing the false
+    /// assumption that `recentEpisode.userMediaProgress` exists.
+    func testPartitionedEpisodeHasNoProgressUntilHydrated() {
+        let items = [episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1")]
         let (_, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
-        XCTAssertEqual(episodes.first?.progress, 0.6)
-        XCTAssertEqual(episodes.first?.isFinished, false)
+        XCTAssertEqual(episodes.first?.progress, 0)
+        XCTAssertNil(episodes.first?.resumeTime)
+        XCTAssertTrue(episodes.first?.isUnplayed ?? false)
+    }
+
+    /// The hydration merge (`PodcastEpisodeEntry.withProgress`) — the pure seam
+    /// `loadInProgress` fills from `GET /api/me/progress/{item}/{episode}`.
+    /// Progress fraction, finished state, and the resume position all come from
+    /// the fetched record, not the (progress-less) `recentEpisode`.
+    func testWithProgressHydratesProgressAndResumeTime() {
+        let items = [episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1")]
+        let (_, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
+        let fetched = try! JSONDecoder().decode(
+            ABSMediaProgressDTO.self,
+            from: Data(#"{ "currentTime": 42.0, "progress": 0.6, "isFinished": false }"#.utf8)
+        )
+        let hydrated = episodes.first!.withProgress(fetched)
+        XCTAssertEqual(hydrated.progress, 0.6)
+        XCTAssertEqual(hydrated.isFinished, false)
+        XCTAssertEqual(hydrated.resumeTime, 42.0)
+        XCTAssertFalse(hydrated.isUnplayed)
+    }
+
+    /// A 404 (episode never started) hydrates as `nil` → still unplayed, no
+    /// fabricated resume time.
+    func testWithProgressNilKeepsEntryUnplayed() {
+        let items = [episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1")]
+        let (_, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
+        let hydrated = episodes.first!.withProgress(nil)
+        XCTAssertEqual(hydrated.progress, 0)
+        XCTAssertNil(hydrated.resumeTime)
+        XCTAssertTrue(hydrated.isUnplayed)
     }
 }
