@@ -648,3 +648,134 @@ public struct PodcastPlaybackContext: Equatable {
         Self.nextEpisode(in: episodes, after: currentEpisodeId, order: order)
     }
 }
+
+// MARK: - Podcast browsing (E3 / c2s.2, c2s.3, c2s.4)
+
+/// A podcast show summary for the "By Show" grid — just enough to render a
+/// row/tile and open the show's episode list. Distinct from `Audiobook`
+/// (which is a GRDB-persisted book record) — shows are not cached to the
+/// local DB, they're re-fetched per library load like the book list is.
+public struct PodcastShow: Equatable, Identifiable {
+    public let id: String              // library item id
+    public let libraryId: String
+    public let title: String
+    public let author: String?
+
+    public init(id: String, libraryId: String, title: String, author: String?) {
+        self.id = id
+        self.libraryId = libraryId
+        self.title = title
+        self.author = author
+    }
+
+    /// Builds a show summary from a library item. `nil` if the item has no
+    /// title (shouldn't happen for a real podcast, but keeps this total).
+    public init?(item: ABSLibraryItemDTO, libraryIdFallback: String) {
+        guard let title = item.showTitle else { return nil }
+        self.id = item.id
+        self.libraryId = item.libraryId ?? libraryIdFallback
+        self.title = title
+        self.author = item.media?.metadata?.displayAuthor
+    }
+}
+
+/// One episode plus the show it belongs to — the unit rendered by the
+/// "Recent Episodes" flat list and the Continue Listening shelf's episode
+/// entries. Carries just enough of the show for row display + resuming
+/// playback (`showLibraryItemId` is what `playPodcastEpisode` needs).
+public struct PodcastEpisodeEntry: Equatable, Identifiable {
+    public let episode: ABSEpisodeDTO
+    public let showLibraryItemId: String
+    public let showTitle: String?
+
+    public var id: String { episode.id }
+
+    public init(episode: ABSEpisodeDTO, showLibraryItemId: String, showTitle: String?) {
+        self.episode = episode
+        self.showLibraryItemId = showLibraryItemId
+        self.showTitle = showTitle
+    }
+
+    public static func == (lhs: PodcastEpisodeEntry, rhs: PodcastEpisodeEntry) -> Bool {
+        lhs.episode.id == rhs.episode.id && lhs.showLibraryItemId == rhs.showLibraryItemId
+    }
+
+    /// Progress fraction 0.0-1.0 for the unplayed badge, from the episode's
+    /// embedded `userMediaProgress` (present when the item was fetched with
+    /// `?include=progress`, e.g. via `AudiobookshelfAPI.item(id:)`).
+    public var progress: Double { episode.userMediaProgress?.progress ?? 0 }
+    public var isFinished: Bool { episode.userMediaProgress?.isFinished ?? false }
+    /// True when the episode has never been started — drives the unplayed badge.
+    public var isUnplayed: Bool { !isFinished && progress <= 0 }
+}
+
+extension PodcastPlaybackContext {
+
+    /// Sorts a show's episodes per `order`. Pure — the single seam c2s.2's
+    /// episode list (By Show + Recent Episodes) and c2s.4's setting both call
+    /// through, so display order and auto-play direction can never disagree.
+    ///
+    /// ABS returns `media.episodes[]` newest-first by server convention (same
+    /// assumption `nextEpisode` already makes) — `.oldestFirst` just reverses it.
+    public static func sortedEpisodes(_ episodes: [ABSEpisodeDTO], order: PodcastEpisodeOrder) -> [ABSEpisodeDTO] {
+        order == .newestFirst ? episodes : episodes.reversed()
+    }
+}
+
+/// Aggregates every show's episodes into one flat, sorted list for the
+/// "Recent Episodes" browse mode (c2s.2). Pure — no network/DB.
+///
+/// Each show's episodes are already newest-first (server convention); this
+/// merges them by `pubDate` string (ISO-8601/RFC-2822 both sort correctly as
+/// strings only when zero-padded/same format, which ABS's `pubDate` is not
+/// guaranteed to be — so this sorts by each episode's ALREADY-newest-first
+/// position within its own show, folding shows together in the order given,
+/// then applies `order`. This keeps sorting robust without parsing `pubDate`
+/// through an unvalidated format).
+///
+/// ponytail: true chronological cross-show interleaving needs a parsed
+/// `pubDate`/`publishedAt`, which ABS's exact wire format is unvalidated
+/// against a live server (see the DTO's ponytail note). Concatenating each
+/// show's own newest-first episodes and only reordering top-level by `order`
+/// is correct per-show and stable; revisit with real interleaving once a
+/// podcast server confirms the date field's actual shape.
+public enum PodcastRecentEpisodes {
+    public static func aggregate(shows: [(show: PodcastShow, episodes: [ABSEpisodeDTO])], order: PodcastEpisodeOrder) -> [PodcastEpisodeEntry] {
+        let entries = shows.flatMap { pair in
+            PodcastPlaybackContext.sortedEpisodes(pair.episodes, order: order).map {
+                PodcastEpisodeEntry(episode: $0, showLibraryItemId: pair.show.id, showTitle: pair.show.title)
+            }
+        }
+        return entries
+    }
+}
+
+// MARK: - Continue Listening: books vs. podcast episodes (E3 / c2s.3)
+
+/// `GET /api/me/items-in-progress` returns both in-progress books and podcast
+/// episodes in one list. ABS represents an in-progress podcast episode as a
+/// library item for the SHOW whose `media.episodes[]` carries exactly the one
+/// (recently-played) episode — vs. a book item, whose `media.episodes` is
+/// always empty. That's the one signal this partition uses.
+public enum PodcastContinueListening {
+
+    /// Splits a mixed items-in-progress response into books and podcast
+    /// episodes, preserving server order within each group. Pure — the single
+    /// seam c2s.3's shelf and its tests both go through.
+    public static func partition(items: [ABSLibraryItemDTO], updatedAt: Int) -> (books: [Audiobook], episodes: [PodcastEpisodeEntry]) {
+        var books: [Audiobook] = []
+        var episodes: [PodcastEpisodeEntry] = []
+        for item in items {
+            let showEpisodes = item.episodes()
+            if let episode = showEpisodes.first {
+                episodes.append(PodcastEpisodeEntry(episode: episode, showLibraryItemId: item.id, showTitle: item.showTitle))
+            } else {
+                let record = item.toRecord(libraryIdFallback: item.libraryId ?? "", updatedAt: updatedAt)
+                if !record.isFinished && record.progress > 0 {
+                    books.append(record)
+                }
+            }
+        }
+        return (books, episodes)
+    }
+}

@@ -155,6 +155,29 @@ public enum ChannelSortOrder: String, Codable, CaseIterable {
     }
 }
 
+/// Podcast episode sort order (E3 / c2s.4). Drives both the episode list
+/// display order (By Show + Recent Episodes) and whole-show auto-play
+/// direction — see `PodcastEpisodeOrder` in AudiobookshelfModels.swift, which
+/// this maps onto 1:1 at the settings boundary.
+public enum PodcastEpisodeSortOrder: String, Codable, CaseIterable {
+    case newestFirst
+    case oldestFirst
+
+    public var label: String {
+        switch self {
+        case .newestFirst: "Newest First"
+        case .oldestFirst: "Oldest First"
+        }
+    }
+
+    public var podcastEpisodeOrder: PodcastEpisodeOrder {
+        switch self {
+        case .newestFirst: .newestFirst
+        case .oldestFirst: .oldestFirst
+        }
+    }
+}
+
 /// Ordering of the Navidrome music entries relative to streaming channel
 /// groups in the CarPlay root list. Only meaningful when a Subsonic provider
 /// is configured. `streamingFirst` preserves the historical layout (channels
@@ -215,6 +238,9 @@ public struct AppSettings: Codable {
     /// CarPlay root ordering of Navidrome music vs streaming channel groups
     /// (fnv.8). Default streamingFirst preserves the historical layout.
     public var carPlaySourceOrder: CarPlaySourceOrder
+    /// Podcast episode sort order (E3 / c2s.4). Drives both episode list
+    /// display order and whole-show auto-play direction. Default newest-first.
+    public var podcastEpisodeSortOrder: PodcastEpisodeSortOrder
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -233,7 +259,8 @@ public struct AppSettings: Codable {
         repeatMode: RepeatMode = .off,
         shuffleEnabled: Bool = false,
         offlineMode: Bool = false,
-        carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst
+        carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst,
+        podcastEpisodeSortOrder: PodcastEpisodeSortOrder = .newestFirst
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -252,6 +279,7 @@ public struct AppSettings: Codable {
         self.shuffleEnabled = shuffleEnabled
         self.offlineMode = offlineMode
         self.carPlaySourceOrder = carPlaySourceOrder
+        self.podcastEpisodeSortOrder = podcastEpisodeSortOrder
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -276,6 +304,7 @@ public struct AppSettings: Codable {
         shuffleEnabled = try container.decodeIfPresent(Bool.self, forKey: .shuffleEnabled) ?? false
         offlineMode = try container.decodeIfPresent(Bool.self, forKey: .offlineMode) ?? false
         carPlaySourceOrder = try container.decodeIfPresent(CarPlaySourceOrder.self, forKey: .carPlaySourceOrder) ?? .streamingFirst
+        podcastEpisodeSortOrder = try container.decodeIfPresent(PodcastEpisodeSortOrder.self, forKey: .podcastEpisodeSortOrder) ?? .newestFirst
     }
 }
 

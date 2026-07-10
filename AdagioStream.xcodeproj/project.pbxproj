@@ -136,6 +136,7 @@
 		818614EC1C13D0D3A221B095 /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7473223A3E7D4A8A7C63A3 /* CrashReporter.swift */; };
 		820E29811BA7C70BB58A791D /* CrashReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B7473223A3E7D4A8A7C63A3 /* CrashReporter.swift */; };
 		822CBD96D23302FB5AF7A3F8 /* SavedSong.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7713A3C47F3B23E57849347 /* SavedSong.swift */; };
+		82A5C121CA11C3EADAB8D94F /* PodcastLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CD0AB33DF196CE170D8ACC1 /* PodcastLibraryView.swift */; };
 		840B6B3CBCCD32E7362FD0B0 /* LGPL-2.1.txt in Resources */ = {isa = PBXBuildFile; fileRef = CBE71EE57338E91114F4A789 /* LGPL-2.1.txt */; };
 		8432DCB7AEC1149AD0CE3B16 /* CarPlayMusicBrowseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */; };
 		852CBCEA973A3313D827AA98 /* PlaybackSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81245276C98A5709B721113 /* PlaybackSource.swift */; };
@@ -236,6 +237,7 @@
 		E60AF4EE2F52234311F791E2 /* NowPlayingQueueUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8290153DA6AE230673CBD774 /* NowPlayingQueueUITests.swift */; };
 		E635A6E210A5998E1CD2D537 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DCB0C46B512BF4D2919E11A /* ContentView.swift */; };
 		E6770E028819F7C202725955 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
+		E7B674BE8FD30E3C01207CE0 /* PodcastEpisodeSortingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDA04083FB9D453CCBEDF77A /* PodcastEpisodeSortingTests.swift */; };
 		EAF5EE4211D7A39F9B441A5E /* AudiobookshelfOIDCSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A941BA559B2F737D9755A857 /* AudiobookshelfOIDCSession.swift */; };
 		EB47F7DCB341A894170BDD66 /* ImageCacheServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 985EB398F70876CEEC467643 /* ImageCacheServiceTests.swift */; };
 		EC4420F4B82AFB4A4667A1B9 /* AudiobookSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB2B11F049C14407921EAA7 /* AudiobookSyncTests.swift */; };
@@ -348,6 +350,7 @@
 		48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeModelsTests.swift; sourceTree = "<group>"; };
 		48F7855554D238CE0CCF1A92 /* ChannelListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListViewModel.swift; sourceTree = "<group>"; };
 		4B04F3504B6EB6AAE7863CE0 /* SubsonicAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubsonicAuth.swift; sourceTree = "<group>"; };
+		4CD0AB33DF196CE170D8ACC1 /* PodcastLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastLibraryView.swift; sourceTree = "<group>"; };
 		4CD580FC83CC64AAAFBBDEBF /* AdagioStream-tvOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "AdagioStream-tvOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5007C81620324434051842F8 /* AdagioStartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdagioStartupView.swift; sourceTree = "<group>"; };
 		51A157C3F8D594E8C2BC7BB8 /* AudioPlayerService+Queue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioPlayerService+Queue.swift"; sourceTree = "<group>"; };
@@ -464,6 +467,7 @@
 		EBA9C37814DF850D9943C848 /* VLCAudioCallbackBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = VLCAudioCallbackBridge.h; sourceTree = "<group>"; };
 		EBEDEBD30F3138B52EF04EE8 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
+		EDA04083FB9D453CCBEDF77A /* PodcastEpisodeSortingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastEpisodeSortingTests.swift; sourceTree = "<group>"; };
 		EE137FF651110189C708941D /* PlaybackSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackSettingsView.swift; sourceTree = "<group>"; };
 		EE5702869640246914D37C85 /* LoadableContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadableContent.swift; sourceTree = "<group>"; };
 		EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBrowseView.swift; sourceTree = "<group>"; };
@@ -644,6 +648,7 @@
 				1D3200355927ECEE975520D8 /* NavidromeAddToPlaylistSheet.swift */,
 				6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */,
 				EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */,
+				4CD0AB33DF196CE170D8ACC1 /* PodcastLibraryView.swift */,
 				0B48DC2BAF144D6832406885 /* SearchResultsView.swift */,
 				4764DC58A87DECEFE53BB799 /* SubsonicCoverArt.swift */,
 				F0F8559DFD52269DF97E1E63 /* TrackDownloadButton.swift */,
@@ -847,6 +852,7 @@
 				48640C51C04FD333FD2355DB /* NavidromeModelsTests.swift */,
 				826EE35C4ACE4B68BFA5B0FC /* PlaybackQueueTests.swift */,
 				90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */,
+				EDA04083FB9D453CCBEDF77A /* PodcastEpisodeSortingTests.swift */,
 				300058C4A834232B92D00C97 /* PodcastPlaybackContextTests.swift */,
 			);
 			path = Models;
@@ -1185,6 +1191,7 @@
 				5DA4B6779C4DF27B8CD84D27 /* PlaybackQueueTests.swift in Sources */,
 				964624A11AF757074CD84111 /* PlaybackRateTests.swift in Sources */,
 				082C24BA4D5890A3DEE3ED77 /* PlaybackSourceTests.swift in Sources */,
+				E7B674BE8FD30E3C01207CE0 /* PodcastEpisodeSortingTests.swift in Sources */,
 				47B3167B2819CF7616B85C46 /* PodcastPlaybackContextTests.swift in Sources */,
 				D0FD5760D572C6DBB7EB8C14 /* ProviderManagerTests.swift in Sources */,
 				BC2B114A4E67CB8D3B0C6D70 /* ReconnectGuardTests.swift in Sources */,
@@ -1292,6 +1299,7 @@
 				852CBCEA973A3313D827AA98 /* PlaybackSource.swift in Sources */,
 				9C1BC605AC3359E35C7032DA /* PlayerViewModel.swift in Sources */,
 				F5719F3D7283A8E94C64ADD5 /* PlaylistBrowseView.swift in Sources */,
+				82A5C121CA11C3EADAB8D94F /* PodcastLibraryView.swift in Sources */,
 				4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */,
 				129D39FCB60C075DFBF45289 /* Provider.swift in Sources */,
 				5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */,

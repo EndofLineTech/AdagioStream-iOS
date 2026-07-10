@@ -24,10 +24,46 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// library.
     @Published public private(set) var libraries: [ABSLibraryDTO] = []
 
-    // MARK: - Continue Listening (00t)
+    // MARK: - Continue Listening (00t; episodes added E3 / c2s.3)
 
     /// In-progress, not-finished books in server order (GET /api/me/items-in-progress).
     @Published public private(set) var inProgress: [Audiobook] = []
+
+    /// In-progress podcast episodes from the SAME items-in-progress response
+    /// (c2s.3 — rendered in the same Continue Listening shelf as books, not a
+    /// separate row).
+    @Published public private(set) var inProgressEpisodes: [PodcastEpisodeEntry] = []
+
+    // MARK: - Podcasts (E3 / c2s.1, c2s.2)
+
+    @Published public private(set) var podcastShows: [PodcastShow] = []
+    @Published public private(set) var podcastShowsState: LoadState = .idle
+
+    /// Podcast libraries seen on the last `loadPodcastShows`, for gating the
+    /// Podcasts section in the library selector (c2s.1).
+    @Published public private(set) var podcastLibraries: [ABSLibraryDTO] = []
+
+    /// Whether the ABS provider has at least one podcast library — the exact
+    /// gate `MusicLibraryView` uses to decide whether to offer the Podcasts
+    /// section at all (c2s.1), mirroring how Books is gated on `books`/`libraries`.
+    public var hasPodcastLibrary: Bool { !podcastLibraries.isEmpty }
+
+    /// Cover URLs for podcast shows, keyed by show id. Separate from
+    /// `coverURLs` (book covers) only in name — same dictionary shape, kept
+    /// distinct so a show id can never collide with a book id in one map.
+    @Published public private(set) var showCoverURLs: [String: URL] = [:]
+
+    /// Selected show's episode list (By Show → episode list, c2s.2). Sorted by
+    /// `episodeSortOrder` at the call site, not stored pre-sorted, so a live
+    /// setting change re-renders without a re-fetch.
+    @Published public private(set) var selectedShow: PodcastShow?
+    @Published public private(set) var selectedShowEpisodes: [ABSEpisodeDTO] = []
+    @Published public private(set) var showDetailState: LoadState = .idle
+
+    /// Recent Episodes: every show's episodes flattened (c2s.2). Populated by
+    /// `loadRecentEpisodes`, which fetches each show's detail once.
+    @Published public private(set) var recentEpisodes: [PodcastEpisodeEntry] = []
+    @Published public private(set) var recentEpisodesState: LoadState = .idle
 
     // MARK: - Book detail (chapters)
 
@@ -89,20 +125,27 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// Loads the Continue-Listening shelf from `/api/me/items-in-progress`.
     /// Keeps server order (most-recently-listened first). Best-effort: leaves the
     /// shelf empty on failure so the main book list still renders.
+    ///
+    /// c2s.3: the same response mixes in podcast episodes — `partition` (pure,
+    /// unit-tested) splits them out so `inProgress` (books) keeps behaving
+    /// exactly as before and `inProgressEpisodes` is purely additive.
     public func loadInProgress() async {
         guard let items = try? await api.itemsInProgress() else { return }
         let now = Int(Date().timeIntervalSince1970)
-        let records = Self.inProgressBooks(from: items, updatedAt: now)
-        inProgress = records
-        await resolveCovers(for: records)
+        let (books, episodes) = PodcastContinueListening.partition(items: items, updatedAt: now)
+        inProgress = books
+        inProgressEpisodes = episodes
+        await resolveCovers(for: books)
+        await resolveShowCovers(for: episodes.map(\.showLibraryItemId))
     }
 
     /// Maps in-progress DTOs to records, dropping finished/unstarted books.
     /// Pure so the filter/order is unit-testable. Server order is preserved.
+    /// Kept for existing callers/tests; `loadInProgress` now routes through
+    /// `PodcastContinueListening.partition` so podcast episodes in the same
+    /// response don't fall through into the book list.
     static func inProgressBooks(from items: [ABSLibraryItemDTO], updatedAt: Int) -> [Audiobook] {
-        items
-            .map { $0.toRecord(libraryIdFallback: $0.libraryId ?? "", updatedAt: updatedAt) }
-            .filter { !$0.isFinished && $0.progress > 0 }
+        PodcastContinueListening.partition(items: items, updatedAt: updatedAt).books
     }
 
     private func resolveCovers(for books: [Audiobook]) async {
@@ -111,6 +154,88 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
                 coverURLs[book.id] = url
             }
         }
+    }
+
+    private func resolveShowCovers(for showIDs: [String]) async {
+        for id in Set(showIDs) where showCoverURLs[id] == nil {
+            if let url = await api.coverURL(itemID: id) {
+                showCoverURLs[id] = url
+            }
+        }
+    }
+
+    // MARK: - Podcasts (E3 / c2s.2)
+
+    /// Loads every podcast show across all podcast libraries. Mirrors
+    /// `loadBooks`'s shape (fetch libraries, fetch each library's items,
+    /// flatten, sort by title) but shows aren't persisted to the local DB —
+    /// there's no offline/download story for podcast shows yet.
+    public func loadPodcastShows() async {
+        guard podcastShowsState != .loading else { return }
+        podcastShowsState = .loading
+        do {
+            let libraries = try await api.podcastLibraries()
+            self.podcastLibraries = libraries
+            var all: [PodcastShow] = []
+            for library in libraries {
+                let items = try await api.items(inLibrary: library.id)
+                all.append(contentsOf: items.compactMap { PodcastShow(item: $0, libraryIdFallback: library.id) })
+            }
+            all.sort { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            podcastShows = all
+            podcastShowsState = all.isEmpty ? .empty : .loaded
+            await resolveShowCovers(for: all.map(\.id))
+        } catch let apiErr as AudiobookshelfAPI.APIError {
+            podcastShowsState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            podcastShowsState = .error(error.localizedDescription)
+        }
+    }
+
+    /// Loads one show's full episode list (By Show → episode list, c2s.2).
+    /// Episodes are stored in server (newest-first) order; views sort for
+    /// display via `PodcastPlaybackContext.sortedEpisodes(_:order:)`.
+    public func loadShowDetail(_ show: PodcastShow) async {
+        selectedShow = show
+        selectedShowEpisodes = []
+        showDetailState = .loading
+        do {
+            let item = try await api.item(id: show.id)
+            let episodes = item.episodes()
+            selectedShowEpisodes = episodes
+            showDetailState = episodes.isEmpty ? .empty : .loaded
+        } catch let apiErr as AudiobookshelfAPI.APIError {
+            showDetailState = .error(apiErr.errorDescription ?? "Unknown error")
+        } catch {
+            showDetailState = .error(error.localizedDescription)
+        }
+    }
+
+    public func resetShowDetail() {
+        selectedShow = nil
+        selectedShowEpisodes = []
+        showDetailState = .idle
+    }
+
+    /// Loads every show's episodes and flattens them for "Recent Episodes"
+    /// (c2s.2). Requires `podcastShows` to already be loaded (call after
+    /// `loadPodcastShows`); fetches each show's detail once via `item(id:)`.
+    public func loadRecentEpisodes(order: PodcastEpisodeOrder) async {
+        guard recentEpisodesState != .loading else { return }
+        guard !podcastShows.isEmpty else {
+            recentEpisodesState = .empty
+            return
+        }
+        recentEpisodesState = .loading
+        var pairs: [(show: PodcastShow, episodes: [ABSEpisodeDTO])] = []
+        for show in podcastShows {
+            guard let item = try? await api.item(id: show.id) else { continue }
+            pairs.append((show, item.episodes()))
+        }
+        let flattened = PodcastRecentEpisodes.aggregate(shows: pairs, order: order)
+        recentEpisodes = flattened
+        recentEpisodesState = flattened.isEmpty ? .empty : .loaded
+        await resolveShowCovers(for: pairs.map(\.show.id))
     }
 
     // MARK: - Load: one book's detail (fresh progress + chapters)

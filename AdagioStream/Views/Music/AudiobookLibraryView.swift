@@ -54,7 +54,7 @@ struct AudiobookBrowserView: View {
 
         case .loaded:
             List {
-                if !viewModel.inProgress.isEmpty {
+                if !viewModel.inProgress.isEmpty || !viewModel.inProgressEpisodes.isEmpty {
                     Section("Continue Listening") {
                         ContinueListeningShelf(viewModel: viewModel)
                             .listRowInsets(EdgeInsets())
@@ -160,12 +160,19 @@ struct AudiobookAuthorBrowserView: View {
     }
 }
 
-// MARK: - Continue Listening shelf (00t)
+// MARK: - Continue Listening shelf (00t; podcast episodes mixed in E3 / c2s.3)
 
-/// Horizontal shelf of in-progress books; tap resumes via `playAudiobook`.
+/// Horizontal shelf of in-progress books AND podcast episodes (c2s.3 — one
+/// shelf, not a separate row per the PO decision). Books resume via
+/// `playAudiobook`; episodes resume via `playPodcastEpisode` with a
+/// single-episode `PodcastPlaybackContext` (same rationale as the Recent
+/// Episodes tap — see `PodcastRecentEpisodesView.recentEpisodesContext`:
+/// whole-show auto-play from a resume tap isn't in scope here, only resuming
+/// the specific episode is).
 private struct ContinueListeningShelf: View {
     @ObservedObject var viewModel: AudiobookshelfLibraryViewModel
     @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var settingsViewModel: SettingsViewModel
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -174,10 +181,31 @@ private struct ContinueListeningShelf: View {
                     Button {
                         audioPlayer.playAudiobook(book, via: viewModel.audiobookshelfAPI)
                     } label: {
-                        ContinueListeningCard(book: book, coverURL: viewModel.coverURLs[book.id])
+                        ContinueListeningCard(title: book.title, coverURL: viewModel.coverURLs[book.id], progress: book.progress, placeholderIcon: "book.closed")
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Resume \(book.title)")
+                }
+                ForEach(viewModel.inProgressEpisodes) { entry in
+                    Button {
+                        let order = settingsViewModel.settings.podcastEpisodeSortOrder.podcastEpisodeOrder
+                        let context = PodcastPlaybackContext(
+                            libraryItemId: entry.showLibraryItemId,
+                            showTitle: entry.showTitle,
+                            episodes: [entry.episode],
+                            order: order
+                        )
+                        audioPlayer.playPodcastEpisode(entry.episode, via: viewModel.audiobookshelfAPI, context: context)
+                    } label: {
+                        ContinueListeningCard(
+                            title: entry.episode.title ?? "Episode",
+                            coverURL: viewModel.showCoverURLs[entry.showLibraryItemId],
+                            progress: entry.progress,
+                            placeholderIcon: "mic"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Resume \(entry.episode.title ?? "episode")")
                 }
             }
             .padding(.horizontal, 16)
@@ -187,14 +215,16 @@ private struct ContinueListeningShelf: View {
 }
 
 private struct ContinueListeningCard: View {
-    let book: Audiobook
+    let title: String
     let coverURL: URL?
+    let progress: Double
+    var placeholderIcon: String = "book.closed"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             cover
-            Text(book.title).font(.caption).foregroundStyle(.primary).lineLimit(2)
-            ProgressView(value: min(1, book.progress))
+            Text(title).font(.caption).foregroundStyle(.primary).lineLimit(2)
+            ProgressView(value: min(1, progress))
                 .progressViewStyle(.linear)
                 .tint(.accentColor)
         }
@@ -209,7 +239,7 @@ private struct ContinueListeningCard: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(Color(.secondarySystemBackground))
                 .frame(width: 120, height: 120)
-                .overlay(Image(systemName: "book.closed").foregroundStyle(.secondary))
+                .overlay(Image(systemName: placeholderIcon).foregroundStyle(.secondary))
         }
     }
 }

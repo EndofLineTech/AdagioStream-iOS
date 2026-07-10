@@ -217,4 +217,13 @@ public final class SettingsViewModel: ObservableObject {
         settings.offlineMode = enabled
         await saveSettings()
     }
+
+    /// Podcast episode sort order (E3 / c2s.4). Drives both episode list
+    /// display order and whole-show auto-play direction — views read
+    /// `settings.podcastEpisodeSortOrder.podcastEpisodeOrder` directly, no
+    /// AudioPlayerService push needed (unlike bufferDuration/artwork mode).
+    public func updatePodcastEpisodeSortOrder(_ order: PodcastEpisodeSortOrder) async {
+        settings.podcastEpisodeSortOrder = order
+        await saveSettings()
+    }
 }

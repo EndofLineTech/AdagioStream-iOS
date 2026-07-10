@@ -33,10 +33,12 @@ enum MusicBrowseMode: String, CaseIterable {
     case playlists = "Playlists"
 }
 
-/// Top-level library section: Books vs Music (4xw.1). Offered only when the
-/// corresponding provider is configured.
+/// Top-level library section: Books vs Podcasts vs Music (4xw.1; Podcasts
+/// added E3 / c2s.1). Offered only when the corresponding provider/content
+/// actually exists.
 enum LibrarySection: String, CaseIterable {
     case books = "Books"
+    case podcasts = "Podcasts"
     case music = "Music"
 }
 
@@ -45,6 +47,12 @@ enum LibrarySection: String, CaseIterable {
 enum BookBrowseMode: String, CaseIterable {
     case author = "Author"
     case titles = "Titles"
+}
+
+/// Podcast sub-modes (shown when the top-level section is Podcasts, E3 / c2s.1).
+enum PodcastBrowseMode: String, CaseIterable {
+    case byShow = "By Show"
+    case recentEpisodes = "Recent Episodes"
 }
 
 // MARK: - MusicLibraryView
@@ -70,11 +78,12 @@ public struct MusicLibraryView: View {
     @State private var absAPI: AudiobookshelfAPI?
     @State private var absViewModel: AudiobookshelfLibraryViewModel?
 
-    // Top-level section (Books | Music) and per-section sub-mode. All persist
-    // across tab switches (4xw.1).
+    // Top-level section (Books | Podcasts | Music) and per-section sub-mode.
+    // All persist across tab switches (4xw.1; Podcasts added c2s.1).
     @State private var section: LibrarySection = .music
     @State private var browseMode: MusicBrowseMode = .artists
     @State private var bookMode: BookBrowseMode = .titles
+    @State private var podcastMode: PodcastBrowseMode = .byShow
 
     // Search query text — bound to the .searchable modifier.
     // Non-empty → show SearchResultsView; empty → show normal browse.
@@ -123,6 +132,8 @@ public struct MusicLibraryView: View {
                 prompt: section == .books ? "Search title or author" : "Search artists, albums, songs"
             )
             .accessibilityLabel(section == .books ? "Search audiobooks" : "Search music library")
+            // Podcasts (c2s.1) has no search wiring yet — see the note in
+            // `content`'s podcasts branch.
             .onChange(of: searchText) { _, newValue in
                 // Books search filters client-side in the browser views below;
                 // only Music drives the Subsonic server search here.
@@ -138,6 +149,10 @@ public struct MusicLibraryView: View {
                     let absVM = AudiobookshelfLibraryViewModel(api: absResolved)
                     absViewModel = absVM
                     await absVM.loadBooks()
+                    // Podcasts (c2s.1): loaded alongside books so
+                    // `hasPodcastLibrary` is known before the section switch
+                    // first renders — gates whether Podcasts is offered at all.
+                    await absVM.loadPodcastShows()
                 }
 
                 guard let resolved = providerManager.subsonicAPI else {
@@ -181,6 +196,14 @@ public struct MusicLibraryView: View {
                 case .author: AudiobookAuthorBrowserView(viewModel: absVM)
                 }
             }
+        } else if section == .podcasts, let absVM = absViewModel {
+            // Podcasts section (c2s.1/c2s.2): By Show = grid -> episode list;
+            // Recent Episodes = flat list across the whole podcast library.
+            // No search wiring yet (c2s.1 scope is the selector + browse UI).
+            switch podcastMode {
+            case .byShow: PodcastShowGridView(viewModel: absVM)
+            case .recentEpisodes: PodcastRecentEpisodesView(viewModel: absVM)
+            }
         } else if let vm = viewModel, let resolvedAPI = api {
             // Show search results when there is a non-empty query;
             // otherwise show the normal browse UI unchanged.
@@ -223,7 +246,7 @@ public struct MusicLibraryView: View {
     /// the view-model, Books filters the already-loaded list client-side.
     /// Hidden in offline mode (b42) — no network browse/search there.
     private var showsSearch: Bool {
-        !settingsViewModel.settings.offlineMode
+        !settingsViewModel.settings.offlineMode && section != .podcasts
     }
 
     /// True when the search field has non-empty (non-whitespace) text.
@@ -234,10 +257,14 @@ public struct MusicLibraryView: View {
     // MARK: - Mode selector (4xw.1 — two levels)
 
     /// Top-level sections actually available: Music when a Subsonic provider is
-    /// configured, Books when an ABS provider is.
+    /// configured, Books when an ABS provider is, Podcasts when the ABS
+    /// provider additionally has at least one podcast library (c2s.1) — mirrors
+    /// how Books is gated on the ABS provider existing at all. `hasPodcastLibrary`
+    /// reflects the last `loadPodcastShows()` call in MusicLibraryView's `.task`.
     private var availableSections: [LibrarySection] {
         var s: [LibrarySection] = []
         if absViewModel != nil { s.append(.books) }
+        if absViewModel?.hasPodcastLibrary == true { s.append(.podcasts) }
         if providerManager.subsonicAPI != nil { s.append(.music) }
         return s
     }
@@ -303,6 +330,19 @@ public struct MusicLibraryView: View {
             }
             .accessibilityLabel("Book browse mode")
             .accessibilityHint("Switch between Author and Titles")
+        case .podcasts:
+            Menu {
+                Picker("Podcasts", selection: $podcastMode) {
+                    ForEach(PodcastBrowseMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+            } label: {
+                Label(podcastMode.rawValue, systemImage: "chevron.up.chevron.down")
+                    .labelStyle(.titleAndIcon)
+            }
+            .accessibilityLabel("Podcast browse mode")
+            .accessibilityHint("Switch between By Show and Recent Episodes")
         }
     }
 

@@ -75,6 +75,18 @@ struct PlaybackSettingsView: View {
             } footer: {
                 Text("How often to refresh live sports scores from ESPN.com API. Lower values show scores sooner but use more data.")
             }
+
+            Section {
+                Picker("Episode Order", selection: podcastEpisodeSortOrderBinding) {
+                    ForEach(PodcastEpisodeSortOrder.allCases, id: \.self) { order in
+                        Text(order.label).tag(order)
+                    }
+                }
+            } header: {
+                Text("Podcasts")
+            } footer: {
+                Text("Order episode lists newest or oldest first. Also sets the direction whole-show auto-play advances.")
+            }
         }
         .navigationTitle("Playback")
         .navigationBarTitleDisplayMode(.inline)
@@ -94,6 +106,15 @@ struct PlaybackSettingsView: View {
             get: { viewModel.settings.espnLivePollInterval },
             set: { newValue in
                 Task { await viewModel.updateESPNLivePollInterval(newValue) }
+            }
+        )
+    }
+
+    private var podcastEpisodeSortOrderBinding: Binding<PodcastEpisodeSortOrder> {
+        Binding(
+            get: { viewModel.settings.podcastEpisodeSortOrder },
+            set: { newValue in
+                Task { await viewModel.updatePodcastEpisodeSortOrder(newValue) }
             }
         )
     }
