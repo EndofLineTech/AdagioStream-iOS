@@ -20,10 +20,10 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
         return try! JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(json.utf8))
     }
 
-    /// A podcast-episode-in-progress entry, as ABS represents it: a library
-    /// item for the SHOW whose `media.episodes[]` carries exactly the one
-    /// recently-played episode (vs. a book item, whose `media.episodes` is
-    /// always empty/absent).
+    /// A podcast-episode-in-progress entry in the REAL ABS shape that
+    /// `GET /api/me/items-in-progress` sends: a MINIFIED show item (`numEpisodes`,
+    /// NO `media.episodes[]`) with the played episode under a TOP-LEVEL
+    /// `recentEpisode` field carrying its OWN `userMediaProgress`.
     private func episodeItem(showId: String, showTitle: String, episodeId: String, progress: Double, finished: Bool) -> ABSLibraryItemDTO {
         let json = """
         {
@@ -31,10 +31,27 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
           "libraryId": "lib-podcasts",
           "media": {
             "metadata": { "title": "\(showTitle)" },
-            "episodes": [
-              { "id": "\(episodeId)", "title": "Episode Title", "userMediaProgress": { "currentTime": 5.0, "progress": \(progress), "isFinished": \(finished) } }
-            ]
+            "numEpisodes": 12
+          },
+          "recentEpisode": {
+            "id": "\(episodeId)", "title": "Episode Title",
+            "userMediaProgress": { "currentTime": 5.0, "progress": \(progress), "isFinished": \(finished) }
           }
+        }
+        """
+        return try! JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(json.utf8))
+    }
+
+    /// A book item that (like a podcast show) reports `numEpisodes > 0` but has
+    /// NO `recentEpisode` — the negative case that MUST classify as a book, not
+    /// an episode. Guards against the old episode-count heuristic regressing.
+    private func bookItemWithEpisodeCount(id: String, progress: Double, finished: Bool) -> ABSLibraryItemDTO {
+        let json = """
+        {
+          "id": "\(id)",
+          "libraryId": "lib-1",
+          "media": { "duration": 100.0, "metadata": { "title": "\(id)" }, "numEpisodes": 3 },
+          "userMediaProgress": { "currentTime": 10.0, "progress": \(progress), "isFinished": \(finished) }
         }
         """
         return try! JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(json.utf8))
@@ -100,5 +117,25 @@ final class AudiobookshelfContinueListeningTests: XCTestCase {
         let (books, episodes) = PodcastContinueListening.partition(items: [], updatedAt: 1)
         XCTAssertTrue(books.isEmpty)
         XCTAssertTrue(episodes.isEmpty)
+    }
+
+    /// Negative case for the discriminator: a book that reports `numEpisodes > 0`
+    /// but has NO `recentEpisode` MUST classify as a book. `recentEpisode`
+    /// presence — not an episode count — is the signal.
+    func testPartitionClassifiesBookWithEpisodeCountAndNoRecentEpisodeAsBook() {
+        let items = [bookItemWithEpisodeCount(id: "counted-book", progress: 0.3, finished: false)]
+        let (books, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
+        XCTAssertEqual(books.map(\.id), ["counted-book"])
+        XCTAssertTrue(episodes.isEmpty)
+    }
+
+    /// Episode progress is read from `recentEpisode.userMediaProgress`, not the
+    /// item's top-level `userMediaProgress` (which this endpoint omits for
+    /// episodes).
+    func testPartitionReadsEpisodeProgressFromRecentEpisode() {
+        let items = [episodeItem(showId: "show-a", showTitle: "Show A", episodeId: "ep-1", progress: 0.6, finished: false)]
+        let (_, episodes) = PodcastContinueListening.partition(items: items, updatedAt: 1)
+        XCTAssertEqual(episodes.first?.progress, 0.6)
+        XCTAssertEqual(episodes.first?.isFinished, false)
     }
 }

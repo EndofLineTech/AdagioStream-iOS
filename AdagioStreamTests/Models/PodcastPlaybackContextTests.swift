@@ -10,13 +10,23 @@ final class PodcastPlaybackContextTests: XCTestCase {
     /// Decodes a minimal episode list JSON. `ABSEpisodeDTO`'s only init is
     /// `Decodable`, matching every other DTO in this file — same convention as
     /// `AudiobookshelfModelsTests`.
+    ///
+    /// `nextEpisode` now orders EXPLICITLY by `pubDate` (c2s.3 review fix — wire
+    /// order is not guaranteed chronological), so fixtures carry real RFC-2822
+    /// `pubDate` values keyed off the trailing digit: e1 oldest … e3 newest.
     private func episodes(ids: [String]) -> [ABSEpisodeDTO] {
-        let entries = ids.map { "{\"id\": \"\($0)\", \"title\": \"Episode \($0)\"}" }.joined(separator: ",")
-        let json = "[\(entries)]"
-        return try! JSONDecoder().decode([ABSEpisodeDTO].self, from: Data(json.utf8))
+        let entries = ids.map { id -> String in
+            // Map a trailing digit N to 2024-01-0N; ids without one stay undated.
+            if let last = id.last, let day = last.wholeNumberValue, (1...9).contains(day) {
+                let date = String(format: "Mon, 0%d Jan 2024 00:00:00 GMT", day)
+                return "{\"id\": \"\(id)\", \"title\": \"Episode \(id)\", \"pubDate\": \"\(date)\"}"
+            }
+            return "{\"id\": \"\(id)\", \"title\": \"Episode \(id)\"}"
+        }.joined(separator: ",")
+        return try! JSONDecoder().decode([ABSEpisodeDTO].self, from: Data("[\(entries)]".utf8))
     }
 
-    // Server order is newest-first by ABS convention: e3, e2, e1 (e3 newest).
+    // e3 newest, e1 oldest (dates from the trailing digit above).
     private func makeEpisodes() -> [ABSEpisodeDTO] {
         episodes(ids: ["e3", "e2", "e1"])
     }

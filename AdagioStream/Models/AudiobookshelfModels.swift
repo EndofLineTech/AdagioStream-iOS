@@ -152,9 +152,15 @@ public struct ABSLibraryItemDTO: Decodable {
     public let libraryId: String?
     public let media: ABSMediaDTO?
     public let userMediaProgress: ABSMediaProgressDTO?
+    /// TOP-LEVEL field sent only by `GET /api/me/items-in-progress` for an
+    /// in-progress podcast: the recently-played episode (with its own
+    /// `userMediaProgress`). This endpoint sends a MINIFIED item — `numEpisodes`
+    /// but no `media.episodes[]` — so `recentEpisode` (not `media.episodes`) is
+    /// the authoritative signal that an in-progress item is a podcast episode.
+    public let recentEpisode: ABSEpisodeDTO?
 
     enum CodingKeys: String, CodingKey {
-        case id, libraryId, media, userMediaProgress
+        case id, libraryId, media, userMediaProgress, recentEpisode
     }
 
     /// Transforms the item into an `Audiobook` record. `libraryIdFallback` is
@@ -635,9 +641,11 @@ public struct PodcastPlaybackContext: Equatable {
     /// The episode that plays after `currentEpisodeId` ends, honoring `order`.
     /// `nil` at the end of the show (or if `currentEpisodeId` isn't found).
     ///
-    /// Pure — the whole seam a future newest/oldest setting needs to reach.
+    /// Routes through `sortedEpisodes` so auto-play walks the SAME explicit
+    /// `pubDate` order the episode list displays — the wire-order assumption is
+    /// retired here too, not just in the list. Pure.
     public static func nextEpisode(in episodes: [ABSEpisodeDTO], after currentEpisodeId: String, order: PodcastEpisodeOrder) -> ABSEpisodeDTO? {
-        let ordered = order == .newestFirst ? episodes : episodes.reversed()
+        let ordered = sortedEpisodes(episodes, order: order)
         guard let pos = ordered.firstIndex(where: { $0.id == currentEpisodeId }) else { return nil }
         let nextPos = ordered.index(after: pos)
         return nextPos < ordered.endIndex ? ordered[nextPos] : nil
@@ -711,34 +719,62 @@ public struct PodcastEpisodeEntry: Equatable, Identifiable {
 
 extension PodcastPlaybackContext {
 
+    /// Parses an ABS `pubDate` ("Mon, 02 Jan 2006 15:04:05 GMT", RFC-2822) to a
+    /// `Date`. `nil` when absent/unparseable. Pure — the ONE pubDate parser
+    /// (sorting AND the row's display formatter both route through it, so the
+    /// format string can't drift between them).
+    public static func parsePubDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f.date(from: raw)
+    }
+
+    static func pubDate(_ episode: ABSEpisodeDTO) -> Date? { parsePubDate(episode.pubDate) }
+
     /// Sorts a show's episodes per `order`. Pure — the single seam c2s.2's
-    /// episode list (By Show + Recent Episodes) and c2s.4's setting both call
-    /// through, so display order and auto-play direction can never disagree.
+    /// episode list (By Show + Recent Episodes), c2s.4's setting, and (via
+    /// `nextEpisode`) whole-show auto-play all call through, so display order
+    /// and auto-play direction can never disagree.
     ///
-    /// ABS returns `media.episodes[]` newest-first by server convention (same
-    /// assumption `nextEpisode` already makes) — `.oldestFirst` just reverses it.
+    /// Sorts EXPLICITLY by parsed `pubDate` — ABS's `media.episodes[]`
+    /// association order is insertion/PK order, NOT guaranteed chronological
+    /// (no `ORDER BY publishedAt` in `toOldJSONExpanded`), so reversing wire
+    /// order could mislabel newest/oldest. Episodes with a missing/unparseable
+    /// `pubDate` sort LAST in a stable way (their relative wire order is kept),
+    /// so the order is total and tests are deterministic.
     public static func sortedEpisodes(_ episodes: [ABSEpisodeDTO], order: PodcastEpisodeOrder) -> [ABSEpisodeDTO] {
-        order == .newestFirst ? episodes : episodes.reversed()
+        let indexed = episodes.enumerated().map { ($0.offset, $0.element) }
+        let sorted = indexed.sorted { lhs, rhs in
+            let ld = pubDate(lhs.1), rd = pubDate(rhs.1)
+            switch (ld, rd) {
+            case let (l?, r?) where l != r:
+                return order == .newestFirst ? l > r : l < r
+            case (nil, _?):
+                return false          // undated sorts after dated
+            case (_?, nil):
+                return true           // dated sorts before undated
+            default:
+                return lhs.0 < rhs.0  // equal dates / both undated → stable by wire order
+            }
+        }
+        return sorted.map(\.1)
     }
 }
 
-/// Aggregates every show's episodes into one flat, sorted list for the
-/// "Recent Episodes" browse mode (c2s.2). Pure — no network/DB.
+/// Aggregates every show's episodes into one flat list for the "Recent
+/// Episodes" browse mode (c2s.2). Pure — no network/DB.
 ///
-/// Each show's episodes are already newest-first (server convention); this
-/// merges them by `pubDate` string (ISO-8601/RFC-2822 both sort correctly as
-/// strings only when zero-padded/same format, which ABS's `pubDate` is not
-/// guaranteed to be — so this sorts by each episode's ALREADY-newest-first
-/// position within its own show, folding shows together in the order given,
-/// then applies `order`. This keeps sorting robust without parsing `pubDate`
-/// through an unvalidated format).
+/// Each show's episodes are sorted by `sortedEpisodes` (explicit `pubDate`
+/// order), then shows are folded together in the order given. So each show is
+/// internally chronological, but shows are NOT interleaved by date across the
+/// library.
 ///
-/// ponytail: true chronological cross-show interleaving needs a parsed
-/// `pubDate`/`publishedAt`, which ABS's exact wire format is unvalidated
-/// against a live server (see the DTO's ponytail note). Concatenating each
-/// show's own newest-first episodes and only reordering top-level by `order`
-/// is correct per-show and stable; revisit with real interleaving once a
-/// podcast server confirms the date field's actual shape.
+/// ponytail: no cross-show chronological interleaving — episodes cluster by
+/// show. True library-wide "most recent across all shows" would flatten first
+/// then `sortedEpisodes` the whole set; add that only if the grouped layout
+/// proves unwanted. O(n log n) per show is fine at library scale.
 public enum PodcastRecentEpisodes {
     public static func aggregate(shows: [(show: PodcastShow, episodes: [ABSEpisodeDTO])], order: PodcastEpisodeOrder) -> [PodcastEpisodeEntry] {
         let entries = shows.flatMap { pair in
@@ -753,21 +789,27 @@ public enum PodcastRecentEpisodes {
 // MARK: - Continue Listening: books vs. podcast episodes (E3 / c2s.3)
 
 /// `GET /api/me/items-in-progress` returns both in-progress books and podcast
-/// episodes in one list. ABS represents an in-progress podcast episode as a
-/// library item for the SHOW whose `media.episodes[]` carries exactly the one
-/// (recently-played) episode — vs. a book item, whose `media.episodes` is
-/// always empty. That's the one signal this partition uses.
+/// episodes in one list. ABS sends an in-progress podcast as a MINIFIED show
+/// item (`numEpisodes`, NO `media.episodes[]`) with the played episode under
+/// a TOP-LEVEL `recentEpisode` field. A book item has no `recentEpisode`. So
+/// `recentEpisode != nil` is the exact, unambiguous discriminator ABS itself
+/// uses — not an episode-count heuristic (which a single-file audiobook or a
+/// one-episode show could trip).
 public enum PodcastContinueListening {
 
     /// Splits a mixed items-in-progress response into books and podcast
     /// episodes, preserving server order within each group. Pure — the single
     /// seam c2s.3's shelf and its tests both go through.
+    ///
+    /// Podcast episode ⇔ `item.recentEpisode != nil`; its progress is read from
+    /// `recentEpisode.userMediaProgress` (this endpoint does NOT put episode
+    /// progress under the item's top-level `userMediaProgress`). Everything else
+    /// is a book, subject to the same started/not-finished filter as before.
     public static func partition(items: [ABSLibraryItemDTO], updatedAt: Int) -> (books: [Audiobook], episodes: [PodcastEpisodeEntry]) {
         var books: [Audiobook] = []
         var episodes: [PodcastEpisodeEntry] = []
         for item in items {
-            let showEpisodes = item.episodes()
-            if let episode = showEpisodes.first {
+            if let episode = item.recentEpisode {
                 episodes.append(PodcastEpisodeEntry(episode: episode, showLibraryItemId: item.id, showTitle: item.showTitle))
             } else {
                 let record = item.toRecord(libraryIdFallback: item.libraryId ?? "", updatedAt: updatedAt)

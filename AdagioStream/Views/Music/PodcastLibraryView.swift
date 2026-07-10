@@ -227,16 +227,12 @@ struct PodcastEpisodeRowView: View {
         .padding(.vertical, 2)
     }
 
-    /// ABS ships `pubDate` as an RFC-2822 string ("Mon, 02 Jan 2006 15:04:05 GMT")
-    /// per the documented feed-parse shape. Falls back to showing nothing (not
-    /// the raw string) if the format doesn't match, rather than showing
-    /// mangled/unlocalized text.
+    /// Localized display date for an episode's `pubDate`. Parses via the shared
+    /// `PodcastPlaybackContext.parsePubDate` (same RFC-2822 parser the sort
+    /// uses), then formats medium/no-time. `nil` (shows nothing) rather than
+    /// mangled text when the format doesn't match.
     static func formattedPubDate(_ pubDate: String?) -> String? {
-        guard let pubDate, !pubDate.isEmpty else { return nil }
-        let parser = DateFormatter()
-        parser.locale = Locale(identifier: "en_US_POSIX")
-        parser.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-        guard let date = parser.date(from: pubDate) else { return nil }
+        guard let date = PodcastPlaybackContext.parsePubDate(pubDate) else { return nil }
         let display = DateFormatter()
         display.dateStyle = .medium
         display.timeStyle = .none
