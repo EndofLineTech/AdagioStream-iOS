@@ -171,6 +171,152 @@ final class AudiobookDownloadTests: XCTestCase {
     }
 }
 
+// MARK: - E4 / 6b5.1: episode -> 1-file AudiobookDownloadRecord mapping
+
+final class PodcastEpisodeDownloadTests: XCTestCase {
+
+    private func episode(id: String, title: String = "Ep", duration: Double? = 1800, ino: String? = "ino-1") -> ABSEpisodeDTO {
+        let audioFileJSON = ino.map { #"{"index":0,"ino":"\#($0)","duration":\#(duration.map { String($0) } ?? "null")}"# }
+        let json = """
+        {"id": "\(id)", "title": "\(title)", "duration": \(duration.map { String($0) } ?? "null"),
+         "audioFile": \(audioFileJSON ?? "null")}
+        """
+        return try! JSONDecoder().decode(ABSEpisodeDTO.self, from: Data(json.utf8))
+    }
+
+    // Composite id round-trips and never collides with a plain book id.
+
+    func testEpisodeRecordIDRoundTrips() {
+        let id = AudiobookDownloadRecord.episodeRecordID(showID: "show-1", episodeID: "ep-1")
+        let parsed = AudiobookDownloadRecord.parseEpisodeRecordID(id)
+        XCTAssertEqual(parsed?.showID, "show-1")
+        XCTAssertEqual(parsed?.episodeID, "ep-1")
+    }
+
+    func testPlainBookIDIsNotParsedAsEpisode() {
+        XCTAssertNil(AudiobookDownloadRecord.parseEpisodeRecordID("li_abc"),
+                     "a plain book libraryItemId must not be mistaken for an episode record id")
+    }
+
+    // The mapping: index=0, startOffset=0, chapters=[].
+
+    func testForEpisodeMapsToSingleFileNoChapterRecord() {
+        let ep = episode(id: "ep-1", title: "Episode One", duration: 1800, ino: "ino-42")
+        let record = AudiobookDownloadRecord.forEpisode(
+            showID: "show-1", showTitle: "The Show",
+            episodeID: ep.id, episodeTitle: ep.title,
+            coverPath: "/api/items/show-1/cover", audioFile: ep.audioFile
+        )
+        XCTAssertNotNil(record)
+        XCTAssertEqual(record?.id, "ep#show-1#ep-1")
+        XCTAssertEqual(record?.title, "Episode One")
+        XCTAssertEqual(record?.author, "The Show")
+        XCTAssertEqual(record?.files.count, 1)
+        XCTAssertEqual(record?.files.first?.index, 0)
+        XCTAssertEqual(record?.files.first?.startOffset, 0)
+        XCTAssertEqual(record?.files.first?.duration, 1800)
+        XCTAssertEqual(record?.files.first?.ino, "ino-42")
+        XCTAssertEqual(record?.chapters, [], "episodes carry no chapters")
+        XCTAssertTrue(record!.isEpisodeDownload)
+    }
+
+    func testForEpisodeNilWhenNoAudioFile() {
+        let ep = episode(id: "ep-2", ino: nil)
+        let record = AudiobookDownloadRecord.forEpisode(
+            showID: "show-1", showTitle: "The Show",
+            episodeID: ep.id, episodeTitle: ep.title,
+            coverPath: nil, audioFile: ep.audioFile
+        )
+        XCTAssertNil(record, "an episode with no downloadable audio file can't be downloaded")
+    }
+
+    func testBookRecordIsNotFlaggedAsEpisodeDownload() {
+        let record = AudiobookDownloadRecord(
+            id: "li_book1", title: "A Book", status: .completed,
+            files: [], chapters: [], createdAt: 0, updatedAt: 0
+        )
+        XCTAssertFalse(record.isEpisodeDownload, "a book record's plain id must never be mistaken for an episode")
+    }
+
+    // timeline() rebuilds a single-file timeline from the mapped record —
+    // exactly the same reconstruction offline audiobook playback uses.
+
+    func testMappedEpisodeRecordRebuildsSingleFileTimeline() {
+        let ep = episode(id: "ep-1", duration: 600, ino: "ino-9")
+        var record = AudiobookDownloadRecord.forEpisode(
+            showID: "show-1", showTitle: "Show",
+            episodeID: ep.id, episodeTitle: ep.title,
+            coverPath: nil, audioFile: ep.audioFile
+        )!
+        record.files[0].localPath = "/x/ep-1.audio"
+
+        let tl = record.timeline()
+        XCTAssertEqual(tl.files.count, 1)
+        XCTAssertEqual(tl.totalDuration, 600)
+        let located = tl.locate(global: 100)
+        XCTAssertEqual(located?.file.index, 0)
+        XCTAssertEqual(located?.fileOffset ?? -1, 100, accuracy: 0.001)
+        XCTAssertEqual(located?.file.contentPath, "/x/ep-1.audio")
+        XCTAssertNil(tl.chapter(at: 100), "episodes carry no chapters")
+    }
+}
+
+// MARK: - E4 / 6b5.3: bulk "latest N" episode selection
+
+final class PodcastBulkDownloadTests: XCTestCase {
+
+    private func episodes(_ ids: [String]) -> [ABSEpisodeDTO] {
+        let entries = ids.map { #"{"id": "\#($0)", "title": "Episode \#($0)"}"# }.joined(separator: ",")
+        return try! JSONDecoder().decode([ABSEpisodeDTO].self, from: Data("[\(entries)]".utf8))
+    }
+
+    func testLatestNSelectsFirstNInGivenOrder() {
+        let eps = episodes(["e1", "e2", "e3", "e4", "e5"])
+        let latest3 = PodcastBulkDownload.latest(eps, count: 3)
+        XCTAssertEqual(latest3.map(\.id), ["e1", "e2", "e3"])
+    }
+
+    func testLatestNClampsWhenCountExceedsListSize() {
+        let eps = episodes(["e1", "e2"])
+        let latest = PodcastBulkDownload.latest(eps, count: 5)
+        XCTAssertEqual(latest.map(\.id), ["e1", "e2"], "N greater than the list just returns everything")
+    }
+
+    func testLatestZeroReturnsEmpty() {
+        let eps = episodes(["e1", "e2"])
+        XCTAssertTrue(PodcastBulkDownload.latest(eps, count: 0).isEmpty)
+    }
+
+    func testLatestOnEmptyListReturnsEmpty() {
+        XCTAssertTrue(PodcastBulkDownload.latest([], count: 5).isEmpty)
+    }
+
+    func testDownloadAllIsJustTheFullList() {
+        // "Download All" is `latest(episodes, count: episodes.count)` at the call
+        // site — verify that degenerate case returns everything, in order.
+        let eps = episodes(["e1", "e2", "e3"])
+        XCTAssertEqual(PodcastBulkDownload.latest(eps, count: eps.count).map(\.id), ["e1", "e2", "e3"])
+    }
+}
+
+// MARK: - E4 / 6b5.4: auto-delete-after-played decision
+
+final class PodcastAutoDeleteTests: XCTestCase {
+
+    func testDeletesWhenFinishedAndSettingOn() {
+        XCTAssertTrue(AudioPlayerService.shouldAutoDeleteEpisode(finished: true, settingOn: true))
+    }
+
+    func testKeepsWhenSettingOffRegardlessOfFinished() {
+        XCTAssertFalse(AudioPlayerService.shouldAutoDeleteEpisode(finished: true, settingOn: false))
+        XCTAssertFalse(AudioPlayerService.shouldAutoDeleteEpisode(finished: false, settingOn: false))
+    }
+
+    func testKeepsWhenNotFinishedRegardlessOfSetting() {
+        XCTAssertFalse(AudioPlayerService.shouldAutoDeleteEpisode(finished: false, settingOn: true))
+    }
+}
+
 // MARK: - mkj.2: offline progress queue merge + flush
 
 final class ABSProgressSyncQueueTests: XCTestCase {
