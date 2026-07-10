@@ -464,8 +464,40 @@ struct NowPlayingView: View {
             }
             .accessibilityLabel(chapter != nil ? "Seek within chapter" : "Seek audiobook")
             .accessibilityValue("\(Int(displayElapsed)) of \(Int(duration)) seconds")
+
+            // beads_mobilemusic-3h6.8: the scrubber above is chapter-relative,
+            // so whole-book position is otherwise invisible. Add a subtle
+            // secondary line with book-level context. Only shown when the item
+            // actually has chapters — same guard (`chapter != nil`) as the
+            // chapter-relative scrubber above.
+            if chapter != nil, let bookProgress = bookProgressCaption {
+                Text(bookProgress)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal)
+    }
+
+    /// beads_mobilemusic-3h6.8: "Chapter X of Y • Zm left in book" caption for
+    /// the chapter-relative seek bar. Reads the full chapter list off the
+    /// active session's timeline (internal, same-module access — the session
+    /// itself isn't published, only derived @Published fields are) to find the
+    /// current chapter's 1-based index and total count. nil when there's no
+    /// session, no current chapter, or the chapter isn't found in the list.
+    private var bookProgressCaption: String? {
+        guard let chapters = audioPlayer.audiobookSession?.timeline.chapters,
+              !chapters.isEmpty,
+              let currentChapter = audioPlayer.currentChapter,
+              let index = chapters.firstIndex(where: { $0.id == currentChapter.id }) else {
+            return nil
+        }
+        let position = "Chapter \(index + 1) of \(chapters.count)"
+        guard let totalDuration = audioPlayer.audiobookDuration, totalDuration > 0 else {
+            return position
+        }
+        let remaining = max(0, totalDuration - audioPlayer.audiobookGlobalTime)
+        return "\(position) • \(Int(remaining.rounded()).durationString) left in book"
     }
 
     @ViewBuilder

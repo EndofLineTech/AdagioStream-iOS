@@ -122,6 +122,26 @@ struct AddProviderView: View {
             case .audiobookshelf: return "Audiobookshelf"
             }
         }
+
+        /// beads_mobilemusic-3h6.5: icon + one-line description for the
+        /// card-based picker (mirrors WelcomeSetupView's onboarding cards).
+        var icon: String {
+            switch self {
+            case .m3u: return "music.note.list"
+            case .xtreamCodes: return "server.rack"
+            case .subsonic: return "music.note"
+            case .audiobookshelf: return "books.vertical"
+            }
+        }
+
+        var cardDescription: String {
+            switch self {
+            case .m3u: return "Connect using a playlist URL"
+            case .xtreamCodes: return "Connect with server URL, username, and password"
+            case .subsonic: return "Connect to a Navidrome or Subsonic music server"
+            case .audiobookshelf: return "Connect to an Audiobookshelf server"
+            }
+        }
     }
 
     var body: some View {
@@ -130,16 +150,18 @@ struct AddProviderView: View {
                 Section("Account Details") {
                     TextField("Name", text: $name)
                         .accessibilityLabel("Account name")
-                    if !hidePicker {
-                        Picker("Type", selection: $formProviderType) {
-                            ForEach(pickerTypes, id: \.self) { type in
-                                Text(type.label).tag(type)
-                            }
+                }
+
+                // beads_mobilemusic-3h6.5: card-based type selection (replaces the
+                // segmented picker), styled after WelcomeSetupView's onboarding
+                // cards. M3U is excluded — it's added from the Custom M3Us tab.
+                if !hidePicker {
+                    Section("Provider Type") {
+                        ForEach(pickerTypes, id: \.self) { type in
+                            providerTypeCard(type)
                         }
-                        .pickerStyle(.segmented)
-                        .disabled(isEditing)
-                        .accessibilityLabel("Provider type")
                     }
+                    .disabled(isEditing)
                 }
 
                 switch formProviderType {
@@ -352,6 +374,44 @@ struct AddProviderView: View {
             }
             .onAppear { populateFromEditing() }
         }
+    }
+
+    /// beads_mobilemusic-3h6.5: one selectable card per provider type — icon,
+    /// name, one-line description, single tap to choose. Same visual language
+    /// as WelcomeSetupView.connectionCard, kept local since this is the only
+    /// other place it's used.
+    private func providerTypeCard(_ type: FormProviderType) -> some View {
+        let isSelected = formProviderType == type
+        return Button {
+            formProviderType = type
+        } label: {
+            HStack(spacing: 16) {
+                Image(systemName: type.icon)
+                    .font(.title2)
+                    .frame(width: 44)
+                    .foregroundStyle(Color.accentColor)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(type.label)
+                        .font(.headline)
+                    Text(type.cardDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.body)
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(type.label), \(type.cardDescription)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 
     // MARK: - Validation
