@@ -125,6 +125,15 @@ extension AudiobookshelfOIDC {
         // we read Location instead of downloading Google's sign-in HTML.
         DebugLogger.shared.log("[OIDC] /auth/openid response status=\(startStatus) location=\(location ?? "nil") bodyLen=\(data.count)", category: .providers)
 
+        // Cancelling the 302 (NoRedirectDelegate) means URLSession does NOT
+        // auto-store the express-session Set-Cookie (e.g. connect.sid) that ABS
+        // sets on /auth/openid. Capture it explicitly into the flow session's
+        // cookie jar so the later /auth/openid/callback sends it — without it ABS
+        // rejects the callback with 400 "No session". Do this on any 3xx OR 2xx.
+        if let http = http0, (200...399).contains(startStatus) {
+            captureSessionCookies(from: http, requestURL: url, into: session.configuration.httpCookieStorage)
+        }
+
         // The official audiobookshelf-app treats ANY 3xx from /auth/openid as the
         // success case and reads the IdP URL from the Location header.
         if (300...399).contains(startStatus) {
@@ -152,6 +161,26 @@ extension AudiobookshelfOIDC {
             return authURL
         }
         throw OIDCError.authURLMissing
+    }
+
+    /// Parses `Set-Cookie` from a `/auth/openid` response and stores the cookies
+    /// into `storage` for the request URL, so the same flow session sends them on
+    /// `/auth/openid/callback`. Pure enough to unit-test (no async round-trip).
+    /// SECURITY: logs cookie NAMES + domain + path only — never the value.
+    @discardableResult
+    static func captureSessionCookies(from http: HTTPURLResponse, requestURL: URL, into storage: HTTPCookieStorage?) -> [HTTPCookie] {
+        guard let headers = http.allHeaderFields as? [String: String] else { return [] }
+        let cookieURL = http.url ?? requestURL
+        let cookies = HTTPCookie.cookies(withResponseHeaderFields: headers, for: cookieURL)
+        if cookies.isEmpty {
+            DebugLogger.shared.log("[OIDC] /auth/openid Set-Cookie captured: none", category: .providers) // TEMP-OIDC-DEBUG zq2
+            return []
+        }
+        storage?.setCookies(cookies, for: cookieURL, mainDocumentURL: nil)
+        // TEMP-OIDC-DEBUG zq2: NAMES + domain + path only — NEVER the value.
+        let summary = cookies.map { "\($0.name)@\($0.domain)\($0.path)" }.joined(separator: ",")
+        DebugLogger.shared.log("[OIDC] /auth/openid Set-Cookie captured: [\(summary)]", category: .providers)
+        return cookies
     }
 
     struct AuthURLResponse: Decodable {
@@ -221,6 +250,13 @@ extension AudiobookshelfOIDC {
         // (encoded code/code_verifier/state). Reaching here means the browser
         // DID hand us a callback — if the popup 500s, this line never appears.
         DebugLogger.shared.log("[OIDC] /auth/openid/callback request URL: \(url.absoluteString)", category: .providers)
+
+        // TEMP-OIDC-DEBUG zq2: which cookies the flow session WILL send for the
+        // callback — proves whether the /auth/openid session cookie is present +
+        // path-matched. NAMES + domain + path only, NEVER the value.
+        let willSend = session.configuration.httpCookieStorage?.cookies(for: url) ?? []
+        let willSendSummary = willSend.map { "\($0.name)@\($0.domain)\($0.path)" }.joined(separator: ",")
+        DebugLogger.shared.log("[OIDC] /auth/openid/callback will send cookies: [\(willSendSummary)]", category: .providers)
 
         var req = URLRequest(url: url)
         req.httpMethod = "GET"

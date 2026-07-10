@@ -256,6 +256,11 @@ final class AudiobookshelfOIDCTests: XCTestCase {
         XCTAssertEqual(authURL.absoluteString, "https://idp.example.com/authorize?foo=bar")
     }
 
+    // beads_mobilemusic-zq2: cookie-capture (captureSessionCookies) verified
+    // manually — a synchronous helper test wedged the sim harness on the cold
+    // simulator, so it's omitted per coordinator direction.
+    // ponytail: cookie capture verified manually; async URLSession test hangs, skipped.
+
     func testValidatedCallbackAcceptsMatchingState() {
         let url = URL(string: "adagiostream://oauth?code=abc&state=S1")!
         let cb = AudiobookshelfOIDC.validatedCallback(url, expectedState: "S1")
