@@ -45,7 +45,7 @@ struct NavidromeStarButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
-        .accessibilityValue(starred ? "Starred" : "Not starred")
+        .accessibilityValue(starred ? "Saved" : "Not saved")
     }
 }
 
@@ -73,15 +73,15 @@ struct NavidromeStarIndicator: View {
 
 // MARK: - Preview
 
-#Preview("Star states") {
+#Preview("Save states") {
     HStack(spacing: 20) {
-        NavidromeStarButton(starred: false, accessibilityLabel: "Star track") {}
-        NavidromeStarButton(starred: true, accessibilityLabel: "Unstar track") {}
+        NavidromeStarButton(starred: false, accessibilityLabel: "Save track") {}
+        NavidromeStarButton(starred: true, accessibilityLabel: "Remove track from Saved") {}
     }
     .padding()
 }
 
-#Preview("Star indicator") {
+#Preview("Save indicator") {
     HStack(spacing: 12) {
         NavidromeStarIndicator(starred: false)
         NavidromeStarIndicator(starred: true)

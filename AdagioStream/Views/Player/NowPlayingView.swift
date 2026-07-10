@@ -246,8 +246,8 @@ struct NowPlayingView: View {
                             Image(systemName: savedSongsManager.isSaved(trackID: track.id) ? "heart.fill" : "heart")
                                 .foregroundStyle(savedSongsManager.isSaved(trackID: track.id) ? .red : .secondary)
                         }
-                        .accessibilityLabel(savedSongsManager.isSaved(trackID: track.id) ? "Remove from Loved" : "Add to Loved")
-                        .accessibilityValue(savedSongsManager.isSaved(trackID: track.id) ? "Loved" : "Not loved")
+                        .accessibilityLabel(savedSongsManager.isSaved(trackID: track.id) ? "Remove from Saved" : "Save")
+                        .accessibilityValue(savedSongsManager.isSaved(trackID: track.id) ? "Saved" : "Not saved")
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {

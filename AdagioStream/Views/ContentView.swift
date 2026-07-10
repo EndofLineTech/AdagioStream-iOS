@@ -76,12 +76,12 @@ struct ContentView: View {
                 Task { await settingsViewModel.markTabReorgTipSeen() }
             }
         } message: {
-            Text("Music is now Library. Favorites moved into the Live tab, and Library is now just your Loved songs. Playlists is now Custom M3Us.")
+            Text("Music is now Library. Favorites moved into the Live tab, and Library is now just your Saved songs. Playlists is now Custom M3Us.")
         }
     }
 
     // MARK: - Tab Content
-    // Tab order: Live (0) · Library (1) · Loved (2) · Custom M3Us (3) · Settings (4)
+    // Tab order: Live (0) · Library (1) · Saved (2) · Custom M3Us (3) · Settings (4)
 
     private var tabContent: some View {
         TabView(selection: $selectedTab) {
@@ -95,7 +95,7 @@ struct ContentView: View {
                 .tag(Tab.music)
             SavedSongsView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)
-                .tabItem { Label("Loved", systemImage: "heart.fill") }
+                .tabItem { Label("Saved", systemImage: "heart.fill") }
                 .tag(Tab.library)
             CustomPlaylistListView()
                 .contentMargins(.bottom, miniPlayerBottomInset, for: .scrollContent)

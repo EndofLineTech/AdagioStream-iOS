@@ -254,7 +254,7 @@ struct PlaylistDetailView: View {
                 )
             }
             .alert(
-                "Star Error",
+                "Save Error",
                 isPresented: Binding(
                     get: { viewModel.starError != nil },
                     set: { if !$0 { viewModel.clearStarError() } }

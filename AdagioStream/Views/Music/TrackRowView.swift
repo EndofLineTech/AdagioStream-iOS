@@ -91,7 +91,7 @@ struct TrackRowView: View {
             if let isStarred = starred, let toggle = onToggleStar {
                 NavidromeStarButton(
                     starred: isStarred,
-                    accessibilityLabel: isStarred ? "Unstar \(track.title)" : "Star \(track.title)",
+                    accessibilityLabel: isStarred ? "Remove \(track.title) from Saved" : "Save \(track.title)",
                     onToggle: toggle
                 )
             }

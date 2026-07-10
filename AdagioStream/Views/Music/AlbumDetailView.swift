@@ -40,7 +40,7 @@ struct AlbumDetailView: View {
                 )
             }
             .alert(
-                "Star Error",
+                "Save Error",
                 isPresented: Binding(
                     get: { viewModel.starError != nil },
                     set: { if !$0 { viewModel.clearStarError() } }
@@ -114,7 +114,7 @@ struct AlbumDetailView: View {
             HStack(spacing: 16) {
                 NavidromeStarButton(
                     starred: viewModel.selectedAlbumStarState?.starred ?? false,
-                    accessibilityLabel: "Star \(album.title)"
+                    accessibilityLabel: "Save \(album.title)"
                 ) {
                     Task { await viewModel.toggleStar(id: album.id) }
                 }
@@ -201,7 +201,7 @@ struct AlbumDetailView: View {
         }
     }
 
-    /// Love (star) toggle used in both the swipe action and the long-press menu
+    /// Save (star) toggle used in both the swipe action and the long-press menu
     /// (bug sbx — moved off the row to free title width).
     @ViewBuilder
     private func loveButton(for track: Track) -> some View {
@@ -209,11 +209,11 @@ struct AlbumDetailView: View {
         Button {
             Task { await viewModel.toggleStar(id: track.id) }
         } label: {
-            Label(starred ? "Unlove" : "Love",
+            Label(starred ? "Remove from Saved" : "Save",
                   systemImage: starred ? "heart.slash" : "heart")
         }
         .tint(.pink)
-        .accessibilityLabel(starred ? "Unlove \(track.title)" : "Love \(track.title)")
+        .accessibilityLabel(starred ? "Remove \(track.title) from Saved" : "Save \(track.title)")
     }
 
     /// Download affordance for the swipe action — mirrors `downloadContextMenuItem`

@@ -190,9 +190,9 @@ struct GenreDetailView: View {
             parts.append("Track \(number)")
         }
         parts.append(track.title)
-        // 65x.3: Include starred/play-count in accessibility label
+        // 65x.3: Include saved/play-count in accessibility label
         let state = viewModel.genreTrackStarStates[track.id]
-        if state?.starred == true { parts.append("starred") }
+        if state?.starred == true { parts.append("saved") }
         if let count = state?.playCount, count > 0 {
             parts.append("played \(count) \(count == 1 ? "time" : "times")")
         }

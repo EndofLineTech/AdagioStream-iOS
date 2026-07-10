@@ -29,7 +29,7 @@ struct ArtistDetailView: View {
                 ToolbarItem(placement: .primaryAction) {
                     NavidromeStarButton(
                         starred: viewModel.selectedArtistStarState?.starred ?? false,
-                        accessibilityLabel: "Star \(artist.name)"
+                        accessibilityLabel: "Save \(artist.name)"
                     ) {
                         Task { await viewModel.toggleStar(id: artist.id) }
                     }
@@ -42,7 +42,7 @@ struct ArtistDetailView: View {
                 }
             }
             .alert(
-                "Star Error",
+                "Save Error",
                 isPresented: Binding(
                     get: { viewModel.starError != nil },
                     set: { if !$0 { viewModel.clearStarError() } }
