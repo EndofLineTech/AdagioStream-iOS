@@ -87,59 +87,23 @@ public struct MusicLibraryView: View {
 
     public var body: some View {
         NavigationStack {
-            Group {
-                if settingsViewModel.settings.offlineMode {
-                    // Offline mode: show downloaded tracks only, suppress network calls.
-                    offlineBrowser
-                } else if section == .books, let absVM = absViewModel {
-                    // Books section (4xw.1): Titles = flat list, Author = grouped.
-                    switch bookMode {
-                    case .titles: AudiobookBrowserView(viewModel: absVM)
-                    case .author: AudiobookAuthorBrowserView(viewModel: absVM)
-                    }
-                } else if let vm = viewModel, let resolvedAPI = api {
-                    // Show search results when there is a non-empty query;
-                    // otherwise show the normal browse UI unchanged.
-                    if isSearchActive {
-                        SearchResultsView(viewModel: vm, api: resolvedAPI)
-                    } else {
-                        libraryBrowser(vm: vm, api: resolvedAPI)
-                    }
-                } else if providerManager.subsonicAPI == nil && absViewModel == nil {
-                    ScrollView {
-                        EmptyStateView(
-                            title: "No Music Library",
-                            systemImage: "music.note.house",
-                            description: "Add a Navidrome/Subsonic or Audiobookshelf account in Settings → Accounts."
-                        )
-                        .containerRelativeFrame([.horizontal, .vertical])
-                    }
-                } else if providerManager.subsonicAPI == nil, let absVM = absViewModel {
-                    // ABS-only: default straight into the audiobooks browser
-                    // (the .task lands `section` on .books, this covers the
-                    // first render before that runs).
-                    switch bookMode {
-                    case .titles: AudiobookBrowserView(viewModel: absVM)
-                    case .author: AudiobookAuthorBrowserView(viewModel: absVM)
-                    }
-                } else {
-                    ProgressView("Loading library…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-            .navigationTitle("Music")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                // Hide the browse-mode selector in offline mode and while searching.
+            // The two-level selector renders as an inline header pinned above the
+            // content (b42) — NOT in the nav-bar .principal, where two stacked
+            // pills overflowed into the status bar / Dynamic Island and over the
+            // large title. VStack(spacing: 0) keeps the header inside the safe
+            // area below the nav bar; the content sits beneath it.
+            VStack(spacing: 0) {
+                // Hide the selector header in offline mode and while searching.
                 if !settingsViewModel.settings.offlineMode && !isSearchActive {
-                    ToolbarItem(placement: .principal) {
-                        browseModeSelector
-                    }
+                    browseModeSelector
                 }
+                content
             }
-            .searchable(
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .searchableIfMusic(
+                isMusic: showsMusicSearch,
                 text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Search artists, albums, songs"
             )
             .accessibilityLabel("Search music library")
@@ -180,6 +144,61 @@ public struct MusicLibraryView: View {
         }
     }
 
+    /// The mode-specific content beneath the selector header.
+    @ViewBuilder
+    private var content: some View {
+        if settingsViewModel.settings.offlineMode {
+            // Offline mode: show downloaded tracks only, suppress network calls.
+            offlineBrowser
+        } else if section == .books, let absVM = absViewModel {
+            // Books section (4xw.1): Titles = flat list, Author = grouped.
+            switch bookMode {
+            case .titles: AudiobookBrowserView(viewModel: absVM)
+            case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+            }
+        } else if let vm = viewModel, let resolvedAPI = api {
+            // Show search results when there is a non-empty query;
+            // otherwise show the normal browse UI unchanged.
+            if isSearchActive {
+                SearchResultsView(viewModel: vm, api: resolvedAPI)
+            } else {
+                libraryBrowser(vm: vm, api: resolvedAPI)
+            }
+        } else if providerManager.subsonicAPI == nil && absViewModel == nil {
+            ScrollView {
+                EmptyStateView(
+                    title: "No Music Library",
+                    systemImage: "music.note.house",
+                    description: "Add a Navidrome/Subsonic or Audiobookshelf account in Settings → Accounts."
+                )
+                .containerRelativeFrame([.horizontal, .vertical])
+            }
+        } else if providerManager.subsonicAPI == nil, let absVM = absViewModel {
+            // ABS-only: default straight into the audiobooks browser
+            // (the .task lands `section` on .books, this covers the
+            // first render before that runs).
+            switch bookMode {
+            case .titles: AudiobookBrowserView(viewModel: absVM)
+            case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+            }
+        } else {
+            ProgressView("Loading library…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Navigation title reflects the top-level section (b42): "Books" in the
+    /// Books section, "Music" otherwise.
+    private var navigationTitle: String {
+        section == .books ? "Books" : "Music"
+    }
+
+    /// The Subsonic music search only applies in the Music section. Hidden in
+    /// Books mode (audiobook browsing doesn't use it) and in offline mode (b42).
+    private var showsMusicSearch: Bool {
+        section == .music && !settingsViewModel.settings.offlineMode
+    }
+
     /// True when the search field has non-empty (non-whitespace) text.
     private var isSearchActive: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -196,8 +215,9 @@ public struct MusicLibraryView: View {
         return s
     }
 
-    /// Two-level selector: the top row picks Books|Music (only when both exist);
-    /// the row below picks the sub-mode for the active section.
+    /// Two-level selector, rendered as an inline header pinned above the content
+    /// (b42): the top row picks Books|Music (only when both exist); the row below
+    /// picks the sub-mode for the active section.
     @ViewBuilder
     private var browseModeSelector: some View {
         VStack(spacing: 6) {
@@ -234,6 +254,12 @@ public struct MusicLibraryView: View {
                 .accessibilityLabel("Book browse mode")
             }
         }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground))
+        .overlay(alignment: .bottom) { Divider() }
     }
 
     // MARK: - Offline browser (l31.3)
@@ -476,6 +502,27 @@ struct ArtistRowView: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - Conditional searchable (b42)
+
+private extension View {
+    /// Applies `.searchable` only in Music mode. `.searchable` can't be toggled
+    /// with a plain `if` inside a modifier chain, so branch the whole view here.
+    /// ponytail: two-branch @ViewBuilder is the standard SwiftUI way to make
+    /// .searchable conditional; a shared ViewModifier can't drop the modifier.
+    @ViewBuilder
+    func searchableIfMusic(isMusic: Bool, text: Binding<String>, prompt: String) -> some View {
+        if isMusic {
+            self.searchable(
+                text: text,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: prompt
+            )
+        } else {
+            self
+        }
     }
 }
 
