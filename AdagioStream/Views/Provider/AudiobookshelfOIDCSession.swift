@@ -48,11 +48,6 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
             throw SignInError.flow(error)
         }
 
-        // TEMP-OIDC-DEBUG zq2: the exact URL the popup opens (Google URL carrying
-        // ABS's mobile-redirect as redirect_uri) — lets us see the whole redirect
-        // chain the browser is about to run before it 500s.
-        DebugLogger.shared.log("[OIDC] opening browser with authURL: \(authURL.absoluteString)", category: .providers)
-
         let callbackURL = try await presentWebSession(authURL: authURL)
 
         // CSRF guard: reject an injected code whose state doesn't match ours,
@@ -83,10 +78,6 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
                 callbackURLScheme: AudiobookshelfOIDC.callbackScheme
             ) { callbackURL, error in
                 if let error {
-                    // TEMP-OIDC-DEBUG zq2: browser session ended with an error. If the
-                    // popup shows a 500 page, the user cancels and we land here — this
-                    // distinguishes "ABS 500 in the popup" from "app never got a callback".
-                    DebugLogger.shared.log("[OIDC] ASWebAuthenticationSession error: \(error) code=\((error as? ASWebAuthenticationSessionError)?.code.rawValue.description ?? "n/a")", category: .providers)
                     if let asError = error as? ASWebAuthenticationSessionError,
                        asError.code == .canceledLogin {
                         continuation.resume(throwing: SignInError.cancelled)
@@ -96,14 +87,9 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
                     return
                 }
                 guard let callbackURL else {
-                    // TEMP-OIDC-DEBUG zq2
-                    DebugLogger.shared.log("[OIDC] ASWebAuthenticationSession returned nil callback URL", category: .providers)
                     continuation.resume(throwing: SignInError.missingCallbackParams)
                     return
                 }
-                // TEMP-OIDC-DEBUG zq2: the RAW callback URL the browser handed back
-                // (adagiostream://oauth?code=…&state=…) — proves the app got the code.
-                DebugLogger.shared.log("[OIDC] ASWebAuthenticationSession callback URL: \(callbackURL.absoluteString)", category: .providers)
                 continuation.resume(returning: callbackURL)
             }
             session.presentationContextProvider = self

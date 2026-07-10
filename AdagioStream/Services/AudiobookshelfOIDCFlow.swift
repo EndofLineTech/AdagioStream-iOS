@@ -98,11 +98,6 @@ extension AudiobookshelfOIDC {
             "state": state,
         ]) else { throw OIDCError.invalidURL }
 
-        // TEMP-OIDC-DEBUG zq2: log the EXACT /auth/openid request we send (all
-        // query params, incl. the encoded redirect_uri/code_challenge/state).
-        DebugLogger.shared.log("[OIDC] SENSITIVE DEBUG BUILD — logs OAuth material; do not distribute", category: .providers)
-        DebugLogger.shared.log("[OIDC] /auth/openid request URL: \(url.absoluteString)", category: .providers)
-
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
 
@@ -111,19 +106,11 @@ extension AudiobookshelfOIDC {
         do {
             (data, response) = try await session.data(for: req)
         } catch {
-            // TEMP-OIDC-DEBUG zq2
-            DebugLogger.shared.log("[OIDC] /auth/openid transport error: \(error)", category: .providers)
             throw OIDCError.network(error)
         }
         let http0 = response as? HTTPURLResponse
         let startStatus = http0?.statusCode ?? -1
         let location = http0?.value(forHTTPHeaderField: "Location")
-        // TEMP-OIDC-DEBUG zq2: NEW behavior — we no longer FOLLOW the 302 to the
-        // IdP; the flow session's NoRedirectDelegate cancels the redirect, so we
-        // read the `Location` header of the 3xx (matching the official client).
-        // This line shows the status + extracted Location so the next log proves
-        // we read Location instead of downloading Google's sign-in HTML.
-        DebugLogger.shared.log("[OIDC] /auth/openid response status=\(startStatus) location=\(location ?? "nil") bodyLen=\(data.count)", category: .providers)
 
         // Cancelling the 302 (NoRedirectDelegate) means URLSession does NOT
         // auto-store the express-session Set-Cookie (e.g. connect.sid) that ABS
@@ -139,7 +126,6 @@ extension AudiobookshelfOIDC {
         // success case and reads the IdP URL from the Location header.
         if (300...399).contains(startStatus) {
             if let loc = location, let authURL = URL(string: loc) {
-                DebugLogger.shared.log("[OIDC] auth URL from Location header: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
                 return (authURL, capturedCookies)
             }
             // 3xx with no usable Location — fall through to body/error below.
@@ -149,8 +135,6 @@ extension AudiobookshelfOIDC {
         // JSON body (some deployments). Keep this path so we don't regress those.
         guard let http = response as? HTTPURLResponse,
               (200...399).contains(http.statusCode) else {
-            // TEMP-OIDC-DEBUG zq2
-            DebugLogger.shared.log("[OIDC] /auth/openid FAILED status=\(startStatus) body=\(String(data: data, encoding: .utf8)?.prefix(500) ?? "")", category: .providers)
             throw OIDCError.requestFailed(
                 step: "sign-in start",
                 statusCode: startStatus,
@@ -158,7 +142,6 @@ extension AudiobookshelfOIDC {
             )
         }
         if let raw = decodeAuthURL(from: data), let authURL = URL(string: raw) {
-            DebugLogger.shared.log("[OIDC] auth URL from body: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
             return (authURL, capturedCookies)
         }
         throw OIDCError.authURLMissing
@@ -167,20 +150,15 @@ extension AudiobookshelfOIDC {
     /// Parses `Set-Cookie` from a `/auth/openid` response and stores the cookies
     /// into `storage` for the request URL, so the same flow session sends them on
     /// `/auth/openid/callback`. Pure enough to unit-test (no async round-trip).
-    /// SECURITY: logs cookie NAMES + domain + path only — never the value.
     @discardableResult
     static func captureSessionCookies(from http: HTTPURLResponse, requestURL: URL, into storage: HTTPCookieStorage?) -> [HTTPCookie] {
         guard let headers = http.allHeaderFields as? [String: String] else { return [] }
         let cookieURL = http.url ?? requestURL
         let cookies = HTTPCookie.cookies(withResponseHeaderFields: headers, for: cookieURL)
         if cookies.isEmpty {
-            DebugLogger.shared.log("[OIDC] /auth/openid Set-Cookie captured: none", category: .providers) // TEMP-OIDC-DEBUG zq2
             return []
         }
         storage?.setCookies(cookies, for: cookieURL, mainDocumentURL: nil)
-        // TEMP-OIDC-DEBUG zq2: NAMES + domain + path only — NEVER the value.
-        let summary = cookies.map { "\($0.name)@\($0.domain)\($0.path)" }.joined(separator: ",")
-        DebugLogger.shared.log("[OIDC] /auth/openid Set-Cookie captured: [\(summary)]", category: .providers)
         return cookies
     }
 
@@ -248,11 +226,6 @@ extension AudiobookshelfOIDC {
             "code_verifier": verifier,
         ]) else { throw OIDCError.invalidURL }
 
-        // TEMP-OIDC-DEBUG zq2: log the EXACT /auth/openid/callback URL we build
-        // (encoded code/code_verifier/state). Reaching here means the browser
-        // DID hand us a callback — if the popup 500s, this line never appears.
-        DebugLogger.shared.log("[OIDC] /auth/openid/callback request URL: \(url.absoluteString)", category: .providers)
-
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
 
@@ -266,32 +239,21 @@ extension AudiobookshelfOIDC {
         if !header.isEmpty {
             req.setValue(header, forHTTPHeaderField: "Cookie")
         }
-        // TEMP-OIDC-DEBUG zq2: NAMES of the cookies we're attaching — NEVER the
-        // header value (it carries the express session secret).
-        DebugLogger.shared.log("[OIDC] /auth/openid/callback attaching cookies: [\(cookies.map { $0.name }.joined(separator: ","))]", category: .providers)
 
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: req)
         } catch {
-            // TEMP-OIDC-DEBUG zq2
-            DebugLogger.shared.log("[OIDC] /auth/openid/callback transport error: \(error)", category: .providers)
             throw OIDCError.network(error)
         }
-        // TEMP-OIDC-DEBUG zq2: status + body ONLY on failure. Do NOT log a
-        // success body — it carries access/refresh tokens (reusable secrets).
-        let exStatus = (response as? HTTPURLResponse)?.statusCode ?? -1
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            // TEMP-OIDC-DEBUG zq2
-            DebugLogger.shared.log("[OIDC] /auth/openid/callback FAILED status=\(exStatus) body=\(String(data: data, encoding: .utf8)?.prefix(500) ?? "")", category: .providers)
             throw OIDCError.requestFailed(
                 step: "token exchange",
                 statusCode: (response as? HTTPURLResponse)?.statusCode ?? -1,
                 detail: safeErrorDetail(from: data)
             )
         }
-        DebugLogger.shared.log("[OIDC] /auth/openid/callback status=\(exStatus) OK (token body redacted)", category: .providers) // TEMP-OIDC-DEBUG zq2
         return try parseTokens(from: data)
     }
 
