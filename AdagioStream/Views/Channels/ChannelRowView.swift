@@ -8,6 +8,7 @@ struct ChannelRowView: View {
     let onTap: () -> Void
     let onToggleFavorite: () -> Void
     var onAddToPlaylist: (() -> Void)? = nil
+    var onShowEPG: (() -> Void)? = nil
 
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -68,6 +69,13 @@ struct ChannelRowView: View {
         .draggable(channel)
         .onTapGesture { onTap() }
         .contextMenu {
+            if let onShowEPG {
+                Button {
+                    onShowEPG()
+                } label: {
+                    Label("Program Guide", systemImage: "calendar")
+                }
+            }
             if let onAddToPlaylist {
                 Button {
                     onAddToPlaylist()

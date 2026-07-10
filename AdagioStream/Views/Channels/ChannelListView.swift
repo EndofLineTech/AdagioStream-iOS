@@ -7,6 +7,7 @@ struct ChannelListView: View {
     @ObservedObject var espnService = ESPNScoreService.shared
     @State private var searchText = ""
     @State private var channelToAdd: Channel?
+    @State private var epgChannel: Channel?
 
     var body: some View {
         NavigationStack {
@@ -65,6 +66,29 @@ struct ChannelListView: View {
             }
             .navigationTitle("Channels")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            withAnimation {
+                                providerManager.collapsedGroups.subtract(groups.map(\.name))
+                            }
+                        } label: {
+                            Label("Expand All", systemImage: "chevron.down")
+                        }
+                        Button {
+                            withAnimation {
+                                providerManager.collapsedGroups.formUnion(groups.map(\.name))
+                            }
+                        } label: {
+                            Label("Collapse All", systemImage: "chevron.right")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("Group options")
+                }
+            }
             .searchable(text: $searchText, prompt: "Search channels")
             .refreshable {
                 await providerManager.loadChannels()
@@ -77,6 +101,16 @@ struct ChannelListView: View {
             .sheet(item: $channelToAdd) { channel in
                 AddToPlaylistSheet(channel: channel)
                     .presentationDetents([.medium])
+            }
+            .sheet(item: $epgChannel) { channel in
+                NavigationStack {
+                    EPGView(channelID: channel.epgChannelID ?? channel.id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { epgChannel = nil }
+                            }
+                        }
+                }
             }
         }
     }
@@ -97,6 +131,8 @@ struct ChannelListView: View {
                             Task { await providerManager.toggleFavorite(channel) }
                         } onAddToPlaylist: {
                             channelToAdd = channel
+                        } onShowEPG: {
+                            epgChannel = channel
                         }
                     }
                 }
@@ -136,6 +172,8 @@ struct ChannelListView: View {
                                 Task { await providerManager.toggleFavorite(channel) }
                             } onAddToPlaylist: {
                                 channelToAdd = channel
+                            } onShowEPG: {
+                                epgChannel = channel
                             }
                         }
                     }

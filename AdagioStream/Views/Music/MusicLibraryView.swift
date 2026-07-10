@@ -83,6 +83,9 @@ public struct MusicLibraryView: View {
     // Track titles for the offline downloaded list (l31.3).
     @State private var offlineTrackTitles: [String: String] = [:]
 
+    // Presents the add-account flow from the "no library" empty state (3h6.11).
+    @State private var showAddProvider = false
+
     public init() {}
 
     public var body: some View {
@@ -102,14 +105,15 @@ public struct MusicLibraryView: View {
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .searchableIfMusic(
-                isMusic: showsMusicSearch,
+                isMusic: showsSearch,
                 text: $searchText,
-                prompt: "Search artists, albums, songs"
+                prompt: section == .books ? "Search title or author" : "Search artists, albums, songs"
             )
-            .accessibilityLabel("Search music library")
+            .accessibilityLabel(section == .books ? "Search audiobooks" : "Search music library")
             .onChange(of: searchText) { _, newValue in
-                // Don't fire network search while in offline mode.
-                guard !settingsViewModel.settings.offlineMode else { return }
+                // Books search filters client-side in the browser views below;
+                // only Music drives the Subsonic server search here.
+                guard section == .music, !settingsViewModel.settings.offlineMode else { return }
                 viewModel?.updateSearch(query: newValue)
             }
             .task {
@@ -141,6 +145,10 @@ public struct MusicLibraryView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showAddProvider) {
+                AddProviderView()
+                    .presentationDetents([.medium, .large])
+            }
         }
     }
 
@@ -152,9 +160,13 @@ public struct MusicLibraryView: View {
             offlineBrowser
         } else if section == .books, let absVM = absViewModel {
             // Books section (4xw.1): Titles = flat list, Author = grouped.
-            switch bookMode {
-            case .titles: AudiobookBrowserView(viewModel: absVM)
-            case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+            if isSearchActive {
+                BookSearchResultsView(viewModel: absVM, query: searchText)
+            } else {
+                switch bookMode {
+                case .titles: AudiobookBrowserView(viewModel: absVM)
+                case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+                }
             }
         } else if let vm = viewModel, let resolvedAPI = api {
             // Show search results when there is a non-empty query;
@@ -169,17 +181,24 @@ public struct MusicLibraryView: View {
                 EmptyStateView(
                     title: "No Music Library",
                     systemImage: "music.note.house",
-                    description: "Add a Navidrome/Subsonic or Audiobookshelf account in Settings → Accounts."
-                )
+                    description: "Add a Navidrome/Subsonic or Audiobookshelf account in Settings → Accounts.",
+                    actionLabel: "Add Account"
+                ) {
+                    showAddProvider = true
+                }
                 .containerRelativeFrame([.horizontal, .vertical])
             }
         } else if providerManager.subsonicAPI == nil, let absVM = absViewModel {
             // ABS-only: default straight into the audiobooks browser
             // (the .task lands `section` on .books, this covers the
             // first render before that runs).
-            switch bookMode {
-            case .titles: AudiobookBrowserView(viewModel: absVM)
-            case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+            if isSearchActive {
+                BookSearchResultsView(viewModel: absVM, query: searchText)
+            } else {
+                switch bookMode {
+                case .titles: AudiobookBrowserView(viewModel: absVM)
+                case .author: AudiobookAuthorBrowserView(viewModel: absVM)
+                }
             }
         } else {
             ProgressView("Loading library…")
@@ -193,10 +212,11 @@ public struct MusicLibraryView: View {
         section == .books ? "Books" : "Music"
     }
 
-    /// The Subsonic music search only applies in the Music section. Hidden in
-    /// Books mode (audiobook browsing doesn't use it) and in offline mode (b42).
-    private var showsMusicSearch: Bool {
-        section == .music && !settingsViewModel.settings.offlineMode
+    /// Search applies in both sections (3h6.9): Music does a server search via
+    /// the view-model, Books filters the already-loaded list client-side.
+    /// Hidden in offline mode (b42) — no network browse/search there.
+    private var showsSearch: Bool {
+        !settingsViewModel.settings.offlineMode
     }
 
     /// True when the search field has non-empty (non-whitespace) text.
@@ -429,6 +449,48 @@ struct ArtistBrowserView: View {
             .refreshable {
                 await viewModel.loadArtists()
             }
+        }
+    }
+}
+
+// MARK: - Book search (3h6.9)
+
+/// Client-side title/author search over the already-loaded Books list — no ABS
+/// server-search endpoint exists, so this filters `viewModel.books` in memory.
+/// ponytail: linear scan over an in-memory array; fine at library-list scale,
+/// revisit only if book counts get large enough to matter.
+struct BookSearchResultsView: View {
+    @ObservedObject var viewModel: AudiobookshelfLibraryViewModel
+    let query: String
+
+    private var results: [Audiobook] {
+        viewModel.books.filter {
+            $0.title.localizedCaseInsensitiveContains(query)
+                || ($0.author?.localizedCaseInsensitiveContains(query) ?? false)
+        }
+    }
+
+    var body: some View {
+        if results.isEmpty {
+            ScrollView {
+                EmptyStateView(
+                    title: "No Results",
+                    systemImage: "magnifyingglass",
+                    description: "No books match \"\(query)\"."
+                )
+                .containerRelativeFrame([.horizontal, .vertical])
+            }
+        } else {
+            List(results, id: \.id) { book in
+                NavigationLink {
+                    AudiobookDetailView(viewModel: viewModel, book: book)
+                } label: {
+                    AudiobookRowView(book: book, coverURL: viewModel.coverURLs[book.id])
+                }
+                .accessibilityLabel(book.title)
+                .accessibilityHint("Open \(book.title)")
+            }
+            .listStyle(.plain)
         }
     }
 }

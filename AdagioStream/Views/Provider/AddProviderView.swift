@@ -306,12 +306,12 @@ struct AddProviderView: View {
                         }
 
                         Section {
-                            DisclosureGroup("SSO setup & requirements") {
+                            DisclosureGroup("SSO server requirements") {
                                 Text(Self.ssoSetupHelp)
                                     .font(.footnote)
                                     .foregroundStyle(.secondary)
                             }
-                            .accessibilityLabel("Single sign-on setup and requirements")
+                            .accessibilityLabel("SSO server requirements")
                         }
                     }
 
@@ -389,16 +389,13 @@ struct AddProviderView: View {
     }
 
     /// Server-side setup the app cannot do itself, surfaced in the SSO section
-    /// (wv4.4). See docs/design/audiobookshelf-sso-setup.md.
+    /// (wv4.4). Condensed to the essentials (3h6.7) — full detail in
+    /// docs/design/audiobookshelf-sso-setup.md for server admins.
     static let ssoSetupHelp = """
-    Single sign-on needs the server configured for it — the app can't do this part:
+    Your Audiobookshelf admin needs to allow-list adagiostream://oauth as a mobile redirect URI, and your identity provider needs the server's mobile-redirect URI allow-listed too.
 
-    • In Audiobookshelf admin, add adagiostream://oauth to "Allowed Mobile Redirect URIs".
-    • In your identity provider (Google/Authentik/…), allow-list the server's mobile-redirect URI — https://<server>/auth/openid/mobile-redirect (include any base path). This is a DIFFERENT URI than the web callback; registering only the callback makes web login work but app SSO fail.
-    • Enter your server URL above INCLUDING any base path (e.g. https://host/audiobookshelf), not the bare host.
-    • A reverse proxy in front of Audiobookshelf must send X-Forwarded-Proto: https.
-    • Requires Audiobookshelf server 2.26.0 or newer.
-    • SSO can't be used behind an untrusted self-signed certificate. Use a trusted certificate (e.g. Let's Encrypt), or sign in with a username and password instead.
+    • Enter the server URL including any base path (e.g. https://host/audiobookshelf).
+    • Requires a trusted certificate and Audiobookshelf 2.26.0+.
     """
 
     // MARK: - Audiobookshelf OpenID / SSO (wv4.3)
