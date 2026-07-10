@@ -247,7 +247,7 @@ final class AudiobookshelfOIDCTests: XCTestCase {
             statusCode: 302,
             headers: ["Location": "https://idp.example.com/authorize?foo=bar"]
         )]
-        let authURL = try await AudiobookshelfOIDC.authorizationURL(
+        let (authURL, _) = try await AudiobookshelfOIDC.authorizationURL(
             host: URL(string: "https://abs.example.com")!,
             challenge: "chal",
             state: "STATE123",
@@ -260,6 +260,22 @@ final class AudiobookshelfOIDCTests: XCTestCase {
     // manually — a synchronous helper test wedged the sim harness on the cold
     // simulator, so it's omitted per coordinator direction.
     // ponytail: cookie capture verified manually; async URLSession test hangs, skipped.
+
+    // beads_mobilemusic-zq2: the Cookie header sent on /auth/openid/callback is
+    // built from the cookies authorizationURL captured — a manual HTTPCookieStorage
+    // won't hand them back via cookies(for:), so we attach them explicitly.
+    // Fully synchronous (no async/URLSession) — the async path hangs the sim.
+    func testCookieHeaderJoinsNameValuePairs() {
+        let c1 = HTTPCookie(properties: [
+            .domain: "abs.example.com", .path: "/", .name: "connect.sid", .value: "abc",
+        ])!
+        let c2 = HTTPCookie(properties: [
+            .domain: "abs.example.com", .path: "/", .name: "auth_method", .value: "openid",
+        ])!
+        XCTAssertEqual(AudiobookshelfOIDC.cookieHeader(from: [c1, c2]),
+                       "connect.sid=abc; auth_method=openid")
+        XCTAssertEqual(AudiobookshelfOIDC.cookieHeader(from: []), "")
+    }
 
     func testValidatedCallbackAcceptsMatchingState() {
         let url = URL(string: "adagiostream://oauth?code=abc&state=S1")!

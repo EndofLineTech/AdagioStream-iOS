@@ -39,8 +39,9 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
         let flowSession = AudiobookshelfOIDC.makeFlowSession()
 
         let authURL: URL
+        let sessionCookies: [HTTPCookie]
         do {
-            authURL = try await AudiobookshelfOIDC.authorizationURL(
+            (authURL, sessionCookies) = try await AudiobookshelfOIDC.authorizationURL(
                 host: host, challenge: pkce.challenge, state: expectedState, session: flowSession
             )
         } catch {
@@ -64,7 +65,8 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
 
         do {
             return try await AudiobookshelfOIDC.exchange(
-                host: host, state: callback.state, code: callback.code, verifier: pkce.verifier, session: flowSession
+                host: host, state: callback.state, code: callback.code, verifier: pkce.verifier,
+                cookies: sessionCookies, session: flowSession
             )
         } catch {
             throw SignInError.flow(error)

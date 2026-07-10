@@ -88,7 +88,7 @@ extension AudiobookshelfOIDC {
     /// its own `/auth/openid/mobile-redirect` toward the IdP. Pass the shared
     /// `session` from `makeFlowSession()` and the `state` from `makeState()`;
     /// the caller MUST validate the callback's `state` against it before exchange.
-    public static func authorizationURL(host: URL, challenge: String, state: String, session: URLSession) async throws -> URL {
+    public static func authorizationURL(host: URL, challenge: String, state: String, session: URLSession) async throws -> (authURL: URL, cookies: [HTTPCookie]) {
         guard let url = AudiobookshelfURL.resolve(host: host, path: "/auth/openid", query: [
             "code_challenge": challenge,
             "code_challenge_method": "S256",
@@ -130,8 +130,9 @@ extension AudiobookshelfOIDC {
         // sets on /auth/openid. Capture it explicitly into the flow session's
         // cookie jar so the later /auth/openid/callback sends it — without it ABS
         // rejects the callback with 400 "No session". Do this on any 3xx OR 2xx.
+        var capturedCookies: [HTTPCookie] = []
         if let http = http0, (200...399).contains(startStatus) {
-            captureSessionCookies(from: http, requestURL: url, into: session.configuration.httpCookieStorage)
+            capturedCookies = captureSessionCookies(from: http, requestURL: url, into: session.configuration.httpCookieStorage)
         }
 
         // The official audiobookshelf-app treats ANY 3xx from /auth/openid as the
@@ -139,7 +140,7 @@ extension AudiobookshelfOIDC {
         if (300...399).contains(startStatus) {
             if let loc = location, let authURL = URL(string: loc) {
                 DebugLogger.shared.log("[OIDC] auth URL from Location header: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
-                return authURL
+                return (authURL, capturedCookies)
             }
             // 3xx with no usable Location — fall through to body/error below.
         }
@@ -158,7 +159,7 @@ extension AudiobookshelfOIDC {
         }
         if let raw = decodeAuthURL(from: data), let authURL = URL(string: raw) {
             DebugLogger.shared.log("[OIDC] auth URL from body: \(authURL.absoluteString)", category: .providers) // TEMP-OIDC-DEBUG zq2
-            return authURL
+            return (authURL, capturedCookies)
         }
         throw OIDCError.authURLMissing
     }
@@ -238,6 +239,7 @@ extension AudiobookshelfOIDC {
         state: String,
         code: String,
         verifier: String,
+        cookies: [HTTPCookie],
         session: URLSession
     ) async throws -> AudiobookshelfAuth.Tokens {
         guard let url = AudiobookshelfURL.resolve(host: host, path: "/auth/openid/callback", query: [
@@ -251,15 +253,22 @@ extension AudiobookshelfOIDC {
         // DID hand us a callback — if the popup 500s, this line never appears.
         DebugLogger.shared.log("[OIDC] /auth/openid/callback request URL: \(url.absoluteString)", category: .providers)
 
-        // TEMP-OIDC-DEBUG zq2: which cookies the flow session WILL send for the
-        // callback — proves whether the /auth/openid session cookie is present +
-        // path-matched. NAMES + domain + path only, NEVER the value.
-        let willSend = session.configuration.httpCookieStorage?.cookies(for: url) ?? []
-        let willSendSummary = willSend.map { "\($0.name)@\($0.domain)\($0.path)" }.joined(separator: ",")
-        DebugLogger.shared.log("[OIDC] /auth/openid/callback will send cookies: [\(willSendSummary)]", category: .providers)
-
         var req = URLRequest(url: url)
         req.httpMethod = "GET"
+
+        // Attach the /auth/openid session cookies DIRECTLY as a Cookie header. A
+        // manually-constructed HTTPCookieStorage stores via setCookies but does not
+        // return them via cookies(for:), so relying on the storage round-trip sent
+        // NO Cookie header and ABS rejected the callback with 400 "No session".
+        // Building the header from the cookies authorizationURL captured is
+        // deterministic — no storage lookup, no path matching. Foundation-only.
+        let header = cookieHeader(from: cookies)
+        if !header.isEmpty {
+            req.setValue(header, forHTTPHeaderField: "Cookie")
+        }
+        // TEMP-OIDC-DEBUG zq2: NAMES of the cookies we're attaching — NEVER the
+        // header value (it carries the express session secret).
+        DebugLogger.shared.log("[OIDC] /auth/openid/callback attaching cookies: [\(cookies.map { $0.name }.joined(separator: ","))]", category: .providers)
 
         let data: Data
         let response: URLResponse
@@ -284,6 +293,16 @@ extension AudiobookshelfOIDC {
         }
         DebugLogger.shared.log("[OIDC] /auth/openid/callback status=\(exStatus) OK (token body redacted)", category: .providers) // TEMP-OIDC-DEBUG zq2
         return try parseTokens(from: data)
+    }
+
+    /// Builds a `Cookie` request-header value from cookies (`name=value; name=value`).
+    /// Empty cookies (or all-empty names) yield "". Pure — unit-tested synchronously.
+    /// SECURITY: the RESULT contains cookie values (session secret); never log it.
+    static func cookieHeader(from cookies: [HTTPCookie]) -> String {
+        cookies
+            .filter { !$0.name.isEmpty }
+            .map { "\($0.name)=\($0.value)" }
+            .joined(separator: "; ")
     }
 
     /// Extracts the token pair from a `/auth/openid/callback` body. Reuses the
