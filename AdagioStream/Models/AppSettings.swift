@@ -241,6 +241,11 @@ public struct AppSettings: Codable {
     /// Podcast episode sort order (E3 / c2s.4). Drives both episode list
     /// display order and whole-show auto-play direction. Default newest-first.
     public var podcastEpisodeSortOrder: PodcastEpisodeSortOrder
+    /// Auto-delete a downloaded episode once it's marked finished (E4 / 6b5.4).
+    /// Default OFF — downloads persist until manually deleted. Audiobooks are
+    /// never affected by this setting (episode-only trigger, see
+    /// `AudioPlayerService.shouldAutoDeleteEpisode`).
+    public var autoDeleteEpisodeAfterPlayed: Bool
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -260,7 +265,8 @@ public struct AppSettings: Codable {
         shuffleEnabled: Bool = false,
         offlineMode: Bool = false,
         carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst,
-        podcastEpisodeSortOrder: PodcastEpisodeSortOrder = .newestFirst
+        podcastEpisodeSortOrder: PodcastEpisodeSortOrder = .newestFirst,
+        autoDeleteEpisodeAfterPlayed: Bool = false
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -280,6 +286,7 @@ public struct AppSettings: Codable {
         self.offlineMode = offlineMode
         self.carPlaySourceOrder = carPlaySourceOrder
         self.podcastEpisodeSortOrder = podcastEpisodeSortOrder
+        self.autoDeleteEpisodeAfterPlayed = autoDeleteEpisodeAfterPlayed
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -305,6 +312,7 @@ public struct AppSettings: Codable {
         offlineMode = try container.decodeIfPresent(Bool.self, forKey: .offlineMode) ?? false
         carPlaySourceOrder = try container.decodeIfPresent(CarPlaySourceOrder.self, forKey: .carPlaySourceOrder) ?? .streamingFirst
         podcastEpisodeSortOrder = try container.decodeIfPresent(PodcastEpisodeSortOrder.self, forKey: .podcastEpisodeSortOrder) ?? .newestFirst
+        autoDeleteEpisodeAfterPlayed = try container.decodeIfPresent(Bool.self, forKey: .autoDeleteEpisodeAfterPlayed) ?? false
     }
 }
 

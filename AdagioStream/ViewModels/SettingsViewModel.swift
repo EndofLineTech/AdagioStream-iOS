@@ -226,4 +226,12 @@ public final class SettingsViewModel: ObservableObject {
         settings.podcastEpisodeSortOrder = order
         await saveSettings()
     }
+
+    /// Auto-delete a downloaded episode once it's marked finished (E4 / 6b5.4).
+    /// Default OFF; audiobooks are never affected (checked only on the
+    /// episode-ended path — see `AudioPlayerService.audiobookFileEnded`).
+    public func updateAutoDeleteEpisodeAfterPlayed(_ enabled: Bool) async {
+        settings.autoDeleteEpisodeAfterPlayed = enabled
+        await saveSettings()
+    }
 }

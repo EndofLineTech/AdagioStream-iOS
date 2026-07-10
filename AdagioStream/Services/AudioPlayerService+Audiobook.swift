@@ -541,6 +541,14 @@ extension AudioPlayerService {
 
         if case .podcast(let episodeId, let context) = session.kind {
             let api = session.api
+            // Auto-delete (E4 / 6b5.4): episode-only, checked here where "this
+            // episode just finished" is unambiguous — never touches books.
+            if AudioPlayerService.shouldAutoDeleteEpisode(
+                finished: true,
+                settingOn: settingsViewModel?.settings.autoDeleteEpisodeAfterPlayed ?? false
+            ) {
+                DownloadManager.shared.deleteEpisodeDownload(showID: context.libraryItemId, episodeID: episodeId)
+            }
             if let next = context.nextEpisode(after: episodeId) {
                 log.log("podcast: episode \(episodeId) ended — auto-playing next episode \(next.id)", category: .player)
                 playPodcastEpisode(next, via: api, context: context)
@@ -558,6 +566,16 @@ extension AudioPlayerService {
             log.log("audiobook: reached end of book \"\(session.book.title)\"", category: .player)
             stopAudiobook()
         }
+    }
+
+    /// Auto-delete decision (E4 / 6b5.4) — pure so it's unit-testable without
+    /// VLC/DownloadManager. `finished` is the caller's own "did this episode
+    /// just end" signal (always `true` at the one call site, `audiobookFileEnded`'s
+    /// podcast branch); kept as an explicit parameter so the truth table is
+    /// exhaustively testable: setting off → always keep; setting on → delete
+    /// only when finished.
+    nonisolated static func shouldAutoDeleteEpisode(finished: Bool, settingOn: Bool) -> Bool {
+        finished && settingOn
     }
 
     // MARK: - Initial per-file seek (f0d — state-observed)

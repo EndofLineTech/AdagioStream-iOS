@@ -82,10 +82,12 @@ struct PlaybackSettingsView: View {
                         Text(order.label).tag(order)
                     }
                 }
+                Toggle("Delete Episode After Played", isOn: autoDeleteEpisodeAfterPlayedBinding)
+                    .accessibilityHint("When on, a downloaded episode is removed from this device once it's marked finished")
             } header: {
                 Text("Podcasts")
             } footer: {
-                Text("Order episode lists newest or oldest first. Also sets the direction whole-show auto-play advances.")
+                Text("Order episode lists newest or oldest first. Also sets the direction whole-show auto-play advances. Deleting after played only affects downloaded episodes, never audiobooks.")
             }
         }
         .navigationTitle("Playback")
@@ -115,6 +117,15 @@ struct PlaybackSettingsView: View {
             get: { viewModel.settings.podcastEpisodeSortOrder },
             set: { newValue in
                 Task { await viewModel.updatePodcastEpisodeSortOrder(newValue) }
+            }
+        )
+    }
+
+    private var autoDeleteEpisodeAfterPlayedBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.settings.autoDeleteEpisodeAfterPlayed },
+            set: { newValue in
+                Task { await viewModel.updateAutoDeleteEpisodeAfterPlayed(newValue) }
             }
         )
     }
