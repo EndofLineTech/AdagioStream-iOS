@@ -613,6 +613,32 @@ public enum PodcastEpisodeOrder: String, Codable, CaseIterable {
     case oldestFirst
 }
 
+/// What to auto-play when a podcast episode ends (beads_mobilemusic-5aj.2).
+///
+/// Replaces the old "walk `sortedEpisodes` one slot forward" behavior, which
+/// under the default `.newestFirst` display order silently played the next
+/// OLDER (already-heard) episode — the reported TestFlight bug. Default is
+/// `.nextUnplayed`: it can only advance into the future, so finishing the
+/// newest episode stops instead of replaying something older.
+public enum PodcastEpisodeEndBehavior: String, Codable, CaseIterable {
+    /// Stop at the end of the episode. No auto-advance.
+    case stop
+    /// Advance to the closest unplayed episode with a `pubDate` strictly
+    /// newer than the current one. Stops when nothing newer/unplayed exists.
+    case nextUnplayed
+    /// Walk the list in the user's chosen display order (`PodcastEpisodeOrder`),
+    /// skipping already-finished episodes. Stops when none remain.
+    case continueInSortOrder
+
+    public var label: String {
+        switch self {
+        case .stop: "Stop"
+        case .nextUnplayed: "Play Next Unplayed Episode"
+        case .continueInSortOrder: "Continue in Sort Order"
+        }
+    }
+}
+
 /// The show's episode list + a pointer to what's currently playing — enough
 /// state to answer "what plays after this episode ends" without re-fetching.
 /// Pure/value-type so auto-play selection is unit-testable without VLC or the
@@ -638,22 +664,80 @@ public struct PodcastPlaybackContext: Equatable {
             && lhs.episodes.map(\.id) == rhs.episodes.map(\.id)
     }
 
-    /// The episode that plays after `currentEpisodeId` ends, honoring `order`.
-    /// `nil` at the end of the show (or if `currentEpisodeId` isn't found).
+    /// The episode that plays after `currentEpisodeId` ends, per `behavior`
+    /// (beads_mobilemusic-5aj.2). `nil` means stop — either the policy says so
+    /// (`.stop`), or there's nothing left that qualifies.
     ///
-    /// Routes through `sortedEpisodes` so auto-play walks the SAME explicit
-    /// `pubDate` order the episode list displays — the wire-order assumption is
-    /// retired here too, not just in the list. Pure.
-    public static func nextEpisode(in episodes: [ABSEpisodeDTO], after currentEpisodeId: String, order: PodcastEpisodeOrder) -> ABSEpisodeDTO? {
-        let ordered = sortedEpisodes(episodes, order: order)
-        guard let pos = ordered.firstIndex(where: { $0.id == currentEpisodeId }) else { return nil }
-        let nextPos = ordered.index(after: pos)
-        return nextPos < ordered.endIndex ? ordered[nextPos] : nil
+    /// Pure — does no I/O. `isFinished` is an injected predicate so the caller
+    /// can hydrate per-episode progress on demand (episodes here carry no
+    /// `userMediaProgress`, see `AudiobookshelfAPI.episodeProgress`) without
+    /// this function knowing about the network. Callers walking forward should
+    /// call this once per candidate as they hydrate it, not all at once.
+    ///
+    /// - `.nextUnplayed`: closest strictly-newer-by-`pubDate` unfinished
+    ///   episode, regardless of display `order`. Undated episodes have no
+    ///   comparable `pubDate` and are never selected.
+    /// - `.continueInSortOrder`: first unfinished episode walking `order`
+    ///   forward from `currentEpisodeId` in `sortedEpisodes`.
+    public static func nextEpisode(
+        in episodes: [ABSEpisodeDTO],
+        after currentEpisodeId: String,
+        order: PodcastEpisodeOrder,
+        behavior: PodcastEpisodeEndBehavior,
+        isFinished: (String) -> Bool
+    ) -> ABSEpisodeDTO? {
+        switch behavior {
+        case .stop:
+            return nil
+
+        case .nextUnplayed:
+            guard let current = episodes.first(where: { $0.id == currentEpisodeId }),
+                  let currentDate = pubDate(current) else { return nil }
+            return episodes
+                .compactMap { ep -> (ABSEpisodeDTO, Date)? in
+                    guard let d = pubDate(ep), d > currentDate else { return nil }
+                    return (ep, d)
+                }
+                .filter { !isFinished($0.0.id) }
+                .min { $0.1 < $1.1 }?
+                .0
+
+        case .continueInSortOrder:
+            let ordered = sortedEpisodes(episodes, order: order)
+            guard let pos = ordered.firstIndex(where: { $0.id == currentEpisodeId }) else { return nil }
+            return ordered[ordered.index(after: pos)...].first { !isFinished($0.id) }
+        }
     }
 
     /// Instance convenience over this context's own `episodes`/`order`.
-    public func nextEpisode(after currentEpisodeId: String) -> ABSEpisodeDTO? {
-        Self.nextEpisode(in: episodes, after: currentEpisodeId, order: order)
+    public func nextEpisode(
+        after currentEpisodeId: String,
+        behavior: PodcastEpisodeEndBehavior,
+        isFinished: (String) -> Bool
+    ) -> ABSEpisodeDTO? {
+        Self.nextEpisode(in: episodes, after: currentEpisodeId, order: order, behavior: behavior, isFinished: isFinished)
+    }
+
+    /// Small tolerance (as a 0.0-1.0 progress fraction) for "close enough to
+    /// the end to count as finished" — ABS's own `isFinished` flag is
+    /// authoritative when present, but a progress record can land a hair
+    /// under 1.0 (e.g. the last sync before the file's `.ended` event fires)
+    /// without the flag ever having been set server-side. `ABSMediaProgressDTO`
+    /// carries `progress` as a fraction, not raw seconds + duration, so the
+    /// epsilon is fractional too.
+    static let finishedProgressEpsilon: Double = 0.01
+
+    /// Whether a hydrated progress record counts as "finished" for auto-play
+    /// skip-played purposes: the server's own flag, OR `progress` within
+    /// `finishedProgressEpsilon` of 1.0. `nil` progress (never started, or a
+    /// failed/absent fetch) is unplayed — never finished. Pure.
+    public static func isFinished(_ progress: ABSMediaProgressDTO?) -> Bool {
+        guard let progress else { return false }
+        if progress.isFinished == true { return true }
+        if let fraction = progress.progress {
+            return fraction >= 1.0 - finishedProgressEpsilon
+        }
+        return false
     }
 }
 

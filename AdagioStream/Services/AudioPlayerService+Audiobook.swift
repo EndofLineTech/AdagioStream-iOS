@@ -549,12 +549,15 @@ extension AudioPlayerService {
             ) {
                 DownloadManager.shared.deleteEpisodeDownload(showID: context.libraryItemId, episodeID: episodeId)
             }
-            if let next = context.nextEpisode(after: episodeId) {
-                log.log("podcast: episode \(episodeId) ended — auto-playing next episode \(next.id)", category: .player)
-                playPodcastEpisode(next, via: api, context: context)
-            } else {
-                log.log("podcast: reached end of show \"\(context.showTitle ?? context.libraryItemId)\"", category: .player)
-                stopAudiobook()
+            let behavior = settingsViewModel?.settings.podcastEpisodeEndBehavior ?? .nextUnplayed
+            Task { @MainActor in
+                if let next = await self.nextPodcastEpisode(after: episodeId, context: context, behavior: behavior, api: api) {
+                    self.log.log("podcast: episode \(episodeId) ended — auto-playing next episode \(next.id)", category: .player)
+                    self.playPodcastEpisode(next, via: api, context: context)
+                } else {
+                    self.log.log("podcast: reached end of show \"\(context.showTitle ?? context.libraryItemId)\"", category: .player)
+                    self.stopAudiobook()
+                }
             }
             return
         }
@@ -565,6 +568,47 @@ extension AudioPlayerService {
         } else {
             log.log("audiobook: reached end of book \"\(session.book.title)\"", category: .player)
             stopAudiobook()
+        }
+    }
+
+    /// Resolves the next podcast episode to auto-play per `behavior`
+    /// (beads_mobilemusic-5aj.2), hydrating per-episode server progress ONLY
+    /// as needed to answer "is this candidate finished" — never the whole
+    /// show up front. `PodcastPlaybackContext.nextEpisode` is the pure
+    /// selector (no I/O); this loop feeds it a growing `finishedIds` set,
+    /// hydrating one new candidate per iteration via `episodeProgress`, until
+    /// the selector converges on an episode whose finished-state is already
+    /// known (i.e. it's actually unfinished) or returns nil. Bounded by the
+    /// show's episode count — each iteration hydrates a distinct episode id.
+    private func nextPodcastEpisode(
+        after episodeId: String,
+        context: PodcastPlaybackContext,
+        behavior: PodcastEpisodeEndBehavior,
+        api: AudiobookshelfAPI
+    ) async -> ABSEpisodeDTO? {
+        var finishedIds = Set<String>()
+        var checkedIds = Set<String>()
+        while true {
+            guard let candidate = PodcastPlaybackContext.nextEpisode(
+                in: context.episodes,
+                after: episodeId,
+                order: context.order,
+                behavior: behavior,
+                isFinished: { finishedIds.contains($0) }
+            ) else { return nil }
+
+            if checkedIds.contains(candidate.id) {
+                // Already hydrated and known unfinished — the selector is
+                // stably re-selecting it, so it's the answer.
+                return candidate
+            }
+            checkedIds.insert(candidate.id)
+            let progress = await api.episodeProgress(libraryItemId: context.libraryItemId, episodeId: candidate.id)
+            if PodcastPlaybackContext.isFinished(progress) {
+                finishedIds.insert(candidate.id)
+                continue // re-run the selector so it skips this one
+            }
+            return candidate
         }
     }
 

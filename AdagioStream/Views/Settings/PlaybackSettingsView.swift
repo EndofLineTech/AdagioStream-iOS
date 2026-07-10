@@ -82,12 +82,17 @@ struct PlaybackSettingsView: View {
                         Text(order.label).tag(order)
                     }
                 }
+                Picker("When an episode ends", selection: podcastEpisodeEndBehaviorBinding) {
+                    ForEach(PodcastEpisodeEndBehavior.allCases, id: \.self) { behavior in
+                        Text(behavior.label).tag(behavior)
+                    }
+                }
                 Toggle("Delete Episode After Played", isOn: autoDeleteEpisodeAfterPlayedBinding)
                     .accessibilityHint("When on, a downloaded episode is removed from this device once it's marked finished")
             } header: {
                 Text("Podcasts")
             } footer: {
-                Text("Order episode lists newest or oldest first. Also sets the direction whole-show auto-play advances. Deleting after played only affects downloaded episodes, never audiobooks.")
+                Text("Order episode lists newest or oldest first. \"When an episode ends\" controls whole-show auto-play: stop, jump to the next unplayed episode chronologically, or continue skipping played episodes in the order above. Deleting after played only affects downloaded episodes, never audiobooks.")
             }
         }
         .navigationTitle("Playback")
@@ -117,6 +122,15 @@ struct PlaybackSettingsView: View {
             get: { viewModel.settings.podcastEpisodeSortOrder },
             set: { newValue in
                 Task { await viewModel.updatePodcastEpisodeSortOrder(newValue) }
+            }
+        )
+    }
+
+    private var podcastEpisodeEndBehaviorBinding: Binding<PodcastEpisodeEndBehavior> {
+        Binding(
+            get: { viewModel.settings.podcastEpisodeEndBehavior },
+            set: { newValue in
+                Task { await viewModel.updatePodcastEpisodeEndBehavior(newValue) }
             }
         )
     }

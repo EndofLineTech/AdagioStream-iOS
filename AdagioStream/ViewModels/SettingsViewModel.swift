@@ -227,6 +227,14 @@ public final class SettingsViewModel: ObservableObject {
         await saveSettings()
     }
 
+    /// What to auto-play when a podcast episode ends (beads_mobilemusic-5aj.2).
+    /// Read directly off `settings.podcastEpisodeEndBehavior` by
+    /// `AudioPlayerService` at the moment an episode ends — no push needed.
+    public func updatePodcastEpisodeEndBehavior(_ behavior: PodcastEpisodeEndBehavior) async {
+        settings.podcastEpisodeEndBehavior = behavior
+        await saveSettings()
+    }
+
     /// Auto-delete a downloaded episode once it's marked finished (E4 / 6b5.4).
     /// Default OFF; audiobooks are never affected (checked only on the
     /// episode-ended path — see `AudioPlayerService.audiobookFileEnded`).

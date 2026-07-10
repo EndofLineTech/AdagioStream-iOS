@@ -241,6 +241,10 @@ public struct AppSettings: Codable {
     /// Podcast episode sort order (E3 / c2s.4). Drives both episode list
     /// display order and whole-show auto-play direction. Default newest-first.
     public var podcastEpisodeSortOrder: PodcastEpisodeSortOrder
+    /// What to auto-play when a podcast episode ends (beads_mobilemusic-5aj.2).
+    /// Default `.nextUnplayed` — can only advance into the future, so
+    /// finishing the newest episode stops instead of replaying an older one.
+    public var podcastEpisodeEndBehavior: PodcastEpisodeEndBehavior
     /// Auto-delete a downloaded episode once it's marked finished (E4 / 6b5.4).
     /// Default OFF — downloads persist until manually deleted. Audiobooks are
     /// never affected by this setting (episode-only trigger, see
@@ -266,6 +270,7 @@ public struct AppSettings: Codable {
         offlineMode: Bool = false,
         carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst,
         podcastEpisodeSortOrder: PodcastEpisodeSortOrder = .newestFirst,
+        podcastEpisodeEndBehavior: PodcastEpisodeEndBehavior = .nextUnplayed,
         autoDeleteEpisodeAfterPlayed: Bool = false
     ) {
         self.bufferDuration = bufferDuration
@@ -286,6 +291,7 @@ public struct AppSettings: Codable {
         self.offlineMode = offlineMode
         self.carPlaySourceOrder = carPlaySourceOrder
         self.podcastEpisodeSortOrder = podcastEpisodeSortOrder
+        self.podcastEpisodeEndBehavior = podcastEpisodeEndBehavior
         self.autoDeleteEpisodeAfterPlayed = autoDeleteEpisodeAfterPlayed
     }
 
@@ -312,6 +318,7 @@ public struct AppSettings: Codable {
         offlineMode = try container.decodeIfPresent(Bool.self, forKey: .offlineMode) ?? false
         carPlaySourceOrder = try container.decodeIfPresent(CarPlaySourceOrder.self, forKey: .carPlaySourceOrder) ?? .streamingFirst
         podcastEpisodeSortOrder = try container.decodeIfPresent(PodcastEpisodeSortOrder.self, forKey: .podcastEpisodeSortOrder) ?? .newestFirst
+        podcastEpisodeEndBehavior = try container.decodeIfPresent(PodcastEpisodeEndBehavior.self, forKey: .podcastEpisodeEndBehavior) ?? .nextUnplayed
         autoDeleteEpisodeAfterPlayed = try container.decodeIfPresent(Bool.self, forKey: .autoDeleteEpisodeAfterPlayed) ?? false
     }
 }
