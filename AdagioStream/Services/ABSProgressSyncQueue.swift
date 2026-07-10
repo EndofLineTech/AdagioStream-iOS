@@ -30,13 +30,20 @@ public actor ABSProgressSyncQueue {
 
     // MARK: - Pure merge (unit-tested)
 
-    /// Merges a new update into an existing queue, keeping ONE entry per book —
-    /// the one with the newest `lastUpdate`. A stale update (older than what's
-    /// already queued) is dropped so a late-arriving background flush can't
-    /// rewind progress.
+    /// Merges a new update into an existing queue, keeping ONE entry per
+    /// `(libraryItemId, episodeId)` — the one with the newest `lastUpdate`. A
+    /// stale update (older than what's already queued) is dropped so a
+    /// late-arriving background flush can't rewind progress.
+    ///
+    /// Keying on the pair (not just `libraryItemId`) matters once podcasts are
+    /// in the queue: two episodes of the same show share `libraryItemId` and
+    /// must not collide into one entry. `episodeId == nil` (books) behaves
+    /// exactly as before — same single-key dedup.
     public static func merge(_ existing: [ABSProgressUpdate], with update: ABSProgressUpdate) -> [ABSProgressUpdate] {
         var result = existing
-        if let idx = result.firstIndex(where: { $0.libraryItemId == update.libraryItemId }) {
+        if let idx = result.firstIndex(where: {
+            $0.libraryItemId == update.libraryItemId && $0.episodeId == update.episodeId
+        }) {
             if update.lastUpdate >= result[idx].lastUpdate {
                 result[idx] = update
             }

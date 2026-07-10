@@ -43,11 +43,21 @@ public struct AudiobookshelfAPI {
 
     // MARK: - Libraries
 
-    /// `GET /api/libraries`, filtered to `mediaType == "book"` (per-library flag,
-    /// not a query filter).
-    public func bookLibraries() async throws -> [ABSLibraryDTO] {
+    /// `GET /api/libraries`, filtered by `mediaType` (per-library flag, not a
+    /// query filter — the server has no server-side media-type filter).
+    public func libraries(mediaType: String) async throws -> [ABSLibraryDTO] {
         let response: ABSLibrariesResponse = try await get("/api/libraries")
-        return response.libraries.filter(\.isBook)
+        return response.libraries.filter { $0.mediaType == mediaType }
+    }
+
+    /// `GET /api/libraries`, filtered to `mediaType == "book"`.
+    public func bookLibraries() async throws -> [ABSLibraryDTO] {
+        try await libraries(mediaType: "book")
+    }
+
+    /// `GET /api/libraries`, filtered to `mediaType == "podcast"`.
+    public func podcastLibraries() async throws -> [ABSLibraryDTO] {
+        try await libraries(mediaType: "podcast")
     }
 
     /// `GET /api/libraries/{id}/items` — full book list for one library.
@@ -133,7 +143,7 @@ public struct AudiobookshelfAPI {
     public func batchUpdateProgress(_ updates: [ABSProgressUpdate]) async throws -> Int {
         guard !updates.isEmpty else { return 200 }
         let payload = updates.map { u -> [String: Any] in
-            [
+            var entry: [String: Any] = [
                 "libraryItemId": u.libraryItemId,
                 "currentTime": u.currentTime,
                 "duration": u.duration,
@@ -141,6 +151,12 @@ public struct AudiobookshelfAPI {
                 "isFinished": u.isFinished,
                 "lastUpdate": u.lastUpdate,
             ]
+            // episodeId is only present for podcast episodes — books must keep
+            // serializing exactly as before (no episodeId key at all).
+            if let episodeId = u.episodeId {
+                entry["episodeId"] = episodeId
+            }
+            return entry
         }
         guard let url = buildURL("/api/me/progress/batch/update", query: [:]) else { throw APIError.invalidURL }
         var req = URLRequest(url: url)

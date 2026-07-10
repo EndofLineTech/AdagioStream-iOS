@@ -77,4 +77,79 @@ final class AudiobookshelfModelsTests: XCTestCase {
         let books = response.libraries.filter(\.isBook)
         XCTAssertEqual(books.map(\.id), ["a"])
     }
+
+    // MARK: - yha.2: podcast library filtering
+
+    func testLibraryFilterKeepsPodcastsOnly() throws {
+        let json = """
+        {"libraries":[
+          {"id":"a","name":"Books","mediaType":"book"},
+          {"id":"b","name":"Pods","mediaType":"podcast"}
+        ]}
+        """
+        let response = try JSONDecoder().decode(ABSLibrariesResponse.self, from: Data(json.utf8))
+        let pods = response.libraries.filter(\.isPodcast)
+        XCTAssertEqual(pods.map(\.id), ["b"])
+        XCTAssertFalse(response.libraries[1].isBook)
+        XCTAssertFalse(response.libraries[0].isPodcast)
+    }
+
+    // MARK: - yha.3: podcast show + episode decoding
+
+    // A podcast show library item with 2 episodes (expanded shape — episodes[]
+    // populated, mirroring how audioFiles[] only appears on the expanded shape).
+    private let podcastShowJSON = """
+    {
+      "id": "show-1",
+      "libraryId": "lib-pods",
+      "media": {
+        "metadata": { "title": "The Daily Byte", "author": "Byte Media" },
+        "episodes": [
+          {
+            "id": "ep-1",
+            "title": "Episode One",
+            "duration": 1800.0,
+            "pubDate": "2026-07-01",
+            "audioFile": { "index": 0, "ino": "111", "duration": 1800.0 },
+            "userMediaProgress": { "currentTime": 900.0, "progress": 0.5, "isFinished": false, "lastUpdate": 1720000000000 }
+          },
+          {
+            "id": "ep-2",
+            "title": "Episode Two",
+            "duration": 2400.0,
+            "pubDate": "2026-07-08",
+            "audioFile": { "index": 0, "ino": "222", "duration": 2400.0 }
+          }
+        ]
+      }
+    }
+    """
+
+    func testPodcastShowDecodesShowTitleAndAuthor() throws {
+        let dto = try JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(podcastShowJSON.utf8))
+        XCTAssertEqual(dto.showTitle, "The Daily Byte")
+        XCTAssertEqual(dto.media?.metadata?.displayAuthor, "Byte Media")
+    }
+
+    func testPodcastEpisodesDecodeFromShow() throws {
+        let dto = try JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(podcastShowJSON.utf8))
+        let episodes = dto.episodes()
+
+        XCTAssertEqual(episodes.count, 2)
+        XCTAssertEqual(episodes[0].id, "ep-1")
+        XCTAssertEqual(episodes[0].title, "Episode One")
+        XCTAssertEqual(episodes[0].duration, 1800.0)
+        XCTAssertEqual(episodes[0].audioFile?.ino, "111")
+        XCTAssertEqual(episodes[0].userMediaProgress?.currentTime, 900.0)
+
+        // Second episode has no progress payload — decodes to nil, not a crash.
+        XCTAssertNil(episodes[1].userMediaProgress)
+        XCTAssertEqual(episodes[1].audioFile?.ino, "222")
+    }
+
+    func testBookMetadataAuthorNameStillWinsOverAuthor() throws {
+        // Books only ever send authorName; displayAuthor must keep returning it.
+        let dto = try JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(itemJSON.utf8))
+        XCTAssertEqual(dto.media?.metadata?.displayAuthor, "Jane Doe")
+    }
 }

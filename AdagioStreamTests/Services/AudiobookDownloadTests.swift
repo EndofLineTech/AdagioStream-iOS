@@ -261,3 +261,72 @@ final class ABSProgressSyncQueueTests: XCTestCase {
         XCTAssertTrue(ok, "flushing an empty queue is a no-op success")
     }
 }
+
+// MARK: - yha.1 / yha.4: podcast episode progress adapter + keyed dedup
+
+final class ABSEpisodeProgressKeyTests: XCTestCase {
+
+    // Books-unchanged: episodeId nil, and JSON encodes with no episodeId key at all.
+
+    func testBookKeyHasNilEpisodeIdAndBookPaths() {
+        let key = ABSEpisodeProgressKey(libraryItemId: "book-1")
+        XCTAssertNil(key.episodeId)
+        XCTAssertEqual(key.playPath, "/api/items/book-1/play")
+        XCTAssertEqual(key.progressPath, "/api/me/progress/book-1")
+    }
+
+    func testBookProgressUpdateEncodesWithNoEpisodeIdField() throws {
+        let update = ABSProgressUpdate(libraryItemId: "book-1", currentTime: 100, duration: 1000)
+        XCTAssertNil(update.episodeId)
+
+        let data = try JSONEncoder().encode(update)
+        let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        XCTAssertNotNil(obj)
+        // A book's payload must not carry an episodeId key at all — not even null —
+        // so it serializes exactly as it did before podcasts existed.
+        XCTAssertNil(obj?["episodeId"] as Any? ?? nil, "book payload must omit episodeId")
+        XCTAssertFalse(obj?.keys.contains("episodeId") ?? true)
+    }
+
+    func testEpisodeKeyBuildsEpisodeScopedPaths() {
+        let key = ABSEpisodeProgressKey(libraryItemId: "show-1", episodeId: "ep-1")
+        XCTAssertEqual(key.playPath, "/api/items/show-1/play/ep-1")
+        XCTAssertEqual(key.progressPath, "/api/me/progress/show-1/ep-1")
+    }
+
+    func testEpisodeProgressUpdateCarriesEpisodeId() {
+        let key = ABSEpisodeProgressKey(libraryItemId: "show-1", episodeId: "ep-1")
+        let update = key.progressUpdate(currentTime: 500, duration: 1800)
+        XCTAssertEqual(update.libraryItemId, "show-1")
+        XCTAssertEqual(update.episodeId, "ep-1")
+        XCTAssertEqual(update.progress, 500.0 / 1800.0, accuracy: 0.0001)
+    }
+
+    // merge()/dedup keyed on (libraryItemId, episodeId?) — two episodes of the
+    // same show must not collide into one queue entry.
+
+    func testMergeKeepsDistinctEpisodesOfSameShow() {
+        let ep1 = ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-1", currentTime: 100, duration: 1800, lastUpdate: 1)
+        let ep2 = ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-2", currentTime: 200, duration: 2400, lastUpdate: 1)
+        let merged = ABSProgressSyncQueue.merge([ep1], with: ep2)
+        XCTAssertEqual(merged.count, 2, "same libraryItemId, different episodeId — must not collapse")
+        XCTAssertEqual(Set(merged.map(\.episodeId)), ["ep-1", "ep-2"])
+    }
+
+    func testMergeReplacesOlderProgressForSameEpisode() {
+        let first  = ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-1", currentTime: 100, duration: 1800, lastUpdate: 1)
+        let second = ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-1", currentTime: 300, duration: 1800, lastUpdate: 2)
+        let merged = ABSProgressSyncQueue.merge([first], with: second)
+        XCTAssertEqual(merged.count, 1, "same show AND same episode — collapses like a book does")
+        XCTAssertEqual(merged[0].currentTime, 300)
+    }
+
+    func testMergeDoesNotConfuseShowLevelAndEpisodeLevelEntries() {
+        // A book/show-level update (episodeId nil) and an episode update that
+        // happens to share libraryItemId must stay distinct.
+        let showLevel = ABSProgressUpdate(libraryItemId: "show-1", currentTime: 10, duration: 100, lastUpdate: 1)
+        let episode = ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-1", currentTime: 50, duration: 1800, lastUpdate: 1)
+        let merged = ABSProgressSyncQueue.merge([showLevel], with: episode)
+        XCTAssertEqual(merged.count, 2)
+    }
+}

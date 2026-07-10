@@ -109,6 +109,7 @@ public struct ABSLibraryDTO: Decodable, Equatable {
     public let mediaType: String
 
     public var isBook: Bool { mediaType == "book" }
+    public var isPodcast: Bool { mediaType == "podcast" }
 }
 
 /// `GET /api/libraries` envelope.
@@ -166,7 +167,7 @@ public struct ABSLibraryItemDTO: Decodable {
             libraryItemId: id,
             libraryId: libraryId ?? libraryIdFallback,
             title: meta?.title ?? "Untitled",
-            author: meta?.authorName,
+            author: meta?.displayAuthor,
             duration: media?.duration,
             coverPath: coverPath,
             currentTime: progress?.currentTime ?? 0,
@@ -182,6 +183,13 @@ public struct ABSLibraryItemDTO: Decodable {
 
     /// The expanded item's audio files (index + ino), empty on minified lists.
     public func audioFiles() -> [ABSAudioFileDTO] { media?.audioFiles ?? [] }
+
+    /// The show's title, for a podcast library item. Same field as a book's
+    /// title (`media.metadata.title`) — ABS uses one metadata shape for both.
+    public var showTitle: String? { media?.metadata?.title }
+
+    /// The show's episodes (expanded shape only), empty for books or minified lists.
+    public func episodes() -> [ABSEpisodeDTO] { media?.episodes ?? [] }
 
     /// Transforms `media.chapters[]` into `[AudiobookChapter]` records. Start/end
     /// are already global-timeline seconds in the ABS payload — passed through.
@@ -199,6 +207,11 @@ public struct ABSLibraryItemDTO: Decodable {
 }
 
 /// The `media` object of a library item.
+///
+/// Books and podcast shows share this type: books carry `chapters`/`audioFiles`
+/// directly; podcast shows carry `episodes[]` instead (populated on the
+/// expanded/detail shape — same convention as `audioFiles`). A show has no
+/// single `duration`/`chapters` of its own, only per-episode.
 public struct ABSMediaDTO: Decodable {
     public let duration: Double?
     public let metadata: ABSMetadataDTO?
@@ -206,6 +219,8 @@ public struct ABSMediaDTO: Decodable {
     /// Present on the expanded item-detail shape; carries each file's `ino`
     /// (needed for the per-file download endpoint). Absent on minified lists.
     public let audioFiles: [ABSAudioFileDTO]?
+    /// Podcast show episodes (expanded shape only). `nil`/empty for books.
+    public let episodes: [ABSEpisodeDTO]?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -213,9 +228,37 @@ public struct ABSMediaDTO: Decodable {
         metadata = try? c.decodeIfPresent(ABSMetadataDTO.self, forKey: .metadata)
         chapters = try? c.decodeIfPresent([ABSChapterDTO].self, forKey: .chapters)
         audioFiles = try? c.decodeIfPresent([ABSAudioFileDTO].self, forKey: .audioFiles)
+        episodes = try? c.decodeIfPresent([ABSEpisodeDTO].self, forKey: .episodes)
     }
 
-    enum CodingKeys: String, CodingKey { case duration, metadata, chapters, audioFiles }
+    enum CodingKeys: String, CodingKey { case duration, metadata, chapters, audioFiles, episodes }
+}
+
+/// One `media.episodes[]` entry on a podcast show's library item.
+///
+/// ponytail: field names coded to the documented ABS podcast API shape
+/// (no live podcast library to validate against — see yha.1's adapter and the
+/// `// ponytail:` note on `ABSEpisodeProgressKey`). `audioFile` mirrors the
+/// book `ABSAudioFileDTO` (single file per episode, vs. an array for books).
+public struct ABSEpisodeDTO: Decodable {
+    public let id: String
+    public let title: String?
+    public let duration: Double?
+    public let pubDate: String?
+    public let audioFile: ABSAudioFileDTO?
+    public let userMediaProgress: ABSMediaProgressDTO?
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? ""
+        title = try? c.decodeIfPresent(String.self, forKey: .title)
+        duration = try? c.decodeIfPresent(Double.self, forKey: .duration)
+        pubDate = try? c.decodeIfPresent(String.self, forKey: .pubDate)
+        audioFile = try? c.decodeIfPresent(ABSAudioFileDTO.self, forKey: .audioFile)
+        userMediaProgress = try? c.decodeIfPresent(ABSMediaProgressDTO.self, forKey: .userMediaProgress)
+    }
+
+    enum CodingKeys: String, CodingKey { case id, title, duration, pubDate, audioFile, userMediaProgress }
 }
 
 /// A `media.audioFiles[]` entry from the expanded item detail. `ino` is the
@@ -245,18 +288,28 @@ public struct ABSAudioFileDTO: Decodable {
 }
 
 /// `media.metadata` — title and author display fields.
+///
+/// Shared by books and podcast shows: books expose a flattened `authorName`
+/// string; podcast shows expose `author` instead (same shape, different key —
+/// ABS convention). `displayAuthor` picks whichever is present so callers don't
+/// need to branch on media type.
 public struct ABSMetadataDTO: Decodable {
     public let title: String?
     /// ABS exposes a flattened `authorName` string on book metadata.
     public let authorName: String?
+    /// Podcast show metadata's author field (ABS naming differs from books').
+    public let author: String?
+
+    public var displayAuthor: String? { authorName ?? author }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         title = try? c.decodeIfPresent(String.self, forKey: .title)
         authorName = try? c.decodeIfPresent(String.self, forKey: .authorName)
+        author = try? c.decodeIfPresent(String.self, forKey: .author)
     }
 
-    enum CodingKeys: String, CodingKey { case title, authorName }
+    enum CodingKeys: String, CodingKey { case title, authorName, author }
 }
 
 /// A `media.chapters[]` entry. `start`/`end` are global-timeline seconds.
@@ -295,14 +348,21 @@ public struct ABSMediaProgressDTO: Decodable {
     enum CodingKeys: String, CodingKey { case currentTime, progress, isFinished, lastUpdate }
 }
 
-// MARK: - Offline progress update (E3 / mkj.2)
+// MARK: - Offline progress update (E3 / mkj.2; episodeId added E1 / yha.4)
 
-/// One book's progress, queued while offline and flushed via
+/// One item's progress, queued while offline and flushed via
 /// `PATCH /api/me/progress/batch/update` on reconnect. Fields mirror the ABS
 /// per-item progress payload. `Codable` so the pending queue persists to disk
 /// across app launches.
+///
+/// `episodeId` is `nil` for books (unchanged from before podcasts existed) and
+/// set for a podcast episode — see `ABSEpisodeProgressKey`, the seam that
+/// decides whether a given item carries one.
 public struct ABSProgressUpdate: Codable, Equatable {
     public let libraryItemId: String
+    /// Podcast episode id, `nil` for books. ponytail: keyed per the documented
+    /// (unvalidated) ABS podcast progress shape — see `ABSEpisodeProgressKey`.
+    public let episodeId: String?
     public let currentTime: Double
     public let duration: Double
     public let progress: Double
@@ -310,13 +370,68 @@ public struct ABSProgressUpdate: Codable, Equatable {
     /// Client wall-clock (Unix millis) — the server uses it for last-writer-wins.
     public let lastUpdate: Int64
 
-    public init(libraryItemId: String, currentTime: Double, duration: Double, isFinished: Bool = false, lastUpdate: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) {
+    public init(libraryItemId: String, episodeId: String? = nil, currentTime: Double, duration: Double, isFinished: Bool = false, lastUpdate: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) {
         self.libraryItemId = libraryItemId
+        self.episodeId = episodeId
         self.currentTime = currentTime
         self.duration = duration
         self.progress = duration > 0 ? min(1.0, max(0.0, currentTime / duration)) : 0
         self.isFinished = isFinished
         self.lastUpdate = lastUpdate
+    }
+}
+
+// MARK: - Episode progress keying adapter (E1 / yha.1 — unvalidated, see below)
+
+/// The one seam that decides how a podcast episode's progress is keyed and
+/// addressed, isolated from every call site so an on-device correction against
+/// a real ABS server is a one-line change here — not a scatter of `if let
+/// episodeId` branches through the API/sync-queue/player.
+///
+/// ponytail: UNVALIDATED ASSUMPTION. There is no reachable podcast library to
+/// test against, so this is coded strictly to the documented ABS API shape:
+/// progress keyed by `(libraryItemId, episodeId)` and a dedicated per-episode
+/// play endpoint. If a real server differs (e.g. a flat episode-only id, or no
+/// episode-scoped play endpoint), only `ABSEpisodeProgressKey` and its two
+/// methods below need to change. Follow-up: file a bead to validate podcast
+/// episode progress on device once a podcast library is reachable.
+public struct ABSEpisodeProgressKey: Equatable {
+    public let libraryItemId: String
+    /// `nil` for a book/show-level item; set for a podcast episode.
+    public let episodeId: String?
+
+    public init(libraryItemId: String, episodeId: String? = nil) {
+        self.libraryItemId = libraryItemId
+        self.episodeId = episodeId
+    }
+
+    /// `POST` path to open a playback session: per-episode for podcasts,
+    /// per-item for books.
+    public var playPath: String {
+        if let episodeId {
+            return "/api/items/\(libraryItemId)/play/\(episodeId)"
+        }
+        return "/api/items/\(libraryItemId)/play"
+    }
+
+    /// `PATCH` path for a single (non-batch) progress update.
+    public var progressPath: String {
+        if let episodeId {
+            return "/api/me/progress/\(libraryItemId)/\(episodeId)"
+        }
+        return "/api/me/progress/\(libraryItemId)"
+    }
+
+    /// Builds the queued/batch progress update for this key.
+    public func progressUpdate(currentTime: Double, duration: Double, isFinished: Bool = false, lastUpdate: Int64 = Int64(Date().timeIntervalSince1970 * 1000)) -> ABSProgressUpdate {
+        ABSProgressUpdate(
+            libraryItemId: libraryItemId,
+            episodeId: episodeId,
+            currentTime: currentTime,
+            duration: duration,
+            isFinished: isFinished,
+            lastUpdate: lastUpdate
+        )
     }
 }
 
