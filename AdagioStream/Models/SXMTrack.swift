@@ -216,12 +216,17 @@ public struct STLStation: Decodable {
         artworkURL = try container.decodeIfPresent(String.self, forKey: .artworkURL)
     }
 
-    /// Cut types that are never program content: Spot/Link/Promo (ads and
-    /// promos), Fill (filler), Perm (placeholder where artist == channel name).
+    /// Cut types that are never program content: Spot/Promo (ads and promos),
+    /// Fill (filler), Perm (placeholder where artist == channel name).
+    /// Link is NOT hidden: live-feed surveys show it overwhelmingly carries
+    /// real program data — DJ mix shows ("@Shallou | #HouseOfChill"), comedy
+    /// sets, podcast episodes, Stern segments — and mix/comedy/podcast
+    /// channels sit in Link for hours. The rare "Commercials" Link entry
+    /// showing through is an accepted cost.
     /// Live vocabulary is wide (Song, Music, talk, sports, Exp, PGM_Segment,
     /// even the typo'd PGM_Segement), so this is a blocklist — anything not
     /// listed here is real metadata and shown.
-    private static let hiddenCutTypes: Set<String> = ["spot", "link", "promo", "fill", "perm"]
+    private static let hiddenCutTypes: Set<String> = ["spot", "promo", "fill", "perm"]
 
     /// Whether this cut is real program metadata worth displaying.
     /// Empty/missing cut_type hides too (the xmplaylist "commercial break"

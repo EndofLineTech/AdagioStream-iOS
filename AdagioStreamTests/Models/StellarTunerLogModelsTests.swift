@@ -161,13 +161,16 @@ final class StellarTunerLogModelsTests: XCTestCase {
         XCTAssertNotNil(station(cutType: "PGM_Segment").toSXMTrack(startedAt: nil))
         // The live API really ships this typo'd variant.
         XCTAssertNotNil(station(cutType: "PGM_Segement").toSXMTrack(startedAt: nil))
+        // Link carries mix-show/comedy/podcast program data (e.g. SiriusXM Chill)
+        XCTAssertNotNil(station(
+            cutType: "Link", artist: "@Shallou",
+            title: "#HouseOfChill").toSXMTrack(startedAt: nil))
     }
 
     func testJunkCutTypesAreHidden() {
         XCTAssertNil(station(
             cutType: "Spot", artist: "TireRack.com",
             title: "TireRack.com").toSXMTrack(startedAt: nil))
-        XCTAssertNil(station(cutType: "Link").toSXMTrack(startedAt: nil))
         XCTAssertNil(station(cutType: "Promo").toSXMTrack(startedAt: nil))
         XCTAssertNil(station(cutType: "Fill").toSXMTrack(startedAt: nil))
         // Perm placeholder: artist == channel name (trailing whitespace), no title
