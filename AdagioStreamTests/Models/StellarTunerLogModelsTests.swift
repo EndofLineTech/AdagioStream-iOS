@@ -2,7 +2,7 @@ import XCTest
 @testable import AdagioStream
 
 /// Tests for the StellarTunerLog (api.stellartunerlog.com/v1) response models,
-/// the Song/Music cut-type filter, and the first-observation startedAt/id
+/// the cut-type displayability blocklist, and the first-observation startedAt/id
 /// synthesis. Fixtures mirror live API responses — no network calls.
 final class StellarTunerLogModelsTests: XCTestCase {
 
@@ -120,12 +120,20 @@ final class StellarTunerLogModelsTests: XCTestCase {
             STLStationResponse.self, from: Data(singleStationJSON.utf8))
         XCTAssertEqual(response.station.id, "8206")
         XCTAssertEqual(response.station.name, "90s on 9")
-        XCTAssertTrue(response.station.isMusic)
+        XCTAssertTrue(response.station.isDisplayable)
     }
 
-    // MARK: - Cut-type filter
+    // MARK: - Cut-type displayability (blocklist)
 
-    func testOnlySongAndMusicCutsAreTracks() throws {
+    private func station(
+        cutType: String, artist: String = "A", title: String = "T"
+    ) -> STLStation {
+        STLStation(
+            id: "1", name: "Ch", artist: artist, title: title, album: nil,
+            cutType: cutType, artworkURL: nil)
+    }
+
+    func testFeedFixtureCutFiltering() throws {
         let response = try JSONDecoder().decode(
             STLNowPlayingResponse.self, from: Data(nowPlayingJSON.utf8))
 
@@ -133,15 +141,52 @@ final class StellarTunerLogModelsTests: XCTestCase {
         XCTAssertNotNil(response.stations["8206"]?.toSXMTrack(startedAt: nil))
         // Spot (ad) → no track
         XCTAssertNil(response.stations["8184"]?.toSXMTrack(startedAt: nil))
-        // PGM_Segment (program segment) → no track
-        XCTAssertNil(response.stations["8185"]?.toSXMTrack(startedAt: nil))
+        // PGM_Segment (program segment) IS real program metadata → shown
+        XCTAssertNotNil(response.stations["8185"]?.toSXMTrack(startedAt: nil))
+    }
 
-        // "Music" cut type is also a real track
-        let music = STLStation(
-            id: "1", name: "Ch", artist: "A", title: "T", album: nil,
-            cutType: "Music", artworkURL: nil)
-        XCTAssertTrue(music.isMusic)
-        XCTAssertNotNil(music.toSXMTrack(startedAt: nil))
+    func testProgramCutTypesAreShown() {
+        // Live vocabulary is wide — anything not blocklisted is real metadata.
+        XCTAssertNotNil(station(
+            cutType: "Song", artist: "Bryan Adams",
+            title: "Please Forgive Me (93)").toSXMTrack(startedAt: nil))
+        XCTAssertNotNil(station(cutType: "Music").toSXMTrack(startedAt: nil))
+        XCTAssertNotNil(station(
+            cutType: "talk", artist: "The Power Play",
+            title: "Benjamin Kennedy").toSXMTrack(startedAt: nil))
+        XCTAssertNotNil(station(
+            cutType: "sports", artist: "Rockies @ Giants",
+            title: "COL 0 - SF 1 • Top 3rd").toSXMTrack(startedAt: nil))
+        XCTAssertNotNil(station(cutType: "Exp").toSXMTrack(startedAt: nil))
+        XCTAssertNotNil(station(cutType: "PGM_Segment").toSXMTrack(startedAt: nil))
+        // The live API really ships this typo'd variant.
+        XCTAssertNotNil(station(cutType: "PGM_Segement").toSXMTrack(startedAt: nil))
+    }
+
+    func testJunkCutTypesAreHidden() {
+        XCTAssertNil(station(
+            cutType: "Spot", artist: "TireRack.com",
+            title: "TireRack.com").toSXMTrack(startedAt: nil))
+        XCTAssertNil(station(cutType: "Link").toSXMTrack(startedAt: nil))
+        XCTAssertNil(station(cutType: "Promo").toSXMTrack(startedAt: nil))
+        XCTAssertNil(station(cutType: "Fill").toSXMTrack(startedAt: nil))
+        // Perm placeholder: artist == channel name (trailing whitespace), no title
+        XCTAssertNil(station(
+            cutType: "Perm", artist: "Faction Talk ", title: "").toSXMTrack(startedAt: nil))
+        // null/missing cut_type decodes to "" → hidden
+        XCTAssertNil(station(cutType: "").toSXMTrack(startedAt: nil))
+        XCTAssertNil(station(cutType: "  ").toSXMTrack(startedAt: nil))
+        // Blocklist match is case-insensitive for safety
+        XCTAssertNil(station(cutType: "SPOT").toSXMTrack(startedAt: nil))
+        XCTAssertNil(station(cutType: "promo").toSXMTrack(startedAt: nil))
+    }
+
+    func testShownCutWithEmptyArtistAndTitleYieldsNoTrack() {
+        XCTAssertNil(station(cutType: "talk", artist: "", title: "").toSXMTrack(startedAt: nil))
+        XCTAssertNil(station(cutType: "Song", artist: " ", title: "").toSXMTrack(startedAt: nil))
+        // One side present is still a track
+        XCTAssertNotNil(station(
+            cutType: "talk", artist: "", title: "Benjamin Kennedy").toSXMTrack(startedAt: nil))
     }
 
     // MARK: - Track mapping

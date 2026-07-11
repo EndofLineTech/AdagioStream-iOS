@@ -204,7 +204,7 @@ public struct STLStation: Decodable {
 
     /// Null/missing-tolerant: artist/title/cutType default to "" so a
     /// degenerate station degrades to "no track" (empty cutType fails the
-    /// Song/Music allowlist) instead of failing the whole response decode.
+    /// displayability check) instead of failing the whole response decode.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -216,11 +216,19 @@ public struct STLStation: Decodable {
         artworkURL = try container.decodeIfPresent(String.self, forKey: .artworkURL)
     }
 
-    /// Only Song/Music cuts are real tracks; Spot/Link/Feature/PGM_Segment
-    /// etc. are ads or program segments (the xmplaylist "commercial break"
+    /// Cut types that are never program content: Spot/Link/Promo (ads and
+    /// promos), Fill (filler), Perm (placeholder where artist == channel name).
+    /// Live vocabulary is wide (Song, Music, talk, sports, Exp, PGM_Segment,
+    /// even the typo'd PGM_Segement), so this is a blocklist — anything not
+    /// listed here is real metadata and shown.
+    private static let hiddenCutTypes: Set<String> = ["spot", "link", "promo", "fill", "perm"]
+
+    /// Whether this cut is real program metadata worth displaying.
+    /// Empty/missing cut_type hides too (the xmplaylist "commercial break"
     /// nil-track case).
-    public var isMusic: Bool {
-        cutType == "Song" || cutType == "Music"
+    public var isDisplayable: Bool {
+        let cut = cutType.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !cut.isEmpty && !Self.hiddenCutTypes.contains(cut.lowercased())
     }
 
     /// Stable synthesized track id — the API has no per-track id, so
@@ -231,11 +239,15 @@ public struct STLStation: Decodable {
         "\(id)|\(artist)|\(title)"
     }
 
-    /// Convert to the app-facing track model. Returns nil for non-music cuts.
-    /// `startedAt` is caller-supplied because the API carries no per-track
-    /// timestamp — the service stamps first-observation time.
+    /// Convert to the app-facing track model. Returns nil for non-displayable
+    /// cuts, and for displayable cuts with no artist and no title (nothing to
+    /// show). `startedAt` is caller-supplied because the API carries no
+    /// per-track timestamp — the service stamps first-observation time.
     public func toSXMTrack(startedAt: Date?) -> SXMTrack? {
-        guard isMusic else { return nil }
+        guard isDisplayable else { return nil }
+        let hasContent = !artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard hasContent else { return nil }
         return SXMTrack(
             id: trackID,
             title: title,

@@ -517,7 +517,7 @@ public final class SXMMetadataService: ObservableObject {
                 }
             } else {
                 if currentTrack != nil {
-                    log.log("Track cleared (non-music cut: \(response.station.cutType))", category: .sxm)
+                    log.log("Track cleared (non-displayable cut: \(response.station.cutType))", category: .sxm)
                     currentTrack = nil
                 }
             }
@@ -528,7 +528,7 @@ public final class SXMMetadataService: ObservableObject {
     }
 
     /// Build an SXMTrack from a stellartunerlog station snapshot.
-    /// Returns nil for non-music cuts. startedAt is the first time we observed
+    /// Returns nil for non-displayable cuts. startedAt is the first time we observed
     /// this (station, artist, title) — reused from history when already seen.
     nonisolated static func stlTrack(from station: STLStation, history: [SXMTrack], now: Date = Date()) -> SXMTrack? {
         let startedAt = history.first(where: { $0.id == station.trackID })?.startedAt ?? now
