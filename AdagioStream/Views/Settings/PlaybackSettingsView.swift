@@ -4,6 +4,7 @@ struct PlaybackSettingsView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerService
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject private var viewModel: SettingsViewModel
+    @AppStorage(SXMMetadataSource.defaultsKey) private var sxmMetadataSourceRaw = SXMMetadataSource.xmplaylist.rawValue
 
     var body: some View {
         Form {
@@ -70,10 +71,18 @@ struct PlaybackSettingsView: View {
                         Text(interval.label).tag(interval)
                     }
                 }
+                Picker("SiriusXM Metadata Source", selection: $sxmMetadataSourceRaw) {
+                    ForEach(SXMMetadataSource.allCases, id: \.rawValue) { source in
+                        Text(source.label).tag(source.rawValue)
+                    }
+                }
+                .onChange(of: sxmMetadataSourceRaw) { _, _ in
+                    SXMMetadataService.shared.sourceChanged()
+                }
             } header: {
                 Text("Live Data")
             } footer: {
-                Text("How often to refresh live sports scores from ESPN.com API. Lower values show scores sooner but use more data.")
+                Text("How often to refresh live sports scores from ESPN.com API. Lower values show scores sooner but use more data. SiriusXM song metadata can come from xmplaylist.com or StellarTunerLog; switching takes effect immediately.")
             }
 
             Section {

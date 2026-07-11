@@ -53,6 +53,10 @@ struct PrivacyPolicyView: View {
                         title: "xmplaylist.com API",
                         detail: "Used to retrieve track metadata (song titles, artist names, artwork) for SiriusXM channels. Only channel identifiers are sent. No user data is included."
                     )
+                    dataItem(
+                        title: "StellarTunerLog API",
+                        detail: "Optional alternative source for SiriusXM track metadata, used only when selected in Settings. Only channel identifiers are sent. No user data is included."
+                    )
                 }
                 .padding(.vertical, 4)
             } header: {
