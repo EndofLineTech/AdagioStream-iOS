@@ -9,6 +9,10 @@ struct ChannelListView: View {
     @State private var channelToAdd: Channel?
     @State private var epgChannel: Channel?
 
+    /// Sentinel expand-key for the Favorites section; the leading NUL can't
+    /// appear in an M3U group-title, so a real group named "Favorites" can't collide.
+    private static let favoritesKey = "\u{0}favorites"
+
     var body: some View {
         NavigationStack {
             Group {
@@ -71,14 +75,14 @@ struct ChannelListView: View {
                     Menu {
                         Button {
                             withAnimation {
-                                providerManager.collapsedGroups.subtract(groups.map(\.name))
+                                providerManager.expandedGroups.formUnion(groups.map(\.name) + [Self.favoritesKey])
                             }
                         } label: {
                             Label("Expand All", systemImage: "chevron.down")
                         }
                         Button {
                             withAnimation {
-                                providerManager.collapsedGroups.formUnion(groups.map(\.name))
+                                providerManager.expandedGroups.removeAll()
                             }
                         } label: {
                             Label("Collapse All", systemImage: "chevron.right")
@@ -118,23 +122,32 @@ struct ChannelListView: View {
     private var channelList: some View {
         List {
             if !providerManager.favoriteChannels.isEmpty && searchText.isEmpty {
-                Section("Favorites") {
-                    ForEach(providerManager.favoriteChannels) { channel in
-                        ChannelRowView(
-                            channel: channel,
-                            nowPlayingTrack: sxmService.feedTracks[channel.id],
-                            espnGame: espnService.gamesByChannel[channel.id]
-                        ) {
-                            audioPlayer.channels = providerManager.favoriteChannels
-                            audioPlayer.play(channel: channel)
-                        } onToggleFavorite: {
-                            Task { await providerManager.toggleFavorite(channel) }
-                        } onAddToPlaylist: {
-                            channelToAdd = channel
-                        } onShowEPG: {
-                            epgChannel = channel
+                Section {
+                    if isExpanded(Self.favoritesKey) {
+                        ForEach(providerManager.favoriteChannels) { channel in
+                            ChannelRowView(
+                                channel: channel,
+                                nowPlayingTrack: sxmService.feedTracks[channel.id],
+                                espnGame: espnService.gamesByChannel[channel.id]
+                            ) {
+                                audioPlayer.channels = providerManager.favoriteChannels
+                                audioPlayer.play(channel: channel)
+                            } onToggleFavorite: {
+                                Task { await providerManager.toggleFavorite(channel) }
+                            } onAddToPlaylist: {
+                                channelToAdd = channel
+                            } onShowEPG: {
+                                epgChannel = channel
+                            }
                         }
                     }
+                } header: {
+                    sectionHeader(
+                        title: "Favorites",
+                        key: Self.favoritesKey,
+                        count: providerManager.favoriteChannels.count,
+                        showStar: false
+                    )
                 }
             }
 
@@ -158,7 +171,7 @@ struct ChannelListView: View {
 
             ForEach(groups) { group in
                 Section {
-                    if !providerManager.collapsedGroups.contains(group.name) {
+                    if isExpanded(group.name) {
                         ForEach(group.channels) { channel in
                             ChannelRowView(
                                 channel: channel,
@@ -178,42 +191,12 @@ struct ChannelListView: View {
                         }
                     }
                 } header: {
-                    Button {
-                        withAnimation {
-                            if providerManager.collapsedGroups.contains(group.name) {
-                                providerManager.collapsedGroups.remove(group.name)
-                            } else {
-                                providerManager.collapsedGroups.insert(group.name)
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            if group.isFavorite {
-                                Image(systemName: "star.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.yellow)
-                                    .accessibilityHidden(true)
-                            }
-                            Text(group.name)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .textCase(.none)
-                            Spacer()
-                            Text("\(group.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Image(systemName: providerManager.collapsedGroups.contains(group.name) ? "chevron.right" : "chevron.down")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(group.name)
-                    .accessibilityValue(providerManager.collapsedGroups.contains(group.name) ? "Collapsed" : "Expanded")
-                    .accessibilityHint("Double tap to \(providerManager.collapsedGroups.contains(group.name) ? "expand" : "collapse")")
-                    .accessibilityAddTraits(.isHeader)
+                    sectionHeader(
+                        title: group.name,
+                        key: group.name,
+                        count: group.count,
+                        showStar: group.isFavorite
+                    )
                     .contextMenu {
                         Button {
                             Task { await providerManager.toggleGroupFavorite(group.name) }
@@ -233,6 +216,52 @@ struct ChannelListView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    /// While searching, all sections act expanded so matches stay visible.
+    private func isExpanded(_ key: String) -> Bool {
+        !searchText.isEmpty || providerManager.expandedGroups.contains(key)
+    }
+
+    private func sectionHeader(title: String, key: String, count: Int, showStar: Bool) -> some View {
+        Button {
+            withAnimation {
+                if providerManager.expandedGroups.contains(key) {
+                    providerManager.expandedGroups.remove(key)
+                } else {
+                    providerManager.expandedGroups.insert(key)
+                }
+            }
+        } label: {
+            HStack {
+                if showStar {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .textCase(.none)
+                Spacer()
+                Text("\(count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Image(systemName: isExpanded(key) ? "chevron.down" : "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // While searching, all sections render expanded, so toggling would have no visible effect.
+        .disabled(!searchText.isEmpty)
+        .accessibilityLabel(title)
+        .accessibilityValue(isExpanded(key) ? "Expanded" : "Collapsed")
+        .accessibilityHint(searchText.isEmpty ? "Double tap to \(isExpanded(key) ? "collapse" : "expand")" : "")
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func currentEPG(for channel: Channel) -> EPGEntry? {

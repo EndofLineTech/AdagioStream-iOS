@@ -25,7 +25,10 @@ public final class ProviderManager: ObservableObject {
     @Published public var epgData: [String: [EPGEntry]] = [:]
     @Published public var isLoading = false
     @Published public var error: String?
-    @Published public var collapsedGroups: Set<String> = []
+    /// Section keys (group names + the Favorites sentinel) the user has
+    /// expanded. Empty by default so every section starts collapsed, and
+    /// groups appearing later start collapsed too. Session-only, not persisted.
+    @Published public var expandedGroups: Set<String> = []
     @Published public private(set) var favoriteOrder: [String] = []
     @Published public private(set) var enabledGroups: Set<String>? = nil
     @Published public private(set) var favoriteGroupOrder: [String] = []
@@ -41,7 +44,6 @@ public final class ProviderManager: ObservableObject {
     @Published public var carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst
     private var rawChannels: [Channel] = []
     private var providerRawChannels: [Channel] = []
-    private var hasInitializedCollapsedGroups = false
     private var isLoadingChannels = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -449,11 +451,6 @@ public final class ProviderManager: ObservableObject {
         // Merge custom playlist channels into the pipeline
         appendCustomPlaylistChannels()
 
-        if !hasInitializedCollapsedGroups && !rawChannels.isEmpty {
-            collapsedGroups = Set(rawChannels.map(\.group))
-            hasInitializedCollapsedGroups = true
-        }
-
         await reconcileGroupPreferences()
         applyGroupFilter()
         isLoading = false
@@ -586,12 +583,6 @@ public final class ProviderManager: ObservableObject {
             if !newGroups.isEmpty {
                 enabledGroups = enabled.union(newGroups)
             }
-        }
-
-        // Collapse new groups by default
-        if hasInitializedCollapsedGroups {
-            let newGroups = Set(customChannels.map(\.group)).subtracting(collapsedGroups)
-            collapsedGroups.formUnion(newGroups)
         }
     }
 
