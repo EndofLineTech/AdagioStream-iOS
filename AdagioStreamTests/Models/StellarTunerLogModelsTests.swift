@@ -187,6 +187,100 @@ final class StellarTunerLogModelsTests: XCTestCase {
         XCTAssertNotEqual(third?.id, first.id)
     }
 
+    // MARK: - Degenerate / malformed entries
+
+    func testDegenerateStationSurvivesAndMalformedEntryDrops() throws {
+        // "8206": missing `artist` → decodes with empty artist, still a Song.
+        // "8184": null `cut_type` → decodes with empty cutType → no track.
+        // "9999": missing required `id` → entry drops, response survives.
+        let json = """
+        {
+          "stations": {
+            "8206": {
+              "id": "8206",
+              "name": "90s on 9",
+              "title": "Please Forgive Me (93)",
+              "cut_type": "Song"
+            },
+            "8184": {
+              "id": "8184",
+              "name": "Faction Talk",
+              "artist": "Somebody",
+              "title": "Something",
+              "cut_type": null
+            },
+            "9999": {
+              "name": "No ID Here"
+            }
+          }
+        }
+        """
+        let response = try JSONDecoder().decode(
+            STLNowPlayingResponse.self, from: Data(json.utf8))
+
+        XCTAssertEqual(response.stations.count, 2)
+        XCTAssertNil(response.stations["9999"], "malformed entry should drop")
+
+        let noArtist = try XCTUnwrap(response.stations["8206"])
+        XCTAssertEqual(noArtist.artist, "")
+        XCTAssertNotNil(noArtist.toSXMTrack(startedAt: nil), "Song cut still yields a track")
+
+        let noCutType = try XCTUnwrap(response.stations["8184"])
+        XCTAssertEqual(noCutType.cutType, "")
+        XCTAssertNil(noCutType.toSXMTrack(startedAt: nil), "empty cutType degrades to no track")
+    }
+
+    func testMalformedChannelEntryDropsFromChannelList() throws {
+        let json = """
+        {
+          "channels": {
+            "8206": {"id": "8206", "name": "90s on 9", "channel_number": 9},
+            "bad": {"name": "Missing ID"},
+            "worse": "not even an object"
+          }
+        }
+        """
+        let response = try JSONDecoder().decode(
+            STLChannelListResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(response.channels.count, 1)
+        XCTAssertEqual(response.channels["8206"]?.name, "90s on 9")
+    }
+
+    // MARK: - Channel matching
+
+    func testBuildDeeplinkMapMatchesBothIdentifierShapes() {
+        func channel(_ id: String, _ name: String) -> Channel {
+            Channel(id: id, name: name, streamURL: URL(string: "http://example.com/\(id)")!, group: "SiriusXM")
+        }
+        let channels = [
+            channel("c1", "Radio: 90s on 9"),        // exact after prefix strip
+            channel("c2", "The Coffee House Ch 14"), // word-boundary contains
+            channel("c3", "Totally Unrelated"),      // no match
+        ]
+
+        // xmplaylist shape: identifier is a deeplink slug
+        let xmStations: [SXMMetadataService.MatchableStation] = [
+            (name: "90s on 9", identifier: "90s-on-9"),
+            (name: "The Coffee House", identifier: "the-coffee-house"),
+        ]
+        let xmMap = SXMMetadataService.buildDeeplinkMap(
+            appChannels: channels, stations: xmStations, sortPrefixes: ["Radio: "])
+        XCTAssertEqual(xmMap["c1"], "90s-on-9", "exact match")
+        XCTAssertEqual(xmMap["c2"], "the-coffee-house", "word-boundary match")
+        XCTAssertNil(xmMap["c3"])
+
+        // stellartunerlog shape: identifier is a numeric channel id
+        let stlStations: [SXMMetadataService.MatchableStation] = [
+            (name: "90s on 9", identifier: "8206"),
+            (name: "The Coffee House", identifier: "8210"),
+        ]
+        let stlMap = SXMMetadataService.buildDeeplinkMap(
+            appChannels: channels, stations: stlStations, sortPrefixes: ["Radio: "])
+        XCTAssertEqual(stlMap["c1"], "8206", "exact match")
+        XCTAssertEqual(stlMap["c2"], "8210", "word-boundary match")
+        XCTAssertNil(stlMap["c3"])
+    }
+
     // MARK: - Source enum
 
     func testMetadataSourceDefaultsToXMPlaylist() {

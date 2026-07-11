@@ -53,7 +53,6 @@ public final class SXMMetadataService: ObservableObject {
     public func matchChannels(_ channels: [Channel], sortPrefixes: [String] = ["Radio: ", "TV: "]) {
         stopFeedPolling()
         feedTracks = [:]
-        channelDeeplinkMap = [:]
         pendingResumeChannel = nil
         lastMatchedChannels = channels
         lastSortPrefixes = sortPrefixes
@@ -67,8 +66,23 @@ public final class SXMMetadataService: ObservableObject {
         }
         log.log("Found \(sxmChannels.count) SiriusXM channels, fetching station list...", category: .sxm)
 
+        let expected = source
         Task {
-            guard let stations = await fetchStationList() else { return }
+            guard let stations = await fetchStationList() else {
+                // Stale fetch: a newer matchChannels()/sourceChanged() owns state now.
+                guard self.source == expected else { return }
+                // ponytail: single-shot fetch, no retry — a failed switch lands the
+                // service in a plain non-SXM state; the next provider reload
+                // re-runs matching and recovers.
+                if let channel = pendingResumeChannel {
+                    pendingResumeChannel = nil
+                    log.log("Station list fetch failed during source switch; dropping SXM metadata for \"\(channel.name)\"", category: .sxm)
+                    channelChanged(to: channel)
+                }
+                return
+            }
+            // Stale fetch: source switched while awaiting — discard this result.
+            guard self.source == expected else { return }
             buildMatchingTable(appChannels: sxmChannels, stations: stations, sortPrefixes: sortPrefixes)
         }
     }
@@ -96,7 +110,9 @@ public final class SXMMetadataService: ObservableObject {
                 let (data, _) = try await session.data(from: url)
                 let response = try JSONDecoder().decode(STLChannelListResponse.self, from: data)
                 log.log("Fetched \(response.channels.count) channels from stellartunerlog", category: .sxm)
-                return response.channels.values.map { ($0.name, $0.id) }
+                // Dictionary iteration order is nondeterministic — sort so
+                // word-boundary matching always picks the same station.
+                return response.channels.values.sorted { $0.id < $1.id }.map { ($0.name, $0.id) }
             } catch {
                 log.log("Failed to fetch station list: \(error.localizedDescription)", category: .sxm)
                 return nil
@@ -105,12 +121,33 @@ public final class SXMMetadataService: ObservableObject {
     }
 
     private func buildMatchingTable(appChannels: [Channel], stations: [MatchableStation], sortPrefixes: [String]) {
+        // Build into a fresh map and assign only on success — the live map is
+        // never left cleared or half-built by a failed/stale fetch.
+        channelDeeplinkMap = Self.buildDeeplinkMap(
+            appChannels: appChannels, stations: stations, sortPrefixes: sortPrefixes)
+
+        hasSXMChannels = true
+        if feedWanted {
+            startFeedPolling()
+        }
+
+        // Resume polling for the channel that was live before a source switch
+        if let channel = pendingResumeChannel {
+            pendingResumeChannel = nil
+            channelChanged(to: channel)
+        }
+    }
+
+    /// Pure matching core (internal for tests): app channel ID -> station identifier.
+    nonisolated static func buildDeeplinkMap(appChannels: [Channel], stations: [MatchableStation], sortPrefixes: [String]) -> [String: String] {
+        let log = DebugLogger.shared
         // Build normalized station lookup
         let stationsByName = Dictionary(
             stations.map { ($0.name.lowercased().trimmingCharacters(in: .whitespaces), $0) },
             uniquingKeysWith: { first, _ in first }
         )
 
+        var map: [String: String] = [:]
         var matched = 0
         var unmatched: [String] = []
         for channel in appChannels {
@@ -131,7 +168,7 @@ public final class SXMMetadataService: ObservableObject {
 
             // Exact match first
             if let station = stationsByName[normalized] {
-                channelDeeplinkMap[channel.id] = station.identifier
+                map[channel.id] = station.identifier
                 matched += 1
                 log.log("MATCH: \"\(channel.name)\" ✓ exact → \"\(station.name)\" (id=\(station.identifier))", category: .sxm)
                 continue
@@ -145,7 +182,7 @@ public final class SXMMetadataService: ObservableObject {
                 return stationNorm.range(of: channelPattern, options: .regularExpression) != nil
                     || normalized.range(of: stationPattern, options: .regularExpression) != nil
             }) {
-                channelDeeplinkMap[channel.id] = station.identifier
+                map[channel.id] = station.identifier
                 matched += 1
                 log.log("MATCH: \"\(channel.name)\" ✓ contains → \"\(station.name)\" (id=\(station.identifier))", category: .sxm)
             } else {
@@ -158,17 +195,7 @@ public final class SXMMetadataService: ObservableObject {
         if !unmatched.isEmpty {
             log.log("Unmatched channels: \(unmatched.joined(separator: ", "))", category: .sxm)
         }
-
-        hasSXMChannels = true
-        if feedWanted {
-            startFeedPolling()
-        }
-
-        // Resume polling for the channel that was live before a source switch
-        if let channel = pendingResumeChannel {
-            pendingResumeChannel = nil
-            channelChanged(to: channel)
-        }
+        return map
     }
 
     // MARK: - Source Switching
@@ -180,8 +207,15 @@ public final class SXMMetadataService: ObservableObject {
         guard newSource != source else { return }
         source = newSource
         log.log("Metadata source changed to \(newSource.rawValue), re-matching channels", category: .sxm)
-        let resumeChannel = currentChannel
+        // Fall back to pendingResumeChannel so a second toggle before the first
+        // re-match lands doesn't drop the channel to resume.
+        let resumeChannel = currentChannel ?? pendingResumeChannel
+        // ponytail: switching sources during time-shift intentionally drops
+        // track history and returns the display to live.
         stopPolling()
+        // Old-source identifiers mean nothing to the new source; clear now so a
+        // failed re-match leaves lookups missing (non-SXM) rather than mixed.
+        channelDeeplinkMap = [:]
         matchChannels(lastMatchedChannels, sortPrefixes: lastSortPrefixes)
         pendingResumeChannel = resumeChannel
     }

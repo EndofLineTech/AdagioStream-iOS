@@ -152,6 +152,25 @@ public struct STLChannel: Decodable {
 
 public struct STLChannelListResponse: Decodable {
     public let channels: [String: STLChannel]
+
+    enum CodingKeys: String, CodingKey { case channels }
+
+    /// One malformed catalog entry drops instead of failing the whole response.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        channels = try container
+            .decode([String: STLFailableDecodable<STLChannel>].self, forKey: .channels)
+            .compactMapValues(\.value)
+    }
+}
+
+/// Decodes to nil instead of throwing, so one bad dictionary entry
+/// doesn't poison an entire STL response.
+struct STLFailableDecodable<T: Decodable>: Decodable {
+    let value: T?
+    init(from decoder: Decoder) throws {
+        value = try? T(from: decoder)
+    }
 }
 
 /// Now-playing state for one station, from /v1/nowplaying[/{id}].
@@ -170,6 +189,33 @@ public struct STLStation: Decodable {
         case artworkURL = "artwork_url"
     }
 
+    public init(
+        id: String, name: String, artist: String, title: String,
+        album: String?, cutType: String, artworkURL: String?
+    ) {
+        self.id = id
+        self.name = name
+        self.artist = artist
+        self.title = title
+        self.album = album
+        self.cutType = cutType
+        self.artworkURL = artworkURL
+    }
+
+    /// Null/missing-tolerant: artist/title/cutType default to "" so a
+    /// degenerate station degrades to "no track" (empty cutType fails the
+    /// Song/Music allowlist) instead of failing the whole response decode.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        artist = try container.decodeIfPresent(String.self, forKey: .artist) ?? ""
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        album = try container.decodeIfPresent(String.self, forKey: .album)
+        cutType = try container.decodeIfPresent(String.self, forKey: .cutType) ?? ""
+        artworkURL = try container.decodeIfPresent(String.self, forKey: .artworkURL)
+    }
+
     /// Only Song/Music cuts are real tracks; Spot/Link/Feature/PGM_Segment
     /// etc. are ads or program segments (the xmplaylist "commercial break"
     /// nil-track case).
@@ -179,6 +225,8 @@ public struct STLStation: Decodable {
 
     /// Stable synthesized track id — the API has no per-track id, so
     /// (station, artist, title) identifies a play for Equatable/history dedupe.
+    /// Ceiling: the API is timestamp-less, so a replay within the 10-min
+    /// history window dedupes to the first observation and reuses its startedAt.
     public var trackID: String {
         "\(id)|\(artist)|\(title)"
     }
@@ -201,6 +249,16 @@ public struct STLStation: Decodable {
 /// Envelope for GET /v1/nowplaying (all stations, keyed by channel id).
 public struct STLNowPlayingResponse: Decodable {
     public let stations: [String: STLStation]
+
+    enum CodingKeys: String, CodingKey { case stations }
+
+    /// One malformed station entry drops instead of failing the whole response.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        stations = try container
+            .decode([String: STLFailableDecodable<STLStation>].self, forKey: .stations)
+            .compactMapValues(\.value)
+    }
 }
 
 /// Envelope for GET /v1/nowplaying/{channel_id} (single station, no history).
