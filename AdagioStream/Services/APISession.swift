@@ -15,6 +15,14 @@ public enum APISession {
         return URLSession(configuration: config)
     }()
 
+    /// Session for api.stellartunerlog.com API calls.
+    public static let stellartunerlog: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        config.httpAdditionalHeaders = ["User-Agent": "AdagioStream/1.0"]
+        return URLSession(configuration: config)
+    }()
+
     /// Session for ESPN API calls.
     public static let espn: URLSession = {
         let config = URLSessionConfiguration.default

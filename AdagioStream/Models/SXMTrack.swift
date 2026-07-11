@@ -1,5 +1,28 @@
 import Foundation
 
+// MARK: - Metadata source selection
+
+/// Which third-party API supplies SiriusXM now-playing metadata.
+public enum SXMMetadataSource: String, CaseIterable {
+    case xmplaylist
+    case stellartunerlog
+
+    public static let defaultsKey = "sxmMetadataSource"
+
+    /// The user-selected source, defaulting to xmplaylist for existing users.
+    public static var current: SXMMetadataSource {
+        UserDefaults.standard.string(forKey: defaultsKey)
+            .flatMap(SXMMetadataSource.init(rawValue:)) ?? .xmplaylist
+    }
+
+    public var label: String {
+        switch self {
+        case .xmplaylist: return "xmplaylist.com"
+        case .stellartunerlog: return "StellarTunerLog"
+        }
+    }
+}
+
 // MARK: - App-facing models
 
 /// SiriusXM track metadata as exposed to the app's UI.
@@ -110,4 +133,77 @@ public struct SXMFeedEntry: Decodable {
 public struct SXMFeedResponse: Decodable {
     public let count: Int?
     public let results: [SXMFeedEntry]
+}
+
+// MARK: - StellarTunerLog API models (api.stellartunerlog.com/v1)
+
+/// One channel from GET /v1/channels. The catalog is keyed by numeric-string
+/// channel id; only the fields the app matches on are decoded.
+public struct STLChannel: Decodable {
+    public let id: String
+    public let name: String
+    public let channelNumber: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case channelNumber = "channel_number"
+    }
+}
+
+public struct STLChannelListResponse: Decodable {
+    public let channels: [String: STLChannel]
+}
+
+/// Now-playing state for one station, from /v1/nowplaying[/{id}].
+public struct STLStation: Decodable {
+    public let id: String
+    public let name: String
+    public let artist: String
+    public let title: String
+    public let album: String?
+    public let cutType: String
+    public let artworkURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, artist, title, album
+        case cutType = "cut_type"
+        case artworkURL = "artwork_url"
+    }
+
+    /// Only Song/Music cuts are real tracks; Spot/Link/Feature/PGM_Segment
+    /// etc. are ads or program segments (the xmplaylist "commercial break"
+    /// nil-track case).
+    public var isMusic: Bool {
+        cutType == "Song" || cutType == "Music"
+    }
+
+    /// Stable synthesized track id — the API has no per-track id, so
+    /// (station, artist, title) identifies a play for Equatable/history dedupe.
+    public var trackID: String {
+        "\(id)|\(artist)|\(title)"
+    }
+
+    /// Convert to the app-facing track model. Returns nil for non-music cuts.
+    /// `startedAt` is caller-supplied because the API carries no per-track
+    /// timestamp — the service stamps first-observation time.
+    public func toSXMTrack(startedAt: Date?) -> SXMTrack? {
+        guard isMusic else { return nil }
+        return SXMTrack(
+            id: trackID,
+            title: title,
+            artists: [artist],
+            artworkURL: artworkURL.flatMap { URL(string: $0) },
+            startedAt: startedAt
+        )
+    }
+}
+
+/// Envelope for GET /v1/nowplaying (all stations, keyed by channel id).
+public struct STLNowPlayingResponse: Decodable {
+    public let stations: [String: STLStation]
+}
+
+/// Envelope for GET /v1/nowplaying/{channel_id} (single station, no history).
+public struct STLStationResponse: Decodable {
+    public let station: STLStation
 }
