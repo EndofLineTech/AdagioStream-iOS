@@ -5,6 +5,7 @@ struct PlaybackSettingsView: View {
     @EnvironmentObject var providerManager: ProviderManager
     @EnvironmentObject private var viewModel: SettingsViewModel
     @AppStorage(SXMMetadataSource.defaultsKey) private var sxmMetadataSourceRaw = SXMMetadataSource.xmplaylist.rawValue
+    @AppStorage(SXMPollInterval.defaultsKey) private var sxmPollIntervalSeconds = SXMPollInterval.defaultSeconds
 
     var body: some View {
         Form {
@@ -78,6 +79,14 @@ struct PlaybackSettingsView: View {
                 }
                 .onChange(of: sxmMetadataSourceRaw) { _, _ in
                     SXMMetadataService.shared.sourceChanged()
+                }
+                Picker("Now-Playing Refresh", selection: $sxmPollIntervalSeconds) {
+                    ForEach(SXMPollInterval.options, id: \.self) { seconds in
+                        Text("\(seconds) seconds").tag(seconds)
+                    }
+                }
+                .onChange(of: sxmPollIntervalSeconds) { _, _ in
+                    SXMMetadataService.shared.pollIntervalChanged()
                 }
             } header: {
                 Text("Live Data")

@@ -15,8 +15,9 @@ public final class SXMMetadataService: ObservableObject {
     private var currentDeeplink: String?
     private var pollTimer: Timer?
     private var inFlightTask: Task<Void, Never>?
-    // stellartunerlog data refreshes every 30s (poll_interval_seconds) — don't poll faster
-    private var pollInterval: TimeInterval { source == .stellartunerlog ? 30 : 15 }
+    // User-chosen foreground per-channel poll interval (clamped 10...45s, default 30s),
+    // shared across both sources. Read live so a change applies on the next tick.
+    private var pollInterval: TimeInterval { SXMPollInterval.current }
     private let backgroundPollInterval: TimeInterval = 45
     private var feedTimer: Timer?
     private var feedTask: Task<Void, Never>?
@@ -218,6 +219,14 @@ public final class SXMMetadataService: ObservableObject {
         channelDeeplinkMap = [:]
         matchChannels(lastMatchedChannels, sortPrefixes: lastSortPrefixes)
         pendingResumeChannel = resumeChannel
+    }
+
+    /// Apply a changed foreground poll interval immediately by restarting the
+    /// active per-channel poll timer. No-op in background (that uses its own
+    /// fixed backgroundPollInterval) or when nothing is being polled.
+    public func pollIntervalChanged() {
+        guard !isInBackground else { return }
+        restartTrackPollingIfActive(interval: pollInterval)
     }
 
     // MARK: - Feed Polling

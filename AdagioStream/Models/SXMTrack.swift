@@ -23,6 +23,23 @@ public enum SXMMetadataSource: String, CaseIterable {
     }
 }
 
+/// Foreground tuned-channel now-playing poll interval, in seconds. One shared
+/// value across both metadata sources. Readable without SwiftUI so Services
+/// (which build for tvOS) can consume it.
+public enum SXMPollInterval {
+    public static let defaultsKey = "sxmPollIntervalSeconds"
+    public static let options: [Int] = [10, 15, 20, 25, 30, 35, 40, 45]
+    public static let defaultSeconds = 30
+
+    /// User-selected seconds, clamped to the allowed range so a garbage
+    /// default can't produce a runaway timer. Unset → default.
+    public static var current: TimeInterval {
+        let stored = UserDefaults.standard.object(forKey: defaultsKey) as? Int
+        let seconds = stored ?? defaultSeconds
+        return TimeInterval(min(max(seconds, options.first!), options.last!))
+    }
+}
+
 // MARK: - App-facing models
 
 /// SiriusXM track metadata as exposed to the app's UI.
