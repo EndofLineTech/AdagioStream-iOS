@@ -9,10 +9,11 @@ public enum SXMMetadataSource: String, CaseIterable {
 
     public static let defaultsKey = "sxmMetadataSource"
 
-    /// The user-selected source, defaulting to xmplaylist for existing users.
+    /// The user-selected source, defaulting to StellarTunerLog when the user
+    /// has never chosen. A persisted user choice still wins over the default.
     public static var current: SXMMetadataSource {
         UserDefaults.standard.string(forKey: defaultsKey)
-            .flatMap(SXMMetadataSource.init(rawValue:)) ?? .xmplaylist
+            .flatMap(SXMMetadataSource.init(rawValue:)) ?? .stellartunerlog
     }
 
     public var label: String {

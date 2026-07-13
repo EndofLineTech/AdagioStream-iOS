@@ -331,19 +331,19 @@ final class StellarTunerLogModelsTests: XCTestCase {
 
     // MARK: - Source enum
 
-    func testMetadataSourceDefaultsToXMPlaylist() {
+    func testMetadataSourceDefaultsToStellarTunerLog() {
         let key = SXMMetadataSource.defaultsKey
         let saved = UserDefaults.standard.string(forKey: key)
         defer { UserDefaults.standard.set(saved, forKey: key) }
 
         UserDefaults.standard.removeObject(forKey: key)
-        XCTAssertEqual(SXMMetadataSource.current, .xmplaylist)
-
-        UserDefaults.standard.set("stellartunerlog", forKey: key)
         XCTAssertEqual(SXMMetadataSource.current, .stellartunerlog)
+
+        UserDefaults.standard.set("xmplaylist", forKey: key)
+        XCTAssertEqual(SXMMetadataSource.current, .xmplaylist)
 
         // Unknown value falls back to the default
         UserDefaults.standard.set("garbage", forKey: key)
-        XCTAssertEqual(SXMMetadataSource.current, .xmplaylist)
+        XCTAssertEqual(SXMMetadataSource.current, .stellartunerlog)
     }
 }
