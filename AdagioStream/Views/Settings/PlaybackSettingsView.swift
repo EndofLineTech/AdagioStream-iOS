@@ -6,6 +6,7 @@ struct PlaybackSettingsView: View {
     @EnvironmentObject private var viewModel: SettingsViewModel
     @AppStorage(SXMMetadataSource.defaultsKey) private var sxmMetadataSourceRaw = SXMMetadataSource.stellartunerlog.rawValue
     @AppStorage(SXMPollInterval.defaultsKey) private var sxmPollIntervalSeconds = SXMPollInterval.defaultSeconds
+    @AppStorage(SXMSportsPriority.defaultsKey) private var preferLiveScores = true
 
     var body: some View {
         Form {
@@ -72,6 +73,11 @@ struct PlaybackSettingsView: View {
                         Text(interval.label).tag(interval)
                     }
                 }
+                Toggle("Prefer Live Scores on Sports Channels", isOn: $preferLiveScores)
+                    .accessibilityHint("When on, a live game's score and base runners are shown instead of SiriusXM song metadata on channels carrying that game")
+                    .onChange(of: preferLiveScores) { _, _ in
+                        audioPlayer.refreshNowPlayingInfo()
+                    }
                 Picker("SiriusXM Metadata Source", selection: $sxmMetadataSourceRaw) {
                     ForEach(SXMMetadataSource.allCases, id: \.rawValue) { source in
                         Text(source.label).tag(source.rawValue)
@@ -91,7 +97,7 @@ struct PlaybackSettingsView: View {
             } header: {
                 Text("Live Data")
             } footer: {
-                Text("How often to refresh live sports scores from ESPN.com API. Lower values show scores sooner but use more data. SiriusXM song metadata can come from xmplaylist.com or StellarTunerLog; switching takes effect immediately.")
+                Text("How often to refresh live sports scores from ESPN.com API. Lower values show scores sooner but use more data. \"Prefer Live Scores\" shows a game's score and base runners instead of song metadata on channels carrying that game. SiriusXM song metadata can come from xmplaylist.com or StellarTunerLog; switching takes effect immediately.")
             }
 
             Section {

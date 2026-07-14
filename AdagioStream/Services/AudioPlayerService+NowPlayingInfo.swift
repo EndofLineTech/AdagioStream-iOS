@@ -138,7 +138,8 @@ extension AudioPlayerService {
             artist = channel.group
             artwork = currentArtwork
             source = "channelNameOverlay"
-        } else if let track = sxmService.currentTrack {
+        } else if let track = sxmService.currentTrack,
+                  !(SXMSportsPriority.preferScores && ESPNScoreService.shared.gamesByChannel[channel.id] != nil) {
             title = track.title
             artist = track.artistDisplay
             artwork = artworkDisplayMode == .coverArt ? (sxmArtwork ?? currentArtwork) : currentArtwork

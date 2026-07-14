@@ -22,6 +22,7 @@ struct NowPlayingView: View {
     @State private var isScrubbing: Bool = false
     // d6q.6: up-next queue sheet
     @State private var showUpNext: Bool = false
+    @AppStorage(SXMSportsPriority.defaultsKey) private var preferScores = true
 
     private var artworkSize: CGFloat { sizeClass == .regular ? 300 : 200 }
     private var artworkRadius: CGFloat { sizeClass == .regular ? 24 : 20 }
@@ -112,7 +113,8 @@ struct NowPlayingView: View {
                             .fontWeight(.bold)
                             .multilineTextAlignment(.center)
 
-                        if let track = sxmService.currentTrack {
+                        if let track = sxmService.currentTrack,
+                           !(preferScores && currentGame != nil) {
                             Text(track.title)
                                 .font(.headline)
                                 .multilineTextAlignment(.center)

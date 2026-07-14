@@ -41,6 +41,19 @@ public enum SXMPollInterval {
     }
 }
 
+/// Whether a live ESPN game outranks SiriusXM track metadata on the
+/// now-playing display for a channel carrying that game. When true, scores /
+/// base-runner indicators win over song metadata; when false, metadata wins.
+/// Default true so sports channels show scores out of the box. Readable
+/// without SwiftUI so the now-playing updater (which builds for tvOS) can
+/// consume it; SwiftUI views observe the same value via @AppStorage(defaultsKey).
+public enum SXMSportsPriority {
+    public static let defaultsKey = "preferLiveScoresOverMetadata"
+    public static var preferScores: Bool {
+        UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true
+    }
+}
+
 // MARK: - App-facing models
 
 /// SiriusXM track metadata as exposed to the app's UI.

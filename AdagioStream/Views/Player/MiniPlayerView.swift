@@ -6,6 +6,7 @@ struct MiniPlayerView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showNowPlaying = false
+    @AppStorage(SXMSportsPriority.defaultsKey) private var preferScores = true
 
     private var logoSize: CGFloat { sizeClass == .regular ? 44 : 36 }
     private var logoRadius: CGFloat { sizeClass == .regular ? 8 : 6 }
@@ -77,8 +78,9 @@ struct MiniPlayerView: View {
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
-                        } else if let track = sxmService.currentTrack {
-                            // Radio: SXM now-playing metadata (unchanged)
+                        } else if let track = sxmService.currentTrack,
+                                  !(preferScores && audioPlayer.currentChannel.flatMap({ ESPNScoreService.shared.gamesByChannel[$0.id] }) != nil) {
+                            // Radio: SXM now-playing metadata (yields to a live game when preferScores)
                             Text("\(track.artistDisplay) — \(track.title)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)

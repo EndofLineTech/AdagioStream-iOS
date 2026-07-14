@@ -346,4 +346,16 @@ final class StellarTunerLogModelsTests: XCTestCase {
         UserDefaults.standard.set("garbage", forKey: key)
         XCTAssertEqual(SXMMetadataSource.current, .stellartunerlog)
     }
+
+    func testSportsPriorityDefaultsToPreferScores() {
+        let key = SXMSportsPriority.defaultsKey
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertTrue(SXMSportsPriority.preferScores, "unset → prefer scores")
+
+        UserDefaults.standard.set(false, forKey: key)
+        XCTAssertFalse(SXMSportsPriority.preferScores, "explicit false honored")
+    }
 }
