@@ -158,8 +158,12 @@ extension AudioPlayerService {
                 }
             }
 
-            // ID3 tags take precedence if available
-            if let metaTitle, !metaTitle.isEmpty, metaTitle != self.currentChannel?.name {
+            // ID3 tags take precedence if available. VLC reports the URL's last
+            // path component as the title for raw TS streams with no embedded
+            // tags — that's a filename, not metadata (cxa).
+            if let metaTitle, !metaTitle.isEmpty,
+               metaTitle != self.currentChannel?.name,
+               metaTitle != aMedia.url?.lastPathComponent {
                 title = metaTitle
             }
             if let metaArtist, !metaArtist.isEmpty {
