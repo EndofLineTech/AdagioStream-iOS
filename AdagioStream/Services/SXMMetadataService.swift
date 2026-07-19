@@ -29,10 +29,14 @@ public final class SXMMetadataService: ObservableObject {
     /// Channels from the last matchChannels() call, retained so sourceChanged() can re-match.
     private var lastMatchedChannels: [Channel] = []
     private var lastSortPrefixes: [String] = []
-    /// Channel currently being polled, retained so sourceChanged() can restart its poll.
+    /// Channel currently playing (mapped or not), retained so sourceChanged()
+    /// and a late station-list success can (re)start its poll.
     private var currentChannel: Channel?
     /// Set by sourceChanged(); consumed when the new matching table lands.
     private var pendingResumeChannel: Channel?
+    /// Bumped by every matchChannels() call; the station-list retry loop exits
+    /// when its captured generation is superseded (beads_mobilemusic-k7m).
+    private var matchGeneration = 0
 
     /// Timestamped track history from API responses, sorted newest-first.
     private var trackHistory: [SXMTrack] = []
@@ -52,6 +56,7 @@ public final class SXMMetadataService: ObservableObject {
     /// Build a lookup table mapping app channel IDs to source station identifiers.
     /// Call after channels are loaded from providers.
     public func matchChannels(_ channels: [Channel], sortPrefixes: [String] = ["Radio: ", "TV: "]) {
+        matchGeneration += 1
         stopFeedPolling()
         feedTracks = [:]
         pendingResumeChannel = nil
@@ -67,24 +72,32 @@ public final class SXMMetadataService: ObservableObject {
         }
         log.log("Found \(sxmChannels.count) SiriusXM channels, fetching station list...", category: .sxm)
 
-        let expected = source
+        let generation = matchGeneration
         Task {
-            guard let stations = await fetchStationList() else {
-                // Stale fetch: a newer matchChannels()/sourceChanged() owns state now.
-                guard self.source == expected else { return }
-                // ponytail: single-shot fetch, no retry — a failed switch lands the
-                // service in a plain non-SXM state; the next provider reload
-                // re-runs matching and recovers.
+            // Retry until the list loads or a newer matchChannels() supersedes
+            // this loop — a single failed fetch at launch must not disable SXM
+            // metadata for the whole session (beads_mobilemusic-k7m).
+            var delay: TimeInterval = 5
+            while true {
+                let stations = await fetchStationList()
+                guard generation == matchGeneration else { return }
+                if let stations {
+                    buildMatchingTable(appChannels: sxmChannels, stations: stations, sortPrefixes: sortPrefixes)
+                    return
+                }
+                // First failure only (pendingResumeChannel is consumed): don't
+                // leave the UI hanging on a source switch — drop SXM metadata
+                // for the pending channel now; the loop keeps retrying.
                 if let channel = pendingResumeChannel {
                     pendingResumeChannel = nil
                     log.log("Station list fetch failed during source switch; dropping SXM metadata for \"\(channel.name)\"", category: .sxm)
                     channelChanged(to: channel)
                 }
-                return
+                log.log("Station list fetch failed; retrying in \(Int(delay))s", category: .sxm)
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                guard generation == matchGeneration else { return }
+                delay = min(delay * 2, 60)
             }
-            // Stale fetch: source switched while awaiting — discard this result.
-            guard self.source == expected else { return }
-            buildMatchingTable(appChannels: sxmChannels, stations: stations, sortPrefixes: sortPrefixes)
         }
     }
 
@@ -135,6 +148,11 @@ public final class SXMMetadataService: ObservableObject {
         // Resume polling for the channel that was live before a source switch
         if let channel = pendingResumeChannel {
             pendingResumeChannel = nil
+            channelChanged(to: channel)
+        } else if let channel = currentChannel, currentDeeplink == nil {
+            // Late station-list success: this channel started playing while the
+            // map was empty and was treated as non-SXM — re-run it so the
+            // now-available mapping starts polling (beads_mobilemusic-k7m).
             channelChanged(to: channel)
         }
     }
@@ -392,6 +410,9 @@ public final class SXMMetadataService: ObservableObject {
         // Coming back to live — clear suspension and reset
         isDisplaySuspended = false
         stopPolling()
+        // Remember the channel even when no mapping exists yet (stopPolling
+        // nils this) — a late station-list success resumes metadata for it.
+        currentChannel = channel
 
         guard let deeplink = channelDeeplinkMap[channel.id] else {
             isSXMChannel = false
@@ -401,7 +422,6 @@ public final class SXMMetadataService: ObservableObject {
 
         isSXMChannel = true
         currentDeeplink = deeplink
-        currentChannel = channel
         log.log("SXM channel active: \"\(channel.name)\" → deeplink=\"\(deeplink)\"", category: .sxm)
 
         // Immediate first fetch
