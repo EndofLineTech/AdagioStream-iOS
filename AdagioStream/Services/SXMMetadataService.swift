@@ -11,7 +11,8 @@ public final class SXMMetadataService: ObservableObject {
 
     private let log = DebugLogger.shared
     // channelID -> station identifier (xmplaylist deeplink, or stellartunerlog channel id)
-    private var channelDeeplinkMap: [String: String] = [:]
+    // Getter internal for tests (beads_mobilemusic-t3s); setter stays private.
+    private(set) var channelDeeplinkMap: [String: String] = [:]
     private var currentDeeplink: String?
     private var pollTimer: Timer?
     private var inFlightTask: Task<Void, Never>?
@@ -49,7 +50,24 @@ public final class SXMMetadataService: ObservableObject {
         source == .stellartunerlog ? APISession.stellartunerlog : APISession.xmplaylist
     }
 
-    private init() {}
+    /// Internal (not private) so tests can build fresh instances instead of
+    /// sharing singleton state; production uses `shared` (beads_mobilemusic-t3s).
+    init() {}
+
+    // MARK: - Test Seams (beads_mobilemusic-t3s)
+
+    /// When set, consulted instead of the real network fetch in the retry loop.
+    var stationListFetcher: (@MainActor () async -> [MatchableStation]?)?
+    /// Backoff sleep for the retry loop. Returns true when the sleep was
+    /// cancelled — the loop must exit instead of hot-looping with zero delay.
+    var retrySleep: @MainActor (TimeInterval) async -> Bool = { delay in
+        (try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))) == nil
+    }
+    /// Retained so tests can await loop completion; production never cancels
+    /// it — the generation guard supersedes stale loops. The task body retains
+    /// self while a loop is in flight (harmless on the singleton, keeps
+    /// non-singleton test instances alive until their loop exits).
+    var matchTask: Task<Void, Never>?
 
     // MARK: - Channel Matching
 
@@ -73,13 +91,18 @@ public final class SXMMetadataService: ObservableObject {
         log.log("Found \(sxmChannels.count) SiriusXM channels, fetching station list...", category: .sxm)
 
         let generation = matchGeneration
-        Task {
+        matchTask = Task {
             // Retry until the list loads or a newer matchChannels() supersedes
             // this loop — a single failed fetch at launch must not disable SXM
             // metadata for the whole session (beads_mobilemusic-k7m).
             var delay: TimeInterval = 5
             while true {
-                let stations = await fetchStationList()
+                let stations: [MatchableStation]?
+                if let fetcher = stationListFetcher {
+                    stations = await fetcher()
+                } else {
+                    stations = await fetchStationList()
+                }
                 guard generation == matchGeneration else { return }
                 if let stations {
                     buildMatchingTable(appChannels: sxmChannels, stations: stations, sortPrefixes: sortPrefixes)
@@ -94,7 +117,9 @@ public final class SXMMetadataService: ObservableObject {
                     channelChanged(to: channel)
                 }
                 log.log("Station list fetch failed; retrying in \(Int(delay))s", category: .sxm)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                // Cancelled sleep = exit; otherwise a cancelled Task would spin
+                // a zero-delay hot retry loop (beads_mobilemusic-t3s).
+                if await retrySleep(delay) { return }
                 guard generation == matchGeneration else { return }
                 delay = min(delay * 2, 60)
             }
