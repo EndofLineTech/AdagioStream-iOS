@@ -591,8 +591,29 @@ struct AddProviderView: View {
                     host: host, username: "", password: "",
                     providerID: provider.id.uuidString
                 )
+                // beads_mobilemusic-uxb kickback finding 2: re-check right
+                // before the Keychain write — cancellation can land in the gap
+                // between the guard above and here.
+                guard !Task.isCancelled else {
+                    await MainActor.run { isSigningIn = false }
+                    return
+                }
                 await auth.seedTokens(tokens)
                 await providerManager.addProvider(provider)
+
+                // If cancellation landed during addProvider, its own
+                // isCancelled guard skips the mutation and the provider never
+                // reaches providerManager.providers — but the tokens seeded
+                // above are now orphaned in the Keychain under provider.id.
+                // Clean them up rather than leaving a credential-less token
+                // pair behind for an account that was never added.
+                let wasAdded = providerManager.providers.contains { $0.id == provider.id }
+                if Task.isCancelled && !wasAdded {
+                    await auth.discardSeededTokens()
+                    await MainActor.run { isSigningIn = false }
+                    return
+                }
+
                 await MainActor.run {
                     isSigningIn = false
                     if let loadError = providerManager.error {

@@ -271,6 +271,16 @@ public actor AudiobookshelfAuth {
         persist(pair)
     }
 
+    /// Removes this provider's tokens from the Keychain without a network
+    /// round-trip. Used when an OIDC sign-in's tokens were seeded but the
+    /// provider was never actually added (e.g. the add was cancelled mid-flow)
+    /// — otherwise the orphaned token pair sits under `providerID` indefinitely
+    /// (beads_mobilemusic-uxb kickback finding 2). Mirrors `forgetTokens()`'s
+    /// storage layout exactly; there is no separate deletion path to keep in sync.
+    public func discardSeededTokens() {
+        forgetTokens()
+    }
+
     // MARK: - Refresh (rotates the refresh token)
 
     /// Refreshes at most once for a wave of concurrent 401s. If someone already
