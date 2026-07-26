@@ -143,6 +143,8 @@ final class InterruptionSnapshotStructTests: XCTestCase {
             XCTAssertEqual(ch.id, "ch-radio")
         case .library:
             didRestoreLibrary = true
+        case .audiobook:
+            XCTFail("Radio source must NOT route to audiobook restore path")
         }
 
         XCTAssertTrue(didRestoreRadio, "Radio source must route to radio restore path")
@@ -165,6 +167,8 @@ final class InterruptionSnapshotStructTests: XCTestCase {
             restoredIndex = index
             XCTAssertEqual(queue[index].title, "Track 5",
                 "Restore must target the track at the captured index")
+        case .audiobook:
+            XCTFail("Library source must NOT route to audiobook restore path")
         }
 
         XCTAssertEqual(restoredIndex, capturedIndex,

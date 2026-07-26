@@ -45,18 +45,36 @@ extension Track: NowPlayingItem {
     public var isLiveStream: Bool      { false }
 }
 
+// MARK: - Audiobook conformance
+
+extension Audiobook: NowPlayingItem {
+    public var displayTitle: String    { title }
+    public var displaySubtitle: String? { author }
+    /// `coverPath` is server-relative and needs a provider base URL to
+    /// resolve — same phase-1 punt as `Track.artworkURL`. The in-app/CarPlay
+    /// Now Playing surfaces already resolve audiobook art separately via
+    /// `AudioPlayerService.nowPlayingArtworkURL`.
+    public var artworkURL: URL?        { nil }
+    public var isLiveStream: Bool      { false }
+}
+
 // MARK: - PlaybackSource Enum
 
 /// Describes what the player is currently playing or was most recently playing.
 ///
-/// Phase 1 (this bead): only `.radio` is ever assigned; `.library` is defined
-/// here as the foundation for d6q.2 (queue-based playback).
+/// `.library` is the foundation for d6q.2 (queue-based playback). `.audiobook`
+/// (uxa.1) covers BOTH audiobooks and podcast episodes — a podcast episode is
+/// already represented as a one-file "book" `Audiobook` record elsewhere
+/// (see `AudioPlayerService+Audiobook.swift`), so no separate `.podcast` case
+/// is needed; CarPlay/root-shortcut treatment is identical for both.
 public enum PlaybackSource {
     /// Live radio / channel stream.
     case radio(Channel)
     /// On-demand library queue.  `index` is the index of the active track
     /// within `queue`.
     case library(queue: [Track], index: Int)
+    /// On-demand audiobook or podcast-episode playback.
+    case audiobook(Audiobook)
 
     /// The item currently being presented by this source.
     public var currentItem: any NowPlayingItem {
@@ -65,6 +83,8 @@ public enum PlaybackSource {
             return channel
         case .library(let queue, let index):
             return queue[index]
+        case .audiobook(let book):
+            return book
         }
     }
 }

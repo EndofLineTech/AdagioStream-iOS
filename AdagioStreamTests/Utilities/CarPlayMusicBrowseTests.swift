@@ -223,5 +223,76 @@ final class CarPlayMusicBrowseTests: XCTestCase {
         let episode = makeEpisode(pubDate: nil, duration: nil)
         XCTAssertNil(CarPlayTemplateManager.podcastEpisodeRowDetail(episode))
     }
+
+    // MARK: - nowPlayingButtonKind (uxa.1)
+    //
+    // This is the routing decision behind the bug: audiobook/podcast playback
+    // fell into the radio branch (no third case existed), rendering a
+    // favorite-star button whose handler guards on currentChannel (nil for
+    // books) and silently no-ops on every tap.
+
+    func testNowPlayingButtonKindForLibrary() {
+        let tracks = [Track(id: "t1", albumId: "a1", artistId: "ar1", title: "One", updatedAt: 0)]
+        let source = PlaybackSource.library(queue: tracks, index: 0)
+        XCTAssertEqual(CarPlayTemplateManager.nowPlayingButtonKind(for: source), .library)
+    }
+
+    func testNowPlayingButtonKindForRadio() {
+        let channel = Channel(id: "c1", name: "KEXP", streamURL: URL(string: "https://example.com")!)
+        let source = PlaybackSource.radio(channel)
+        XCTAssertEqual(CarPlayTemplateManager.nowPlayingButtonKind(for: source), .radio)
+    }
+
+    func testNowPlayingButtonKindForNilSourceIsRadio() {
+        // Matches historical behavior: no source captured yet defaults to radio buttons.
+        XCTAssertEqual(CarPlayTemplateManager.nowPlayingButtonKind(for: nil), .radio)
+    }
+
+    func testNowPlayingButtonKindForAudiobook() {
+        let book = Audiobook(id: "b1", libraryItemId: "b1", libraryId: "lib1", title: "A Book", updatedAt: 0)
+        let source = PlaybackSource.audiobook(book)
+        XCTAssertEqual(CarPlayTemplateManager.nowPlayingButtonKind(for: source), .audiobook)
+    }
+
+    // MARK: - rootPlaceholderState (uxa.2)
+    //
+    // The CarPlay root's empty-channel-list placeholder previously showed
+    // "No Channels — Add an account on your phone" identically whether no
+    // provider existed, the provider was still loading, or the load failed.
+
+    func testRootPlaceholderStateUnconfiguredWhenNoProviders() {
+        XCTAssertEqual(
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: true, isLoading: false),
+            .unconfigured
+        )
+        // Providers empty always wins, even if isLoading happens to be true too.
+        XCTAssertEqual(
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: true, isLoading: true),
+            .unconfigured
+        )
+    }
+
+    func testRootPlaceholderStateLoadingWhenConfiguredAndLoading() {
+        XCTAssertEqual(
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: true),
+            .loading
+        )
+    }
+
+    func testRootPlaceholderStateFailedWhenConfiguredNotLoadingStillEmpty() {
+        XCTAssertEqual(
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: false),
+            .failed
+        )
+    }
+
+    func testRootPlaceholderCopy() {
+        XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.unconfigured.text, "No Channels")
+        XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.unconfigured.detailText, "Add an account on your phone")
+        XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.loading.text, "Loading channels…")
+        XCTAssertNil(CarPlayTemplateManager.RootPlaceholder.loading.detailText)
+        XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.failed.text, "Couldn't load channels")
+        XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.failed.detailText, "Check your connection")
+    }
 }
 #endif

@@ -437,6 +437,14 @@ extension AudioPlayerService {
         // Radio/library-shared VLC teardown + fresh player.
         currentChannel = nil
         currentTrack = nil
+        // uxa.1: mirror into the PlaybackSource seam (matches d6q.7's radio/
+        // library mirroring) — this is what CarPlay's Now Playing button and
+        // root "Now Playing" shortcut key off of. Covers both audiobooks and
+        // podcast episodes (audiobookSession.book is the episode-shaped
+        // Audiobook record for a podcast — see AudiobookSessionKind).
+        if let book = audiobookSession?.book {
+            playbackSource = .audiobook(book)
+        }
         streamStartTime = Date()
         lastLoggedVLCState = nil
         stateTimer?.invalidate()
@@ -790,6 +798,7 @@ extension AudioPlayerService {
         audiobookDuration = nil
         audiobookGlobalTime = 0
         currentChapter = nil
+        playbackSource = nil   // uxa.1: mirror into PlaybackSource seam (matches stop()'s d6q.7 clear)
     }
 
     // MARK: - Now Playing (yu8.4 — chapter title + book metadata)

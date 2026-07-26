@@ -32,6 +32,17 @@ final class PlaybackSourceTests: XCTestCase {
         )
     }
 
+    private func makeAudiobook(id: String = "book-1", title: String = "Project Hail Mary", author: String? = "Andy Weir") -> Audiobook {
+        Audiobook(
+            id: id,
+            libraryItemId: id,
+            libraryId: "lib-1",
+            title: title,
+            author: author,
+            updatedAt: 1_700_000_000
+        )
+    }
+
     // MARK: - Channel: NowPlayingItem conformance
 
     func testChannelDisplayTitle() {
@@ -211,6 +222,53 @@ final class PlaybackSourceTests: XCTestCase {
         let items = URLComponents(string: url?.absoluteString ?? "")?.queryItems ?? []
         let idVal = items.first(where: { $0.name == "id" })?.value
         XCTAssertEqual(idVal, "t-1")
+    }
+
+    // MARK: - Audiobook: NowPlayingItem conformance (uxa.1)
+
+    func testAudiobookDisplayTitle() {
+        let book = makeAudiobook(title: "Project Hail Mary")
+        XCTAssertEqual(book.displayTitle, "Project Hail Mary")
+    }
+
+    func testAudiobookDisplaySubtitleIsAuthor() {
+        let book = makeAudiobook(author: "Andy Weir")
+        XCTAssertEqual(book.displaySubtitle, "Andy Weir")
+    }
+
+    func testAudiobookDisplaySubtitleNilWhenNoAuthor() {
+        let book = makeAudiobook(author: nil)
+        XCTAssertNil(book.displaySubtitle)
+    }
+
+    func testAudiobookArtworkURLIsNilPhase1() {
+        // Cover art is resolved separately via AudioPlayerService.nowPlayingArtworkURL
+        // (server-relative coverPath needs a provider base URL) — same punt as Track.
+        let book = makeAudiobook()
+        XCTAssertNil(book.artworkURL)
+    }
+
+    func testAudiobookIsNotLiveStream() {
+        let book = makeAudiobook()
+        XCTAssertFalse(book.isLiveStream)
+    }
+
+    // MARK: - PlaybackSource.audiobook (uxa.1)
+
+    func testAudiobookSourceCurrentItemIsBook() {
+        let book = makeAudiobook(title: "Project Hail Mary")
+        let source = PlaybackSource.audiobook(book)
+        XCTAssertEqual(source.currentItem.displayTitle, "Project Hail Mary")
+        XCTAssertFalse(source.currentItem.isLiveStream)
+    }
+
+    /// A podcast episode is represented as a one-file Audiobook record
+    /// (AudioPlayerService+Audiobook.swift's `episodeRecord`) — same case,
+    /// no separate `.podcast` needed.
+    func testAudiobookSourceCoversPodcastEpisodeRecord() {
+        let episodeRecord = makeAudiobook(id: "ep-1", title: "Episode 42", author: "Some Show")
+        let source = PlaybackSource.audiobook(episodeRecord)
+        XCTAssertEqual(source.currentItem.displayTitle, "Episode 42")
     }
 
     // MARK: - AudioPlayerService seam: playbackSource mirrors currentChannel

@@ -267,11 +267,28 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // right now-playing buttons.  The CPNowPlayingTemplate singleton is
         // shared; we reconfigure it every time the source or relevant state
         // changes (shuffle, repeat, favorite, heart, time-shift).
-        switch audioPlayer.playbackSource {
+        switch Self.nowPlayingButtonKind(for: audioPlayer.playbackSource) {
         case .library:
             updateNowPlayingButtonsForLibrary(nowPlaying)
-        case .radio, .none:
+        case .radio:
             updateNowPlayingButtonsForRadio(nowPlaying)
+        case .audiobook:
+            updateNowPlayingButtonsForAudiobook(nowPlaying)
+        }
+    }
+
+    /// Which now-playing button set a `PlaybackSource` maps to (uxa.1).
+    /// Extracted as a pure function so the routing decision itself — the
+    /// root cause of the dead favorite-star button (audiobooks/podcasts
+    /// silently fell into the radio branch with no third case to route to)
+    /// — is unit-testable without a live CarPlay connection.
+    enum NowPlayingButtonKind: Equatable { case library, radio, audiobook }
+
+    nonisolated static func nowPlayingButtonKind(for source: PlaybackSource?) -> NowPlayingButtonKind {
+        switch source {
+        case .library: return .library
+        case .radio, .none: return .radio
+        case .audiobook: return .audiobook
         }
     }
 
@@ -372,6 +389,18 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         nowPlaying.updateNowPlayingButtons(buttons)
     }
 
+    /// Configures the CPNowPlayingTemplate buttons for audiobook/podcast
+    /// playback (uxa.1). No favorite-star — there's no channel to favorite,
+    /// and the old radio branch's button silently no-op'd every tap since its
+    /// handler guards on `currentChannel` (nil for books). No Up Next either:
+    /// chapter/episode skip already works via the standard next/prev track
+    /// remote commands (MPRemoteCommandCenter), so no extra CarPlay button is
+    /// needed beyond the built-in play/pause/skip transport.
+    private func updateNowPlayingButtonsForAudiobook(_ nowPlaying: CPNowPlayingTemplate) {
+        nowPlaying.isUpNextButtonEnabled = false
+        nowPlaying.updateNowPlayingButtons([])
+    }
+
     private func renderSFSymbol(_ name: String, size: CGSize) -> UIImage {
         let config = UIImage.SymbolConfiguration(pointSize: size.height * 0.8, weight: .medium)
         let symbol = UIImage(systemName: name, withConfiguration: config) ?? UIImage()
@@ -385,9 +414,13 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         var items: [CPListItem] = []
         var nowPlayingItem: CPListItem?
 
-        // Now Playing row at top if something is playing
-        if audioPlayer.currentChannel != nil {
-            let item = CPListItem(text: "Now Playing", detailText: audioPlayer.currentChannel?.name)
+        // Now Playing row at top if something is playing. uxa.1: gated on
+        // hasActivePlayback (radio, library, OR audiobook/podcast) instead of
+        // currentChannel — the old gate hid this shortcut for every
+        // audiobook/podcast session (currentChannel is nil for those).
+        if audioPlayer.hasActivePlayback {
+            let detail = audioPlayer.nowPlaying?.displayTitle ?? audioPlayer.currentAudiobook?.title
+            let item = CPListItem(text: "Now Playing", detailText: detail)
             item.accessoryType = .disclosureIndicator
             item.handler = { [weak self] _, completion in
                 self?.pushNowPlaying()

@@ -136,6 +136,7 @@ extension AudioPlayerService {
                     switch capturedSource {
                     case .radio(let ch): return "radio(\"\(ch.name)\")"
                     case .library(_, let idx): return "library(index=\(idx))"
+                    case .audiobook(let book): return "audiobook(\"\(book.title)\")"
                     }
                 }()
                 self.log.log("Secondary audio hint .end: resuming \(sourceDesc)", category: .interruption)
@@ -161,6 +162,11 @@ extension AudioPlayerService {
                         }
                         self.reactivateAndPlayLibraryTrack(queue[index], inQueue: queue, at: index, via: api, seekTo: savedElapsed)
                     }
+                case .audiobook:
+                    // uxa.1: unreachable — captureInterruptionSnapshot() never
+                    // captures an audiobook source, so interruptedSource is
+                    // never .audiobook here. Exhaustive switch requires the case.
+                    break
                 }
             }
         }
@@ -330,6 +336,7 @@ extension AudioPlayerService {
                     switch self.interruptedSource {
                     case .radio(let ch): return "radio(\"\(ch.name)\")"
                     case .library(_, let idx): return "library(index=\(idx))"
+                    case .audiobook(let book): return "audiobook(\"\(book.title)\")"
                     case nil: return "nil"
                     }
                 }()
@@ -435,6 +442,13 @@ extension AudioPlayerService {
                                 }
                             }
                         }
+
+                    case .audiobook:
+                        // uxa.1: unreachable — captureInterruptionSnapshot() never
+                        // captures an audiobook source, so isRidingOutInterruption
+                        // is never set true for one. Exhaustive switch requires
+                        // the case; audiobooks resume via resume()/pauseAudiobook().
+                        break
                     }
 
                 } else {
@@ -470,6 +484,13 @@ extension AudioPlayerService {
                             }
                             self.reactivateAndPlayLibraryTrack(queue[index], inQueue: queue, at: index, via: api, seekTo: savedElapsed)
                         }
+
+                    case .audiobook:
+                        // uxa.1: unreachable — captureInterruptionSnapshot() never
+                        // captures an audiobook source, so this fallback (which
+                        // only runs for a snapshot taken at .began) never sees
+                        // one. Exhaustive switch requires the case.
+                        break
                     }
                 }
 
@@ -556,6 +577,14 @@ extension AudioPlayerService {
     /// directly and assert snapshot contents.
     func captureInterruptionSnapshot() -> InterruptionSnapshot? {
         guard let source = playbackSource else { return nil }
+        // uxa.1: audiobooks/podcasts have their own pause/resume path
+        // (pauseAudiobook()/resume() via audiobookSession) and don't
+        // participate in the radio/library ride-out-and-restore machinery
+        // below (time-shift capture, queue reactivation) — excluding this
+        // case here keeps existing audiobook interruption behavior
+        // unchanged while still fixing the PlaybackSource seam it shares
+        // with radio/library.
+        if case .audiobook = source { return nil }
         // VLC elapsed: intValue is -1 when unknown; clamp to nil.
         let vlcMs = mediaPlayer.time.intValue
         let elapsed: Double? = vlcMs > 0 ? Double(vlcMs) / 1000.0 : nil
