@@ -254,6 +254,25 @@ public struct ABSEpisodeDTO: Decodable {
     public let audioFile: ABSAudioFileDTO?
     public let userMediaProgress: ABSMediaProgressDTO?
 
+    /// Memberwise init for reconstructing an episode offline from a downloaded
+    /// manifest (`AudiobookDownloadRecord`, uxc.1) — no server round-trip
+    /// available, so this bypasses the JSON-decoding path above.
+    public init(
+        id: String,
+        title: String?,
+        duration: Double?,
+        pubDate: String? = nil,
+        audioFile: ABSAudioFileDTO? = nil,
+        userMediaProgress: ABSMediaProgressDTO? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.duration = duration
+        self.pubDate = pubDate
+        self.audioFile = audioFile
+        self.userMediaProgress = userMediaProgress
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(String.self, forKey: .id)) ?? ""

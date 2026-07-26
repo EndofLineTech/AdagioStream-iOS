@@ -346,12 +346,26 @@ public struct MusicLibraryView: View {
         }
     }
 
-    // MARK: - Offline browser (l31.3)
+    // MARK: - Offline browser (l31.3, unioned with ABS downloads uxc.1)
 
-    /// Shown when offline mode is on.  Lists only downloaded tracks; no network calls made.
+    /// Downloaded audiobooks (excludes podcast episodes, which are namespaced
+    /// `ep#<showID>#<episodeID>` — see `AudiobookDownloadRecord.isEpisodeDownload`).
+    private var offlineBooks: [AudiobookDownloadRecord] {
+        downloadManager.audiobookDownloads.filter { $0.status == .completed && !$0.isEpisodeDownload }
+    }
+
+    /// Downloaded podcast episodes.
+    private var offlineEpisodes: [AudiobookDownloadRecord] {
+        downloadManager.audiobookDownloads.filter { $0.status == .completed && $0.isEpisodeDownload }
+    }
+
+    /// Shown when offline mode is on. Lists downloaded tracks, audiobooks, and
+    /// podcast episodes across all providers (uxc.1) — no network calls made.
     @ViewBuilder
     private var offlineBrowser: some View {
         let downloads = downloadManager.downloads.filter { $0.status == .completed }
+        let books = offlineBooks
+        let episodes = offlineEpisodes
 
         VStack(spacing: 0) {
             // Offline mode banner
@@ -359,7 +373,7 @@ public struct MusicLibraryView: View {
                 Image(systemName: "wifi.slash")
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
-                Text("Offline mode — showing downloaded music")
+                Text("Offline mode — showing downloaded content")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -368,26 +382,56 @@ public struct MusicLibraryView: View {
             .padding(.vertical, 8)
             .background(Color(.secondarySystemBackground))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Offline mode — showing downloaded music only")
+            .accessibilityLabel("Offline mode — showing downloaded content only")
 
-            if downloads.isEmpty {
+            if downloads.isEmpty && books.isEmpty && episodes.isEmpty {
                 ScrollView {
                     EmptyStateView(
                         title: "No Downloads",
                         systemImage: "arrow.down.circle",
-                        description: "No downloaded tracks available. Turn off offline mode or download tracks first."
+                        description: "No downloaded content available. Turn off offline mode or download music, audiobooks, or episodes first."
                     )
                     .containerRelativeFrame([.horizontal, .vertical])
                 }
             } else {
-                List(downloads, id: \.id) { record in
-                    OfflineTrackRow(
-                        record: record,
-                        title: offlineTrackTitles[record.id],
-                        onPlay: {
-                            playOfflineDownloads(startingAt: record.id, downloads: downloads)
+                List {
+                    if !downloads.isEmpty {
+                        Section("Music") {
+                            ForEach(downloads, id: \.id) { record in
+                                OfflineTrackRow(
+                                    record: record,
+                                    title: offlineTrackTitles[record.id],
+                                    onPlay: {
+                                        playOfflineDownloads(startingAt: record.id, downloads: downloads)
+                                    }
+                                )
+                            }
                         }
-                    )
+                    }
+                    if !books.isEmpty {
+                        Section("Audiobooks") {
+                            ForEach(books, id: \.id) { record in
+                                OfflineDownloadRow(
+                                    title: record.title,
+                                    subtitle: record.author,
+                                    systemImage: "books.vertical.fill",
+                                    onPlay: { playOfflineBook(record) }
+                                )
+                            }
+                        }
+                    }
+                    if !episodes.isEmpty {
+                        Section("Podcast Episodes") {
+                            ForEach(episodes, id: \.id) { record in
+                                OfflineDownloadRow(
+                                    title: record.title,
+                                    subtitle: record.author,
+                                    systemImage: "mic.fill",
+                                    onPlay: { playOfflineEpisode(record) }
+                                )
+                            }
+                        }
+                    }
                 }
                 .listStyle(.plain)
             }
@@ -399,6 +443,39 @@ public struct MusicLibraryView: View {
             let completed = newDownloads.filter { $0.status == .completed }
             resolveOfflineTrackTitles(downloads: completed)
         }
+    }
+
+    /// Plays a downloaded audiobook offline. Reuses `AudioPlayerService
+    /// .playAudiobook`'s existing offline routing (E3 / mkj.2) — offline mode
+    /// is guaranteed on here, so it resolves straight to the local-file path.
+    /// Resume position: best-effort from the cached `Audiobook` row if the book
+    /// was ever browsed online; otherwise starts from 0.
+    private func playOfflineBook(_ record: AudiobookDownloadRecord) {
+        guard let absAPI else { return }
+        let cached = try? NavidromeStore.shared.writer.read { db in try Audiobook.fetchOne(db, key: record.id) }
+        let book = cached ?? Audiobook(
+            id: record.id,
+            libraryItemId: record.id,
+            libraryId: "",
+            title: record.title,
+            author: record.author,
+            duration: record.duration,
+            updatedAt: record.updatedAt
+        )
+        audioPlayer.playAudiobook(book, via: absAPI)
+    }
+
+    /// Plays a downloaded podcast episode offline, reconstructing the minimal
+    /// `ABSEpisodeDTO`/`PodcastPlaybackContext` the offline routing in
+    /// `AudioPlayerService.playPodcastEpisode` needs — the manifest carries no
+    /// full show episode list, so auto-play-next is scoped to this one episode
+    /// (mirrors `PodcastRecentEpisodesView`'s single-episode context).
+    private func playOfflineEpisode(_ record: AudiobookDownloadRecord) {
+        guard let absAPI,
+              let (showID, episodeID) = AudiobookDownloadRecord.parseEpisodeRecordID(record.id) else { return }
+        let episode = ABSEpisodeDTO(id: episodeID, title: record.title, duration: record.duration)
+        let context = PodcastPlaybackContext(libraryItemId: showID, showTitle: record.author, episodes: [episode])
+        audioPlayer.playPodcastEpisode(episode, via: absAPI, context: context)
     }
 
     /// Resolves track titles for the offline list from the library cache.
@@ -595,6 +672,52 @@ private struct OfflineTrackRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(displayTitle)
         .accessibilityHint("Play downloaded track")
+    }
+}
+
+// MARK: - Offline download row (uxc.1)
+
+/// Tap-to-play row for a downloaded audiobook or podcast episode in the
+/// offline browser — same shape as `OfflineTrackRow`, generalized to take a
+/// title/subtitle/icon instead of a Navidrome `DownloadRecord`.
+private struct OfflineDownloadRow: View {
+    let title: String
+    let subtitle: String?
+    let systemImage: String
+    let onPlay: () -> Void
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "play.fill")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(title)
+        .accessibilityHint("Play downloaded item")
     }
 }
 
