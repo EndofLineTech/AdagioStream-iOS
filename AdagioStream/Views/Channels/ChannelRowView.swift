@@ -16,58 +16,73 @@ struct ChannelRowView: View {
     private var logoRadius: CGFloat { sizeClass == .regular ? 10 : 8 }
 
     var body: some View {
-        HStack(spacing: 12) {
-            if let logoURL = channel.logoURL {
-                RetryableAsyncImage(url: logoURL, width: logoSize, height: logoSize, cornerRadius: logoRadius)
-            } else {
-                Image(systemName: "radio")
-                    .frame(width: logoSize, height: logoSize)
-                    .foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(channel.name)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                if let track = nowPlayingTrack {
-                    Text("\(track.artistDisplay) — \(track.title)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else if let game = espnGame {
-                    Text(game.displayText)
-                        .font(.caption)
-                        .foregroundStyle(game.state == .live ? .primary : .secondary)
-                        .lineLimit(1)
-                } else if let program = currentProgram {
-                    Text(program.title)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                if let logoURL = channel.logoURL {
+                    RetryableAsyncImage(url: logoURL, width: logoSize, height: logoSize, cornerRadius: logoRadius)
                 } else {
-                    Text(channel.group)
-                        .font(.caption)
+                    Image(systemName: "radio")
+                        .frame(width: logoSize, height: logoSize)
                         .foregroundStyle(.secondary)
                 }
-            }
 
-            Spacer()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(channel.name)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    if let track = nowPlayingTrack {
+                        Text("\(track.artistDisplay) — \(track.title)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if let game = espnGame {
+                        Text(game.displayText)
+                            .font(.caption)
+                            .foregroundStyle(game.state == .live ? .primary : .secondary)
+                            .lineLimit(1)
+                    } else if let program = currentProgram {
+                        Text(program.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text(channel.group)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
-            Button {
-                onToggleFavorite()
-            } label: {
-                Image(systemName: channel.isFavorite ? "star.fill" : "star")
-                    .foregroundStyle(channel.isFavorite ? .yellow : .secondary)
-                    .frame(width: 44, height: 44)
+                Spacer()
+
+                // uxd.1: the favorite star is its own focusable control — SwiftUI
+                // exposes nested interactive elements as separate accessibility
+                // stops even inside a parent Button's label, so this doesn't get
+                // swallowed by the row's combined label below.
+                Button {
+                    onToggleFavorite()
+                } label: {
+                    Image(systemName: channel.isFavorite ? "star.fill" : "star")
+                        .foregroundStyle(channel.isFavorite ? .yellow : .secondary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(channel.isFavorite ? "Remove \(channel.name) from favorites" : "Add \(channel.name) to favorites")
+                .accessibilityValue(channel.isFavorite ? "Favorited" : "Not favorited")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(channel.isFavorite ? "Remove \(channel.name) from favorites" : "Add \(channel.name) to favorites")
-            .accessibilityValue(channel.isFavorite ? "Favorited" : "Not favorited")
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(Self.accessibilityLabel(
+            channelName: channel.name,
+            group: channel.group,
+            isFavorite: channel.isFavorite,
+            nowPlayingTrack: nowPlayingTrack,
+            espnGame: espnGame,
+            currentProgram: currentProgram
+        ))
+        .accessibilityHint("Double tap to listen")
         .hoverEffect(.highlight)
         .draggable(channel)
-        .onTapGesture { onTap() }
         .contextMenu {
             if let onShowEPG {
                 Button {
@@ -105,5 +120,33 @@ struct ChannelRowView: View {
                 .tint(.purple)
             }
         }
+    }
+
+    /// uxd.1: combined VoiceOver label for the row — channel name plus whatever
+    /// dynamic now-playing state is currently shown (track > game > EPG program
+    /// > group), plus favorited state. Pure function so it's unit-testable
+    /// without spinning up SwiftUI.
+    static func accessibilityLabel(
+        channelName: String,
+        group: String,
+        isFavorite: Bool,
+        nowPlayingTrack: SXMTrack?,
+        espnGame: ESPNGameInfo?,
+        currentProgram: EPGEntry?
+    ) -> String {
+        var parts = [channelName]
+        if let track = nowPlayingTrack {
+            parts.append("\(track.artistDisplay) — \(track.title)")
+        } else if let game = espnGame {
+            parts.append(game.displayText)
+        } else if let program = currentProgram {
+            parts.append(program.title)
+        } else {
+            parts.append(group)
+        }
+        if isFavorite {
+            parts.append("Favorited")
+        }
+        return parts.joined(separator: ", ")
     }
 }
