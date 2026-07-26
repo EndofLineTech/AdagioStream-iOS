@@ -29,6 +29,17 @@ struct EPGView: View {
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(.red, in: Capsule())
+                            } else if !entry.isUpcoming {
+                                // uxd.5: past entries were signaled by opacity
+                                // alone — invisible to VoiceOver and to anyone
+                                // who can't distinguish the dimmed shade.
+                                Text("Ended")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(.secondary.opacity(0.15), in: Capsule())
                             }
                         }
 

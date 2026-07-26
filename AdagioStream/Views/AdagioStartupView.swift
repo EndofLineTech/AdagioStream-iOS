@@ -5,6 +5,11 @@ struct AdagioStartupView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var textOpacity: Double = 0
     @State private var glowIntensity: Double = 0.0
+    // uxd.5: was a fixed .system(size:) that ignored Dynamic Type entirely.
+    // @ScaledMetric keeps the same base sizes but scales them with the
+    // user's text-size setting.
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSizeRegular: CGFloat = 44
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSizeCompact: CGFloat = 34
 
     var body: some View {
         GeometryReader { proxy in
@@ -39,7 +44,7 @@ struct AdagioStartupView: View {
         .ignoresSafeArea()
         .overlay(alignment: .bottom) {
             Text("Adagio Stream")
-                .font(.system(size: sizeClass == .regular ? 44 : 34, weight: .semibold))
+                .font(.system(size: sizeClass == .regular ? titleSizeRegular : titleSizeCompact, weight: .semibold))
                 .foregroundStyle(.primary)
                 .opacity(textOpacity)
                 .padding(.bottom, sizeClass == .regular ? 160 : 120)

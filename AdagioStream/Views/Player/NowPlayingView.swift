@@ -476,6 +476,21 @@ struct NowPlayingView: View {
             }
             .accessibilityLabel(chapter != nil ? "Seek within chapter" : "Seek audiobook")
             .accessibilityValue("\(Int(displayElapsed)) of \(Int(duration)) seconds")
+            .accessibilityAdjustableAction { direction in
+                // uxd.5: same pattern as librarySeekBar, but chapter-relative —
+                // step within [0, duration] (the chapter's own bounds, or the
+                // whole book when there's no current chapter), then convert
+                // back to a global position for the actual seek.
+                let step: Double = 10.0
+                let newPosition: Double
+                switch direction {
+                case .increment: newPosition = min(livePosition + step, duration)
+                case .decrement: newPosition = max(livePosition - step, 0)
+                @unknown default: return
+                }
+                let target = chapter.map { $0.start + newPosition } ?? newPosition
+                audioPlayer.seekAudiobook(toGlobal: target)
+            }
 
             // beads_mobilemusic-3h6.8: the scrubber above is chapter-relative,
             // so whole-book position is otherwise invisible. Add a subtle
