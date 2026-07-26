@@ -5,14 +5,16 @@ struct EPGView: View {
     @EnvironmentObject var providerManager: ProviderManager
 
     var body: some View {
-        List {
-            if entries.isEmpty {
-                EmptyStateView(
-                    title: "No EPG Data",
-                    systemImage: "calendar",
-                    description: "No program guide data available for this channel."
-                )
-            } else {
+        LoadableContent(
+            state: loadState,
+            loadingText: "Loading program guide…",
+            emptyTitle: "No EPG Data",
+            emptySystemImage: "calendar",
+            emptyDescription: "No program guide data available for this channel.",
+            errorTitle: "Couldn't Load Program Guide",
+            retry: { Task { await providerManager.loadChannels() } }
+        ) {
+            List {
                 ForEach(entries) { entry in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -52,5 +54,18 @@ struct EPGView: View {
 
     private var entries: [EPGEntry] {
         (providerManager.epgData[channelID] ?? []).sorted { $0.start < $1.start }
+    }
+
+    /// EPG data is fetched inline as part of `ProviderManager.loadChannels()`
+    /// (the same XMLTV/M3U-EPG parse that populates `epgData`), so its
+    /// `isLoading`/`error` are the parent channel-load state (uxc.5) — this
+    /// view has no dedicated EPG fetch of its own to track loading/error for.
+    /// Distinguishes "still loading" and "failed" from "genuinely no guide
+    /// data for this channel", which the bare `entries.isEmpty` check before
+    /// this fix couldn't tell apart.
+    private var loadState: LoadState {
+        if providerManager.isLoading { return .loading }
+        if let error = providerManager.error { return .error(error) }
+        return entries.isEmpty ? .empty : .loaded
     }
 }

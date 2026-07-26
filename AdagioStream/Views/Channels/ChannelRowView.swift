@@ -85,6 +85,17 @@ struct ChannelRowView: View {
             }
         }
         .swipeActions(edge: .leading) {
+            // uxc.5: visible entry point for the program guide — previously
+            // context-menu-only. Kept additive/minimal so it composes with
+            // uxd.1's planned row-as-Button rewrite for VoiceOver.
+            if let onShowEPG {
+                Button {
+                    onShowEPG()
+                } label: {
+                    Label("Program Guide", systemImage: "calendar")
+                }
+                .tint(.blue)
+            }
             if let onAddToPlaylist {
                 Button {
                     onAddToPlaylist()
