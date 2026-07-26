@@ -2,6 +2,7 @@ import SwiftUI
 
 struct NowPlayingTabView: View {
     @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var providerManager: ProviderManager
 
     var body: some View {
         if let book = audioPlayer.currentAudiobook {
@@ -95,11 +96,19 @@ struct NowPlayingTabView: View {
             Text("Nothing playing")
                 .font(.title)
                 .foregroundStyle(.secondary)
-            Text("Pick a channel from the Channels tab to start streaming.")
+            Text(emptyStateHint)
                 .font(.title3)
                 .foregroundStyle(.secondary)
         }
         .padding(80)
+    }
+
+    /// uxa.5: mentions Audiobooks/Podcasts only when those tabs are actually
+    /// visible — same ABS-provider gate RootTabView uses to show them.
+    private var emptyStateHint: String {
+        providerManager.audiobookshelfAPI != nil
+            ? "Pick something from Channels, Audiobooks, or Podcasts to start."
+            : "Pick a channel from the Channels tab to start streaming."
     }
 
     private func playingContent(for channel: Channel) -> some View {
