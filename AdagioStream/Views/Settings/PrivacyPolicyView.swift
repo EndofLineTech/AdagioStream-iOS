@@ -13,7 +13,7 @@ struct PrivacyPolicyView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     dataItem(
                         title: "Provider Credentials",
-                        detail: "Server URLs, usernames, and passwords you enter for Xtream Codes or M3U providers are stored securely in the iOS Keychain on your device."
+                        detail: "Server URLs, usernames, and passwords you enter for Xtream Codes, Navidrome/Subsonic, and Audiobookshelf accounts are stored securely in the iOS Keychain on your device. M3U accounts store only the playlist URL — no username or password."
                     )
                     dataItem(
                         title: "Favorites and Playlists",

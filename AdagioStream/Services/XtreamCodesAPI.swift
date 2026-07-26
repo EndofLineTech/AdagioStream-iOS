@@ -34,7 +34,9 @@ public struct XtreamCodesAPI {
         public var errorDescription: String? {
             switch self {
             case .invalidURL: return "Invalid server URL"
-            case .authenticationFailed: return "Authentication failed"
+            // beads_mobilemusic-uxb.5: match NavidromeAPI / AudiobookshelfAuth's
+            // actionable copy instead of a bare "Authentication failed".
+            case .authenticationFailed: return "Authentication failed. Check your username and password."
             case .networkError(let e): return "Network error: \(e.localizedDescription)"
             case .decodingError(let e): return "Data error: \(e.localizedDescription)"
             case .serverError(let code): return "Server error (HTTP \(code))"

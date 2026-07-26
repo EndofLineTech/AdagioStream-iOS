@@ -99,8 +99,23 @@ struct ProviderManagementView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             if let provider = providerToDelete {
-                Text("Are you sure you want to delete \"\(provider.name)\"? Its channels will be removed.")
+                Text(deleteConfirmationMessage(for: provider))
             }
+        }
+    }
+
+    /// beads_mobilemusic-uxb.5: Subsonic/Audiobookshelf contribute zero
+    /// channels to the live pipeline (ProviderManager.loadChannels(from:)
+    /// returns [] for both) — "Its channels will be removed" is wrong for
+    /// them, so word the confirmation per provider type.
+    private func deleteConfirmationMessage(for provider: Provider) -> String {
+        switch provider.type {
+        case .m3u, .xtreamCodes:
+            return "Are you sure you want to delete \"\(provider.name)\"? Its channels will be removed."
+        case .subsonic:
+            return "Are you sure you want to delete \"\(provider.name)\"? You'll lose access to its Navidrome library."
+        case .audiobookshelf:
+            return "Are you sure you want to delete \"\(provider.name)\"? You'll lose access to its Audiobookshelf library."
         }
     }
 
