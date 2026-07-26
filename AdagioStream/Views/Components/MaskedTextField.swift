@@ -27,25 +27,45 @@ struct MaskedTextField: View {
     /// which needs its own label.
     var accessibilityLabel: String
     @State private var isRevealed = false
-    @FocusState private var isFocused: Bool
+    /// `Bool?` (not `Bool`) so `.focused(_:equals:)` can address either the
+    /// hidden or the visible field of the pair by which one is `true`/`false`;
+    /// `nil` means neither currently has focus.
+    @FocusState private var isFocused: Bool?
 
     var body: some View {
         HStack(spacing: 4) {
-            Group {
-                if isRevealed {
-                    TextField(placeholder, text: $text)
-                } else {
-                    SecureField(placeholder, text: $text)
-                }
+            // beads_mobilemusic-uxb kickback finding 3: an `if/else` swap
+            // between concrete SecureField/TextField types breaks SwiftUI view
+            // identity — toggling reveal mid-typing tore down and recreated
+            // the field, dropping keyboard focus. Both fields now stay in the
+            // hierarchy permanently, synced to the same `$text` binding, with
+            // only the hidden one's hit-testing/visibility/focus toggled off —
+            // so reveal never changes which view is "the" text field.
+            ZStack(alignment: .leading) {
+                SecureField(placeholder, text: $text)
+                    .opacity(isRevealed ? 0 : 1)
+                    .allowsHitTesting(!isRevealed)
+                    .focused($isFocused, equals: false)
+
+                TextField(placeholder, text: $text)
+                    .opacity(isRevealed ? 1 : 0)
+                    .allowsHitTesting(isRevealed)
+                    .focused($isFocused, equals: true)
+                    // Revealed plaintext credentials must not hit the
+                    // keyboard's learning cache.
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
             }
             .textContentType(.password)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .focused($isFocused)
             .accessibilityLabel(accessibilityLabel)
 
             Button {
+                // Move focus to whichever field is about to become visible
+                // BEFORE flipping isRevealed, so the keyboard never drops
+                // between the two field identities.
+                let wasFocused = isFocused != nil
                 isRevealed.toggle()
+                if wasFocused { isFocused = isRevealed }
             } label: {
                 Image(systemName: isRevealed ? "eye.slash" : "eye")
                     .foregroundStyle(.secondary)
