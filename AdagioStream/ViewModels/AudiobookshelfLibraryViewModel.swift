@@ -224,25 +224,82 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
         showDetailState = .idle
     }
 
+    /// Max shows fetched concurrently by `loadRecentEpisodes` (uxc.3). Bounded
+    /// rather than "one task per show" — the ABS server may be a Raspberry Pi,
+    /// and a library can have dozens of shows.
+    static let recentEpisodesConcurrency = 5
+
     /// Loads every show's episodes and flattens them for "Recent Episodes"
     /// (c2s.2). Requires `podcastShows` to already be loaded (call after
     /// `loadPodcastShows`); fetches each show's detail once via `item(id:)`.
+    ///
+    /// uxc.3: shows are fetched with bounded concurrency
+    /// (`recentEpisodesConcurrency` in flight at a time) instead of one
+    /// serial `await` per show — a library of N shows no longer blocks on
+    /// N sequential round-trips. Completion order isn't the show order, so
+    /// results are gathered with their original index and re-sorted before
+    /// `PodcastRecentEpisodes.aggregate` (which folds shows together in the
+    /// order given) — see `Self.reordered`.
     public func loadRecentEpisodes(order: PodcastEpisodeOrder) async {
         guard recentEpisodesState != .loading else { return }
-        guard !podcastShows.isEmpty else {
+        let shows = podcastShows
+        guard !shows.isEmpty else {
             recentEpisodesState = .empty
             return
         }
         recentEpisodesState = .loading
-        var pairs: [(show: PodcastShow, episodes: [ABSEpisodeDTO])] = []
-        for show in podcastShows {
-            guard let item = try? await api.item(id: show.id) else { continue }
-            pairs.append((show, item.episodes()))
+
+        var results: [(index: Int, show: PodcastShow, episodes: [ABSEpisodeDTO])?] =
+            Array(repeating: nil, count: shows.count)
+
+        await withTaskGroup(of: (Int, PodcastShow, [ABSEpisodeDTO]?).self) { group in
+            var nextIndex = 0
+
+            func addTask(for index: Int) {
+                let show = shows[index]
+                group.addTask { [api] in
+                    let item = try? await api.item(id: show.id)
+                    return (index, show, item?.episodes())
+                }
+            }
+
+            let initialBatch = min(Self.recentEpisodesConcurrency, shows.count)
+            for i in 0..<initialBatch {
+                addTask(for: i)
+                nextIndex = i + 1
+            }
+
+            while let (index, show, episodes) = await group.next() {
+                if let episodes {
+                    results[index] = (index, show, episodes)
+                }
+                if nextIndex < shows.count {
+                    addTask(for: nextIndex)
+                    nextIndex += 1
+                }
+            }
         }
+
+        let pairs = Self.reordered(results)
         let flattened = PodcastRecentEpisodes.aggregate(shows: pairs, order: order)
         recentEpisodes = flattened
         recentEpisodesState = flattened.isEmpty ? .empty : .loaded
         await resolveShowCovers(for: pairs.map(\.show.id))
+    }
+
+    /// Reassembles concurrently-fetched per-show results back into their
+    /// original (index) order, dropping shows whose fetch failed. Pure —
+    /// testable without async/network; the input can arrive in ANY order
+    /// (task-group completion order is non-deterministic) and the output must
+    /// always match the original show order for `PodcastRecentEpisodes
+    /// .aggregate`'s per-show grouping to stay deterministic.
+    nonisolated static func reordered(
+        _ results: [(index: Int, show: PodcastShow, episodes: [ABSEpisodeDTO])?]
+    ) -> [(show: PodcastShow, episodes: [ABSEpisodeDTO])] {
+        results
+            .compactMap { $0 }
+            .sorted { $0.index < $1.index }
+            .map { (show: $0.show, episodes: $0.episodes) }
     }
 
     // MARK: - Load: one book's detail (fresh progress + chapters)
