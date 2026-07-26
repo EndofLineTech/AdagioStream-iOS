@@ -23,6 +23,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     private var shuffleCancellable: AnyCancellable?
     private var repeatCancellable: AnyCancellable?
     private var playbackSourceCancellable: AnyCancellable?
+    private var isLoadingCancellable: AnyCancellable?
     private var groupSortCancellables = Set<AnyCancellable>()
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
@@ -127,6 +128,18 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
+            }
+
+        // uxa.2: the $channels sink above only calls updateRootSections() when
+        // hasChannels/hasFavorites flips — a load that stays at zero channels
+        // (unconfigured → loading → failed) never flips either, so the root
+        // placeholder would get stuck on "Loading…" forever. Observe isLoading
+        // directly so the placeholder always reaches its terminal state.
+        isLoadingCancellable = providerManager.$isLoading
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
             }
 
         // 8rg.2: observe shuffle + repeat so the CarPlay now-playing buttons
@@ -519,7 +532,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // single, header-less section so channel-only users see no change.
         if musicItems.isEmpty && audiobookItems.isEmpty && podcastItems.isEmpty {
             if items.isEmpty {
-                let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
+                // uxa.2: distinguish unconfigured / loading / failed instead of
+                // always showing "Add an account on your phone" — that message
+                // was wrong both mid-load (cold-launch race) and after a
+                // configured provider genuinely failed to load.
+                let state = Self.rootPlaceholderState(
+                    providersEmpty: providerManager.providers.isEmpty,
+                    isLoading: providerManager.isLoading
+                )
+                let placeholder = CPListItem(text: state.text, detailText: state.detailText)
                 placeholder.handler = { _, completion in completion() }
                 items.append(placeholder)
             }
@@ -1146,6 +1167,44 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     /// Formats a track duration in seconds as `m:ss` or `h:mm:ss`.
     nonisolated static func formatDuration(_ seconds: Int) -> String {
         seconds.durationString
+    }
+
+    // MARK: - Root Placeholder State (uxa.2)
+
+    /// The three states the CarPlay root's empty-channel-list placeholder can
+    /// be in. Previously all three collapsed into one "No Channels — Add an
+    /// account on your phone" message, even while a provider was still
+    /// loading (cold-launch race, up to ~75s of background retry) or had
+    /// genuinely failed to load.
+    enum RootPlaceholder: Equatable {
+        case unconfigured
+        case loading
+        case failed
+
+        var text: String {
+            switch self {
+            case .unconfigured: return "No Channels"
+            case .loading: return "Loading channels…"
+            case .failed: return "Couldn't load channels"
+            }
+        }
+
+        var detailText: String? {
+            switch self {
+            case .unconfigured: return "Add an account on your phone"
+            case .loading: return nil
+            case .failed: return "Check your connection"
+            }
+        }
+    }
+
+    /// Pure decision logic for which placeholder to show. Extracted as a
+    /// static helper so unit tests can verify the state selection without
+    /// instantiating a live `CarPlayTemplateManager`/`ProviderManager`.
+    nonisolated static func rootPlaceholderState(providersEmpty: Bool, isLoading: Bool) -> RootPlaceholder {
+        if providersEmpty { return .unconfigured }
+        if isLoading { return .loading }
+        return .failed
     }
 
     // MARK: - Now Playing Button State Helpers (8rg.2)
