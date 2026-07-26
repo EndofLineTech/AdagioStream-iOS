@@ -264,5 +264,48 @@ final class AudioPlayerServiceInterruptionStateTests: XCTestCase {
         XCTAssertNil(snapshot,
             "No snapshot should be produced from a stopped service")
     }
+
+    /// uxa kickback (finding 1): captureInterruptionSnapshot() must never
+    /// capture `.audiobook` — audiobooks resume via their own pause()/
+    /// resume() path, not the radio/library ride-out-and-restore machinery.
+    /// Restores the prior `playbackSource` afterward so test order doesn't
+    /// leak state into the "idle" tests above (singleton shared across the suite).
+    func testCaptureInterruptionSnapshotReturnsNilForAudiobookSource() {
+        let service = AudioPlayerService.shared
+        let previousSource = service.playbackSource
+        defer { service.playbackSource = previousSource }
+
+        let book = Audiobook(id: "b1", libraryItemId: "b1", libraryId: "lib1", title: "A Book", updatedAt: 0)
+        service.playbackSource = .audiobook(book)
+
+        XCTAssertNil(service.captureInterruptionSnapshot(),
+            "captureInterruptionSnapshot() must return nil for an audiobook source — audiobooks don't participate in ride-out/restore")
+    }
+}
+
+// MARK: - shouldRestartEngineForBareInterruptionEnded (uxa kickback finding 1)
+//
+// The `.ended` handler's "no captured source" branch previously always took
+// the safe-no-op path — including for an interrupted audiobook, which has no
+// captured InterruptionSnapshot by design. Without a restart path there, a
+// route/format change during the interruption can leave AVAudioEngine
+// stopped with nothing draining VLC's ring buffer: silent playback until the
+// user manually toggles play/pause. This predicate is the decision extracted
+// so it's testable without a live AVAudioSession/engine.
+final class BareInterruptionEndedRestartPredicateTests: XCTestCase {
+
+    func testRestartsWhenAudiobookSessionActive() {
+        XCTAssertTrue(
+            AudioPlayerService.shouldRestartEngineForBareInterruptionEnded(audiobookSessionActive: true),
+            "An active audiobook session must trigger the resilient engine restart"
+        )
+    }
+
+    func testNoRestartWhenNoAudiobookSessionActive() {
+        XCTAssertFalse(
+            AudioPlayerService.shouldRestartEngineForBareInterruptionEnded(audiobookSessionActive: false),
+            "No audiobook session active must stay a safe no-op — unchanged radio/library behavior"
+        )
+    }
 }
 #endif

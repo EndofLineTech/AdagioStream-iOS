@@ -348,9 +348,36 @@ extension AudioPlayerService {
                 self.interruptionFallbackWorkItem = nil
 
                 // d6q.8: gate on interruptedSource (not just interruptedChannel).
-                // Safe no-op guard: if nothing was captured at .began, do nothing.
+                // Safe no-op guard: if nothing was captured at .began, do nothing —
+                // UNLESS an audiobook session is active. captureInterruptionSnapshot()
+                // never captures .audiobook (see its doc), so every audiobook
+                // interruption lands here. Without a restart path, a route/format
+                // change fired during the interruption (Siri swapping the route)
+                // can leave AVAudioEngine stopped with nothing draining VLC's ring
+                // buffer — silent playback until the user manually toggles
+                // play/pause. Run the same resilient restart the radio/library
+                // short-interruption path gets below, but do NOT resume playback:
+                // the audiobook's own pause/resume path owns that decision.
                 guard let capturedSource = self.interruptedSource else {
-                    self.log.log("Interruption ended but no captured source — safe no-op", category: .interruption)
+                    if AudioPlayerService.shouldRestartEngineForBareInterruptionEnded(
+                        audiobookSessionActive: self.audiobookSession != nil
+                    ) {
+                        self.log.log("Interruption ended — no captured source but an audiobook session is active: resilient engine restart (no auto-resume)", category: .interruption)
+                        // noteInterruptionEnded() already cleared AudioOutput's
+                        // isInterrupted gate above — safe to restart now.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            let session = AVAudioSession.sharedInstance()
+                            do {
+                                try session.setActive(false, options: .notifyOthersOnDeactivation)
+                                self.log.log("Audiobook interruption ended: session deactivated to clear stale route", category: .audioSession)
+                            } catch {
+                                self.log.log("Audiobook interruption ended: session deactivate FAILED: \(error.localizedDescription)", category: .audioSession)
+                            }
+                            self.assertSessionOwnership(context: "audiobook interruption ended")
+                        }
+                    } else {
+                        self.log.log("Interruption ended but no captured source — safe no-op", category: .interruption)
+                    }
                     self.isRidingOutInterruption = false
                     return
                 }
@@ -594,6 +621,16 @@ extension AudioPlayerService {
             return nil
         }()
         return InterruptionSnapshot(source: source, queueAPI: api, elapsedSeconds: elapsed)
+    }
+
+    /// Whether the `.ended` handler's "no captured source" branch should still
+    /// run the resilient engine-restart dance for an active audiobook session.
+    /// `captureInterruptionSnapshot()` never captures `.audiobook`, so this is
+    /// the only signal that an audiobook was interrupted. Extracted as a
+    /// static pure predicate (mirrors `AudioOutput.shouldRestartEngineOnConfigChange`)
+    /// so the decision is unit-testable without a live AVAudioSession/engine.
+    nonisolated static func shouldRestartEngineForBareInterruptionEnded(audiobookSessionActive: Bool) -> Bool {
+        audiobookSessionActive
     }
 
     /// Reactivates the audio session and cold-restarts a library track, then
