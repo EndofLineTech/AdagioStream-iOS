@@ -50,6 +50,27 @@ struct WelcomeSetupView: View {
         case audiobookshelf
     }
 
+    // beads_mobilemusic-uxb.3: inline field-level validation captions, shared
+    // decision logic with AddProviderView via ProviderFormValidation. See that
+    // view for why `touchedFields` uses "ever had content" instead of
+    // FocusState (MaskedTextField doesn't expose its internal focus state).
+    private enum ValidationField: Hashable { case name, host, username, password }
+    @State private var hasSubmitted = false
+    @State private var touchedFields: Set<ValidationField> = []
+
+    private func markTouched(_ field: ValidationField, if value: String) {
+        if !value.isEmpty { touchedFields.insert(field) }
+    }
+
+    @ViewBuilder
+    private func caption(_ message: String?, field: ValidationField) -> some View {
+        if let message, hasSubmitted || touchedFields.contains(field) {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -311,6 +332,8 @@ struct WelcomeSetupView: View {
             Form {
                 Section("Account Name") {
                     TextField("My Provider", text: $name)
+                        .onChange(of: name) { _, newValue in markTouched(.name, if: newValue) }
+                    caption(fieldErrors.name, field: .name)
                 }
 
                 switch connectionType {
@@ -322,6 +345,8 @@ struct WelcomeSetupView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Playlist URL")
+                            .onChange(of: m3uURL) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
                         TextField("EPG URL (optional)", text: $epgURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
@@ -338,12 +363,18 @@ struct WelcomeSetupView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Xtream Codes server URL")
+                            .onChange(of: xcHost) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
                         TextField("Username", text: $xcUsername)
                             .textContentType(.username)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Xtream Codes username")
+                            .onChange(of: xcUsername) { _, newValue in markTouched(.username, if: newValue) }
+                        caption(fieldErrors.username, field: .username)
                         MaskedTextField(placeholder: "Password", text: $xcPassword, accessibilityLabel: "Xtream Codes password")
+                            .onChange(of: xcPassword) { _, newValue in markTouched(.password, if: newValue) }
+                        caption(fieldErrors.password, field: .password)
                     }
 
                     if isXtreamCodesHTTP {
@@ -365,12 +396,18 @@ struct WelcomeSetupView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Navidrome server URL")
+                            .onChange(of: subsonicHost) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
                         TextField("Username", text: $subsonicUsername)
                             .textContentType(.username)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Navidrome username")
+                            .onChange(of: subsonicUsername) { _, newValue in markTouched(.username, if: newValue) }
+                        caption(fieldErrors.username, field: .username)
                         MaskedTextField(placeholder: "Password", text: $subsonicPassword, accessibilityLabel: "Navidrome password")
+                            .onChange(of: subsonicPassword) { _, newValue in markTouched(.password, if: newValue) }
+                        caption(fieldErrors.password, field: .password)
                     } header: {
                         Text("Server Settings")
                     } footer: {
@@ -396,12 +433,18 @@ struct WelcomeSetupView: View {
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Audiobookshelf server URL")
+                            .onChange(of: absHost) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
                         TextField("Username", text: $absUsername)
                             .textContentType(.username)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Audiobookshelf username")
+                            .onChange(of: absUsername) { _, newValue in markTouched(.username, if: newValue) }
+                        caption(fieldErrors.username, field: .username)
                         MaskedTextField(placeholder: "Password", text: $absPassword, accessibilityLabel: "Audiobookshelf password")
+                            .onChange(of: absPassword) { _, newValue in markTouched(.password, if: newValue) }
+                        caption(fieldErrors.password, field: .password)
                     } header: {
                         Text("Server Settings")
                     } footer: {
@@ -545,33 +588,60 @@ struct WelcomeSetupView: View {
         return scheme == "http"
     }
 
-    private var isValid: Bool {
-        guard !name.isEmpty else { return false }
+    // beads_mobilemusic-uxb.3: single source of truth for validation, shared
+    // with AddProviderView via ProviderFormValidation (was duplicated here).
+    private var validationKind: ProviderFormValidation.ProviderKind {
         switch connectionType {
-        case .m3u:
-            guard let url = URL(string: m3uURL),
-                  let scheme = url.scheme?.lowercased(),
-                  Self.allowedSchemes.contains(scheme) else { return false }
-            return true
-        case .xtreamCodes:
-            guard let url = URL(string: xcHost),
-                  let scheme = url.scheme?.lowercased(),
-                  Self.allowedSchemes.contains(scheme) else { return false }
-            return !xcUsername.isEmpty && !xcPassword.isEmpty
-        case .subsonic:
-            guard let url = URL(string: subsonicHost),
-                  let scheme = url.scheme?.lowercased(),
-                  Self.allowedSchemes.contains(scheme) else { return false }
-            return !subsonicUsername.isEmpty && !subsonicPassword.isEmpty
-        case .audiobookshelf:
-            guard let url = URL(string: absHost),
-                  let scheme = url.scheme?.lowercased(),
-                  Self.allowedSchemes.contains(scheme) else { return false }
-            return !absUsername.isEmpty && !absPassword.isEmpty
+        case .m3u: return .m3u
+        case .xtreamCodes: return .xtreamCodes
+        case .subsonic: return .subsonic
+        case .audiobookshelf: return .audiobookshelf
         }
     }
 
+    private var currentHostText: String {
+        switch connectionType {
+        case .m3u: return m3uURL
+        case .xtreamCodes: return xcHost
+        case .subsonic: return subsonicHost
+        case .audiobookshelf: return absHost
+        }
+    }
+
+    private var currentUsernameText: String {
+        switch connectionType {
+        case .m3u: return ""
+        case .xtreamCodes: return xcUsername
+        case .subsonic: return subsonicUsername
+        case .audiobookshelf: return absUsername
+        }
+    }
+
+    private var currentPasswordText: String {
+        switch connectionType {
+        case .m3u: return ""
+        case .xtreamCodes: return xcPassword
+        case .subsonic: return subsonicPassword
+        case .audiobookshelf: return absPassword
+        }
+    }
+
+    private var fieldErrors: ProviderFormValidation.Result {
+        ProviderFormValidation.validate(
+            kind: validationKind,
+            name: name,
+            host: currentHostText,
+            username: currentUsernameText,
+            password: currentPasswordText
+        )
+    }
+
+    private var isValid: Bool {
+        fieldErrors.isValid
+    }
+
     private func save() {
+        hasSubmitted = true
         isSaving = true
         error = nil
 

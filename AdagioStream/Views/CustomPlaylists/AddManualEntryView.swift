@@ -12,29 +12,53 @@ struct AddManualEntryView: View {
     @State private var showingNewGroup = false
     @State private var newGroupName = ""
 
+    // beads_mobilemusic-uxb.3: inline field-level validation captions —
+    // decision logic lives in ProviderFormValidation.validateManualEntry so
+    // it's covered by the same truth-table tests as the provider forms.
+    private enum ValidationField: Hashable { case name, url }
+    @State private var hasSubmitted = false
+    @State private var touchedFields: Set<ValidationField> = []
+
+    private func markTouched(_ field: ValidationField, if value: String) {
+        if !value.isEmpty { touchedFields.insert(field) }
+    }
+
+    @ViewBuilder
+    private func caption(_ message: String?, field: ValidationField) -> some View {
+        if let message, hasSubmitted || touchedFields.contains(field) {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
     private var playlist: CustomPlaylist? {
         playlistManager.playlists.first { $0.id == playlistID }
     }
 
-    private var isValid: Bool {
-        let trimmedName = streamName.trimmingCharacters(in: .whitespaces)
-        let trimmedURL = streamURLText.trimmingCharacters(in: .whitespaces)
-        guard !trimmedName.isEmpty, !trimmedURL.isEmpty, selectedGroupID != nil else { return false }
-        guard let url = URL(string: trimmedURL),
-              let scheme = url.scheme?.lowercased(),
-              ["http", "https", "rtsp", "rtmp", "mms"].contains(scheme) else { return false }
-        return true
+    private var fieldErrors: ProviderFormValidation.ManualEntryResult {
+        ProviderFormValidation.validateManualEntry(
+            name: streamName,
+            url: streamURLText,
+            hasGroup: selectedGroupID != nil
+        )
     }
+
+    private var isValid: Bool { fieldErrors.isValid }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Stream Info") {
                     TextField("Stream name", text: $streamName)
+                        .onChange(of: streamName) { _, newValue in markTouched(.name, if: newValue) }
+                    caption(fieldErrors.name, field: .name)
                     TextField("Stream URL", text: $streamURLText)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .onChange(of: streamURLText) { _, newValue in markTouched(.url, if: newValue) }
+                    caption(fieldErrors.url, field: .url)
                     TextField("Logo URL (optional)", text: $logoURLText)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
@@ -42,7 +66,7 @@ struct AddManualEntryView: View {
                 }
 
                 if let playlist {
-                    Section("Group") {
+                    Section {
                         ForEach(playlist.groups) { group in
                             Button {
                                 selectedGroupID = group.id
@@ -64,6 +88,16 @@ struct AddManualEntryView: View {
                             showingNewGroup = true
                         } label: {
                             Label("New Group...", systemImage: "plus")
+                        }
+                    } header: {
+                        Text("Group")
+                    } footer: {
+                        // No typed field to "touch" for a tap-to-select row —
+                        // gated by submit-attempt only, unlike the text fields above.
+                        if let message = fieldErrors.group, hasSubmitted {
+                            Text(message)
+                                .font(.caption)
+                                .foregroundStyle(.red)
                         }
                     }
                 }
@@ -100,6 +134,7 @@ struct AddManualEntryView: View {
     }
 
     private func addEntry() {
+        hasSubmitted = true
         guard let groupID = selectedGroupID,
               let streamURL = URL(string: streamURLText.trimmingCharacters(in: .whitespaces)) else { return }
         let logoURL = URL(string: logoURLText.trimmingCharacters(in: .whitespaces))
