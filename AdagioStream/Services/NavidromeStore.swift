@@ -324,6 +324,16 @@ public final class NavidromeStore {
                 """)
         }
 
+        // ── v6: currentTime on audiobook_downloads (beads_mobilemusic-uxi) ────
+        // Local resume cache for items whose most recent play was ONLINE (the
+        // offline progress queue only has an entry when the last play was
+        // offline/offline-fallback). Nullable/no default — an ALTER TABLE ADD
+        // COLUMN backfills every existing row with NULL, so old rows decode
+        // exactly as before (currentTime == nil) with no data loss.
+        m.registerMigration("addAudiobookDownloadCurrentTime") { db in
+            try db.execute(sql: "ALTER TABLE audiobook_downloads ADD COLUMN currentTime REAL")
+        }
+
         return m
     }()
 }

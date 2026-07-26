@@ -213,6 +213,76 @@ final class AudiobookDownloadTests: XCTestCase {
                 """)
         })
     }
+
+    // MARK: - uxi: currentTime migration-safety + write funnel
+
+    // Simulates a row persisted before the v6 "addAudiobookDownloadCurrentTime"
+    // migration: an INSERT that never mentions the currentTime column. On a
+    // real device this is exactly what ALTER TABLE ADD COLUMN produces for
+    // every pre-existing row (NULL, not a decode error) — this pins that the
+    // typed record decodes cleanly with currentTime == nil rather than
+    // throwing or crashing.
+    func testDecodeOldFormatRecordWithoutCurrentTimeLoadsCleanly() throws {
+        let store = try makeInMemoryNavidromeStore()
+        try store.writer.write { db in
+            try db.execute(sql: """
+                INSERT INTO audiobook_downloads (id, title, status, filesJSON, chaptersJSON, createdAt, updatedAt)
+                VALUES ('legacy-book', 'Legacy', 'completed', '[]', '[]', 0, 0)
+                """)
+        }
+        let fetched = try store.audiobookDownload(forBook: "legacy-book")
+        XCTAssertNotNil(fetched, "a pre-uxi row must still fetch")
+        XCTAssertNil(fetched?.currentTime, "absent currentTime decodes as nil, not a decode failure")
+    }
+
+    // The single write funnel (AudioPlayerService.syncAudiobookProgress hooks
+    // this once) that keeps AudiobookDownloadRecord.currentTime current for a
+    // downloaded item regardless of whether the play was online or offline.
+    @MainActor
+    func testUpdateDownloadedCurrentTimeWritesToExistingRecord() throws {
+        let store = try makeInMemoryNavidromeStore()
+        let manager = DownloadManager(store: store)
+        let record = AudiobookDownloadRecord(
+            id: "book-1", title: "T", status: .completed,
+            files: [], chapters: [], createdAt: 0, updatedAt: 0
+        )
+        try store.upsert(audiobookDownload: record)
+
+        manager.updateDownloadedCurrentTime(itemID: "book-1", currentTime: 456)
+
+        let fetched = try store.audiobookDownload(forBook: "book-1")
+        XCTAssertEqual(fetched?.currentTime, 456)
+    }
+
+    // No download record exists (the item was never downloaded) — must be a
+    // silent no-op, not a crash or a spuriously-created row.
+    @MainActor
+    func testUpdateDownloadedCurrentTimeNoOpWhenNoRecordExists() throws {
+        let store = try makeInMemoryNavidromeStore()
+        let manager = DownloadManager(store: store)
+
+        manager.updateDownloadedCurrentTime(itemID: "never-downloaded", currentTime: 100)
+
+        XCTAssertNil(try store.audiobookDownload(forBook: "never-downloaded"))
+    }
+
+    // Works for an episode's composite record id exactly like a book's plain id.
+    @MainActor
+    func testUpdateDownloadedCurrentTimeWritesToEpisodeRecord() throws {
+        let store = try makeInMemoryNavidromeStore()
+        let manager = DownloadManager(store: store)
+        let recordID = AudiobookDownloadRecord.episodeRecordID(showID: "show-1", episodeID: "ep-1")
+        let record = AudiobookDownloadRecord(
+            id: recordID, title: "Ep", status: .completed,
+            files: [], chapters: [], createdAt: 0, updatedAt: 0
+        )
+        try store.upsert(audiobookDownload: record)
+
+        manager.updateDownloadedCurrentTime(itemID: recordID, currentTime: 789)
+
+        let fetched = try store.audiobookDownload(forBook: recordID)
+        XCTAssertEqual(fetched?.currentTime, 789)
+    }
 }
 
 // MARK: - E4 / 6b5.1: episode -> 1-file AudiobookDownloadRecord mapping

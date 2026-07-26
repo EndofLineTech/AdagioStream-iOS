@@ -245,12 +245,15 @@ extension AudioPlayerService {
     /// global `startOffset`), so chaining, seeking, and chapter math are
     /// identical — only the URLs are `file://` and progress is queued offline.
     ///
-    /// Resume (beads_mobilemusic-uxc kickback): consults the offline progress
-    /// queue the SAME way the live path (`playAudiobook`) does — a prior
-    /// offline (or offline-fallback) session for this book queues its position
-    /// there and it persists to disk, so it survives an app relaunch even
-    /// before the next reconnect flush. `book.currentTime` (server/library
-    /// cache) is the fallback when nothing is queued.
+    /// Resume (beads_mobilemusic-uxc kickback, extended by uxi): consults the
+    /// offline progress queue the SAME way the live path (`playAudiobook`)
+    /// does — a prior offline (or offline-fallback) session for this book
+    /// queues its position there and it persists to disk, so it survives an
+    /// app relaunch even before the next reconnect flush. `download.currentTime`
+    /// (uxi: the local resume cache, updated on EVERY sync — online or
+    /// offline) closes the gap where the last play was online and the queue
+    /// has nothing: `max(queue, record)` so neither source can rewind the
+    /// other. `book.currentTime` (server/library cache) is the final fallback.
     public func playDownloadedAudiobook(_ book: Audiobook, download: AudiobookDownloadRecord, via api: AudiobookshelfAPI, startGlobalTime: Double? = nil) {
         let timeline = download.timeline()
         guard !timeline.files.isEmpty else {
@@ -261,7 +264,7 @@ extension AudioPlayerService {
             let offlinePending = await ABSProgressSyncQueue.shared.pendingPosition(forBook: book.id)
             let resume = AudioPlayerService.resumePosition(
                 override: startGlobalTime,
-                sessionCurrentTime: offlinePending,
+                sessionCurrentTime: AudioPlayerService.maxIgnoringNil(offlinePending, download.currentTime),
                 bookCurrentTime: book.currentTime
             )
             guard let located = timeline.locate(global: resume) else { return }
@@ -388,12 +391,15 @@ extension AudioPlayerService {
     /// `libraryItemId`) can't collide. The queue persists to disk, so this
     /// resumes correctly even after an app relaunch, as long as the last play
     /// of this episode happened offline (or fell back to offline) and hasn't
-    /// flushed yet. Progress from an ONLINE-only play of this episode (never
-    /// offline, no relaunch-surviving cache exists for episodes today) is NOT
-    /// covered by this fix; a durable per-episode progress cache (e.g. a
-    /// `currentTime` column on `AudiobookDownloadRecord`, updated at pause/
-    /// stop) would be needed to close that gap — flagged as follow-up work,
-    /// not filed as a bead by this fix (beads_mobilemusic-uxc kickback).
+    /// flushed yet.
+    ///
+    /// uxi: progress from an ONLINE-only play of this episode is now also
+    /// covered — `download.currentTime` is a durable per-item resume cache on
+    /// `AudiobookDownloadRecord`, updated at every progress sync
+    /// (`AudioPlayerService.syncAudiobookProgress`) regardless of whether that
+    /// play was online or offline. `max(queue, record)` so whichever source
+    /// has the more recent position wins, without needing to compare
+    /// timestamps (both only ever move forward during normal playback).
     public func playDownloadedEpisode(_ episode: ABSEpisodeDTO, download: AudiobookDownloadRecord, via api: AudiobookshelfAPI, context: PodcastPlaybackContext, startGlobalTime: Double? = nil) {
         let timeline = download.timeline()
         guard !timeline.files.isEmpty else {
@@ -404,7 +410,7 @@ extension AudioPlayerService {
             let offlinePending = await ABSProgressSyncQueue.shared.pendingPosition(forBook: context.libraryItemId, episodeId: episode.id)
             let resume = AudioPlayerService.resumePosition(
                 override: startGlobalTime,
-                sessionCurrentTime: offlinePending,
+                sessionCurrentTime: AudioPlayerService.maxIgnoringNil(offlinePending, download.currentTime),
                 bookCurrentTime: episode.userMediaProgress?.currentTime ?? 0
             )
             guard let located = timeline.locate(global: resume) else { return }
@@ -750,6 +756,20 @@ extension AudioPlayerService {
         let api = session.api
         let book = session.book
         let kind = session.kind
+
+        // beads_mobilemusic-uxi: update the local download record's resume
+        // cache (if this item is downloaded) on every sync — online AND
+        // offline — so an item last played ONLINE still has a local position
+        // to resume from on the next offline play. No-op when the item has no
+        // download record. One funnel: this runs for pause/stop/periodic/seek,
+        // same as the offline-queue enqueue and the online sync call below.
+        let downloadRecordID: String = {
+            switch kind {
+            case .book: return book.id
+            case .podcast(let episodeId, _): return AudiobookDownloadRecord.episodeRecordID(showID: book.libraryItemId, episodeID: episodeId)
+            }
+        }()
+        DownloadManager.shared.updateDownloadedCurrentTime(itemID: downloadRecordID, currentTime: global)
 
         // Offline session → queue the progress for a batched flush on reconnect.
         // Routes through `progressKey` (E2 / 72i.1) so a podcast episode's

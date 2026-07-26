@@ -583,6 +583,22 @@ public final class DownloadManager: NSObject, ObservableObject {
         downloadedBook(itemID: itemID) != nil
     }
 
+    /// Updates the local resume cache (`AudiobookDownloadRecord.currentTime`,
+    /// beads_mobilemusic-uxi) for a downloaded item — book OR episode; `itemID`
+    /// is the download record's id (`book.id` for a book,
+    /// `AudiobookDownloadRecord.episodeRecordID` for an episode). No-op if the
+    /// item has no download record (never downloaded) — unlike
+    /// `downloadedBook(itemID:)` this does NOT require `.completed` status, so
+    /// a still-downloading item's progress isn't silently dropped either.
+    /// Called from `AudioPlayerService.syncAudiobookProgress`, the single sync
+    /// funnel already shared by pause/stop/periodic/seek.
+    public func updateDownloadedCurrentTime(itemID: String, currentTime: Double) {
+        guard var record = try? store.audiobookDownload(forBook: itemID) else { return }
+        record.currentTime = currentTime
+        record.updatedAt = Int(Date().timeIntervalSince1970)
+        try? store.upsert(audiobookDownload: record)
+    }
+
     // MARK: - Podcast episode downloads (E4 / 6b5.1)
     //
     // An episode is stored as an `AudiobookDownloadRecord` under the composite

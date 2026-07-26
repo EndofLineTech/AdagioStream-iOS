@@ -112,4 +112,50 @@ final class AudiobookSyncTests: XCTestCase {
         let resume = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: offlinePending, bookCurrentTime: 0)
         XCTAssertEqual(resume, 0, accuracy: 0.001)
     }
+
+    // MARK: - Offline resume precedence with the local download record (uxi)
+    //
+    // playDownloadedAudiobook/playDownloadedEpisode now seed `sessionCurrentTime`
+    // as `maxIgnoringNil(queuePosition, record.currentTime)` — the same
+    // `maxIgnoringNil` idiom ymf.6 already uses for queue-vs-server, applied to
+    // queue-vs-local-record so an item last played ONLINE (record has a
+    // position, queue is empty) still resumes correctly offline. Full
+    // precedence: explicit override > max(queue, record) > userMediaProgress > 0.
+
+    func testOfflineResumePrefersExplicitOverrideOverQueueAndRecord() {
+        let seeded = AudioPlayerService.maxIgnoringNil(300, 700)
+        let r = AudioPlayerService.resumePosition(override: 999, sessionCurrentTime: seeded, bookCurrentTime: 50)
+        XCTAssertEqual(r, 999, accuracy: 0.001)
+    }
+
+    func testOfflineResumeRecordNewerThanQueue() {
+        // Last play was online (record has 900), an OLDER offline queue entry
+        // (300) is still pending flush — the record must win.
+        let seeded = AudioPlayerService.maxIgnoringNil(300, 900)
+        let r = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: seeded, bookCurrentTime: 50)
+        XCTAssertEqual(r, 900, accuracy: 0.001, "the local record's newer online-play position must not be rewound by a stale queue entry")
+    }
+
+    func testOfflineResumeQueueNewerThanRecord() {
+        // A fresh offline session (queue 950) hasn't flushed to the record yet
+        // (record still at the last online position, 400) — the queue must win.
+        let seeded = AudioPlayerService.maxIgnoringNil(950, 400)
+        let r = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: seeded, bookCurrentTime: 50)
+        XCTAssertEqual(r, 950, accuracy: 0.001)
+    }
+
+    func testOfflineResumeFallsBackToUserMediaProgressWhenNeitherQueueNorRecordExist() {
+        let seeded = AudioPlayerService.maxIgnoringNil(nil, nil)
+        let r = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: seeded, bookCurrentTime: 50)
+        XCTAssertEqual(r, 50, accuracy: 0.001, "no queue and no record (e.g. never played) falls back to userMediaProgress")
+    }
+
+    func testOfflineResumeUsesRecordAloneWhenQueueEmpty() {
+        // The exact online-only-played scenario this bead closes: no queue
+        // entry exists (last play was online), only the local record has a
+        // position.
+        let seeded = AudioPlayerService.maxIgnoringNil(nil, 640)
+        let r = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: seeded, bookCurrentTime: 0)
+        XCTAssertEqual(r, 640, accuracy: 0.001)
+    }
 }

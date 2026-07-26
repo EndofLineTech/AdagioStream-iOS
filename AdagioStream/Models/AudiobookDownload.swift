@@ -60,6 +60,17 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
     public var error: String?
     public var createdAt: Int
     public var updatedAt: Int
+    /// Local resume cache (beads_mobilemusic-uxi), updated at the same points
+    /// progress is synced during playback (pause/stop/periodic/seek — see
+    /// `AudioPlayerService.syncAudiobookProgress`), regardless of whether that
+    /// playback was online or offline. Closes the gap where an item last
+    /// played ONLINE had no local progress to resume from on first offline
+    /// play — the offline progress queue (`ABSProgressSyncQueue`) only has an
+    /// entry when the LAST play was offline. `nil` for a record never played
+    /// since this field was added, or never played at all — existing rows
+    /// from before this migration decode as `nil` (added via nullable
+    /// `ALTER TABLE ADD COLUMN`, no default; see NavidromeStore v6 migration).
+    public var currentTime: TimeInterval?
 
     public init(
         id: String,
@@ -72,7 +83,8 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
         chapters: [AudiobookChapter],
         error: String? = nil,
         createdAt: Int,
-        updatedAt: Int
+        updatedAt: Int,
+        currentTime: TimeInterval? = nil
     ) {
         self.id = id
         self.title = title
@@ -85,6 +97,7 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
         self.error = error
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.currentTime = currentTime
     }
 
     /// True when every file in the manifest is present on disk.
@@ -95,7 +108,7 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
     // MARK: GRDB row bridging (manifest columns are JSON text)
 
     enum Columns: String, ColumnExpression {
-        case id, title, author, coverPath, duration, status, filesJSON, chaptersJSON, error, createdAt, updatedAt
+        case id, title, author, coverPath, duration, status, filesJSON, chaptersJSON, error, createdAt, updatedAt, currentTime
     }
 
     public init(row: Row) throws {
@@ -112,6 +125,9 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
         error = row[Columns.error]
         createdAt = row[Columns.createdAt]
         updatedAt = row[Columns.updatedAt]
+        // Nullable, no default (v6 migration) — absent/NULL on rows persisted
+        // before this field existed decodes cleanly as nil.
+        currentTime = row[Columns.currentTime]
     }
 
     public func encode(to container: inout PersistenceContainer) throws {
@@ -126,6 +142,7 @@ public struct AudiobookDownloadRecord: FetchableRecord, PersistableRecord, Equat
         container[Columns.error] = error
         container[Columns.createdAt] = createdAt
         container[Columns.updatedAt] = updatedAt
+        container[Columns.currentTime] = currentTime
     }
 }
 
