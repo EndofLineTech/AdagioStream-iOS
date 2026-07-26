@@ -71,32 +71,52 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
     /// Presents `ASWebAuthenticationSession` and resumes with the captured
     /// `adagiostream://oauth` callback URL. `prefersEphemeralWebBrowserSession`
     /// keeps the IdP cookies out of the shared Safari session.
+    ///
+    /// beads_mobilemusic-uxb kickback finding 1: wrapped in
+    /// `withTaskCancellationHandler` so cancelling the owning `Task` (the
+    /// sheet was dismissed / Cancel tapped) reaches the system browser sheet
+    /// via `session.cancel()` instead of leaving it presented with no parent.
+    /// `ASWebAuthenticationSession.cancel()` synchronously invokes the
+    /// completion handler with `.canceledLogin` on the main thread, so the
+    /// continuation still resumes exactly once from that single completion
+    /// callback — the cancellation handler only triggers the system cancel,
+    /// it never resumes the continuation itself. That path already maps to
+    /// `SignInError.cancelled`, so the caller sees the same silent/benign
+    /// cancellation as a user-initiated dismiss.
     private func presentWebSession(authURL: URL) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(
-                url: authURL,
-                callbackURLScheme: AudiobookshelfOIDC.callbackScheme
-            ) { callbackURL, error in
-                if let error {
-                    if let asError = error as? ASWebAuthenticationSessionError,
-                       asError.code == .canceledLogin {
-                        continuation.resume(throwing: SignInError.cancelled)
-                    } else {
-                        continuation.resume(throwing: SignInError.flow(error))
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let session = ASWebAuthenticationSession(
+                    url: authURL,
+                    callbackURLScheme: AudiobookshelfOIDC.callbackScheme
+                ) { callbackURL, error in
+                    if let error {
+                        if let asError = error as? ASWebAuthenticationSessionError,
+                           asError.code == .canceledLogin {
+                            continuation.resume(throwing: SignInError.cancelled)
+                        } else {
+                            continuation.resume(throwing: SignInError.flow(error))
+                        }
+                        return
                     }
-                    return
+                    guard let callbackURL else {
+                        continuation.resume(throwing: SignInError.missingCallbackParams)
+                        return
+                    }
+                    continuation.resume(returning: callbackURL)
                 }
-                guard let callbackURL else {
-                    continuation.resume(throwing: SignInError.missingCallbackParams)
-                    return
+                session.presentationContextProvider = self
+                session.prefersEphemeralWebBrowserSession = true
+                self.webSession = session
+                if !session.start() {
+                    continuation.resume(throwing: SignInError.cancelled)
                 }
-                continuation.resume(returning: callbackURL)
             }
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = true
-            self.webSession = session
-            if !session.start() {
-                continuation.resume(throwing: SignInError.cancelled)
+        } onCancel: { [weak self] in
+            // May run on an arbitrary thread; ASWebAuthenticationSession is
+            // main-thread-only.
+            Task { @MainActor in
+                self?.webSession?.cancel()
             }
         }
     }
