@@ -7,36 +7,51 @@ struct ProviderManagementView: View {
     @State private var providerToDelete: Provider?
 
     var body: some View {
-        List {
-            Section {
-                ForEach(providerManager.serverProviders) { provider in
-                    providerRow(provider)
+        Group {
+            // beads_mobilemusic-uxb.4: guidance for users who skipped onboarding,
+            // deleted their last account, or used Delete All My Data — previously
+            // this screen rendered nothing but the toolbar "+". Mirrors the
+            // (now-deleted) dead ProviderListView's EmptyStateView usage.
+            if providerManager.serverProviders.isEmpty {
+                EmptyStateView(
+                    title: "No Accounts",
+                    systemImage: "server.rack",
+                    description: "Add a Navidrome, Audiobookshelf, or Xtream Codes account to get started.",
+                    actionLabel: "Add Account"
+                ) {
+                    showAddProvider = true
                 }
-                .onDelete { indexSet in
-                    if let index = indexSet.first {
-                        providerToDelete = providerManager.serverProviders[index]
-                    }
-                }
-            } footer: {
-                if !providerManager.serverProviders.isEmpty {
-                    Text("Swipe right to edit an account. Swipe left to delete.")
-                }
-            }
-
-            Section {
-                Button {
-                    Task { await providerManager.loadChannels() }
-                } label: {
-                    HStack {
-                        Label("Reload All Channels", systemImage: "arrow.clockwise")
-                        Spacer()
-                        if providerManager.isLoading {
-                            ProgressView()
-                                .controlSize(.small)
+            } else {
+                List {
+                    Section {
+                        ForEach(providerManager.serverProviders) { provider in
+                            providerRow(provider)
                         }
+                        .onDelete { indexSet in
+                            if let index = indexSet.first {
+                                providerToDelete = providerManager.serverProviders[index]
+                            }
+                        }
+                    } footer: {
+                        Text("Swipe right to edit an account. Swipe left to delete.")
+                    }
+
+                    Section {
+                        Button {
+                            Task { await providerManager.loadChannels() }
+                        } label: {
+                            HStack {
+                                Label("Reload All Channels", systemImage: "arrow.clockwise")
+                                Spacer()
+                                if providerManager.isLoading {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                            }
+                        }
+                        .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
                     }
                 }
-                .disabled(providerManager.isLoading || providerManager.providers.isEmpty)
             }
         }
         .navigationTitle("Accounts")

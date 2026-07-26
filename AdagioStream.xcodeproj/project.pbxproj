@@ -92,7 +92,6 @@
 		573D9FD1792C3D1E63352518 /* RetryableAsyncImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4455F7037718720E1C277C69 /* RetryableAsyncImage.swift */; };
 		575D753F86DFC83AEBD874E0 /* CustomPlaylistListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */; };
 		57E5328084F745B0A7DB6F2F /* AudioPlayerService+Reconnect.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AE0ADC1022CB548CC8480DF /* AudioPlayerService+Reconnect.swift */; };
-		5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64EF86369F656FD2C55498D1 /* ProviderListView.swift */; };
 		5CDA0B2D887C7B36FA8B4D36 /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6F942DD99FD99986EE7506 /* AddToPlaylistSheet.swift */; };
 		5D04CF82D46CED101C42C799 /* ImageCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B5AD78AF144F5A264F1E91 /* ImageCacheService.swift */; };
 		5DA4B6779C4DF27B8CD84D27 /* PlaybackQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 826EE35C4ACE4B68BFA5B0FC /* PlaybackQueueTests.swift */; };
@@ -377,7 +376,6 @@
 		625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayMusicBrowseTests.swift; sourceTree = "<group>"; };
 		62BA951B52AA391895D82516 /* CustomPlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPlaylistListView.swift; sourceTree = "<group>"; };
 		63DAC15D313E0DBD1A3DA2D3 /* SettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTabView.swift; sourceTree = "<group>"; };
-		64EF86369F656FD2C55498D1 /* ProviderListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderListView.swift; sourceTree = "<group>"; };
 		654E3C5D89466E8FBB999ECE /* AudioPlayerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlayerServiceTests.swift; sourceTree = "<group>"; };
 		6B53DA1A6B961046A0188A39 /* AdagioStream-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "AdagioStream-Bridging-Header.h"; sourceTree = "<group>"; };
 		6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeStarButton.swift; sourceTree = "<group>"; };
@@ -925,7 +923,6 @@
 			children = (
 				3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */,
 				A941BA559B2F737D9755A857 /* AudiobookshelfOIDCSession.swift */,
-				64EF86369F656FD2C55498D1 /* ProviderListView.swift */,
 			);
 			path = Provider;
 			sourceTree = "<group>";
@@ -1341,7 +1338,6 @@
 				4E32B343F30E26B3E8341B14 /* PrivacyPolicyView.swift in Sources */,
 				129D39FCB60C075DFBF45289 /* Provider.swift in Sources */,
 				A6D8940AF3A39B23AF15892F /* ProviderFormValidation.swift in Sources */,
-				5A13537DC1ADD85384A482D2 /* ProviderListView.swift in Sources */,
 				FFAABCBC274AD0B984B04223 /* ProviderListViewModel.swift in Sources */,
 				743B9ECFB3057C393642ADE5 /* ProviderManagementView.swift in Sources */,
 				A96B6E6F75E1E1A6A5596351 /* ProviderManager.swift in Sources */,
