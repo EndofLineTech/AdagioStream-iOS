@@ -235,11 +235,73 @@ final class AudiobookDownloadTests: XCTestCase {
         XCTAssertNil(fetched?.currentTime, "absent currentTime decodes as nil, not a decode failure")
     }
 
+    // The decode-old-format test above pins decode behavior on an
+    // already-v6 schema (a v6 CREATE ran, so `currentTime` was declared but
+    // simply never inserted). This one builds an ACTUAL pre-v6 database —
+    // migrated only through v5 (createAudiobookDownloads), so
+    // `audiobook_downloads` has no currentTime column at all — inserts
+    // realistic rows, then runs the SAME shared migrator NavidromeStore uses
+    // in production to bring it forward, and checks nothing was lost or
+    // corrupted by the ALTER TABLE. `DatabaseMigrator.migrate(_:upTo:)` makes
+    // `NavidromeStore.migrator` truncatable without hand-copying DDL.
+    func testPreV6DatabaseMigratesCleanlyPreservingExistingRows() async throws {
+        let queue = try DatabaseQueue()
+        try NavidromeStore.migrator.migrate(queue, upTo: "createAudiobookDownloads")
+
+        let filesJSON = #"[{"index":0,"ino":"a","startOffset":0,"duration":100,"localPath":"/x/a.audio"}]"#
+        let chaptersJSON = #"[{"id":"book-1#0","bookId":"book-1","title":"Ch1","start":0,"end":100}]"#
+        let episodeID = AudiobookDownloadRecord.episodeRecordID(showID: "show-1", episodeID: "ep-1")
+
+        try await queue.write { db in
+            try db.execute(sql: """
+                INSERT INTO audiobook_downloads
+                    (id, title, author, coverPath, duration, status, filesJSON, chaptersJSON, error, createdAt, updatedAt)
+                VALUES (?, 'Book One', 'Author A', '/cover/1.jpg', 3600.5, 'completed', ?, ?, NULL, 1000, 2000)
+                """, arguments: ["book-1", filesJSON, chaptersJSON])
+            try db.execute(sql: """
+                INSERT INTO audiobook_downloads
+                    (id, title, author, coverPath, duration, status, filesJSON, chaptersJSON, error, createdAt, updatedAt)
+                VALUES (?, 'Episode One', 'Show A', NULL, 900, 'downloading', '[]', '[]', NULL, 1500, 1500)
+                """, arguments: [episodeID])
+        }
+
+        // Run the FULL migrator (adds v6's currentTime column) over the
+        // pre-existing rows — mirrors what a real upgrading device does.
+        try NavidromeStore.migrator.migrate(queue)
+        let store = try NavidromeStore(writer: queue)
+
+        let all = try store.allAudiobookDownloads()
+        XCTAssertEqual(all.count, 2, "the ALTER TABLE must not drop or duplicate rows")
+
+        let book = try store.audiobookDownload(forBook: "book-1")
+        XCTAssertEqual(book?.title, "Book One")
+        XCTAssertEqual(book?.author, "Author A")
+        XCTAssertEqual(book?.coverPath, "/cover/1.jpg")
+        XCTAssertEqual(book?.duration, 3600.5)
+        XCTAssertEqual(book?.status, .completed)
+        XCTAssertEqual(book?.files.first?.localPath, "/x/a.audio", "filesJSON survives byte-for-byte through the ALTER TABLE")
+        XCTAssertEqual(book?.chapters.first?.title, "Ch1")
+        XCTAssertEqual(book?.createdAt, 1000)
+        XCTAssertEqual(book?.updatedAt, 2000)
+        XCTAssertNil(book?.currentTime, "pre-existing rows backfill NULL, not 0 or a decode failure")
+
+        let episode = try store.audiobookDownload(forBook: episodeID)
+        XCTAssertEqual(episode?.title, "Episode One")
+        XCTAssertEqual(episode?.status, .downloading)
+        XCTAssertNil(episode?.currentTime)
+
+        // A subsequent targeted currentTime UPDATE round-trips on a migrated row.
+        try await store.updateAudiobookDownloadCurrentTime(id: "book-1", currentTime: 42)
+        XCTAssertEqual(try store.audiobookDownload(forBook: "book-1")?.currentTime, 42)
+    }
+
     // The single write funnel (AudioPlayerService.syncAudiobookProgress hooks
     // this once) that keeps AudiobookDownloadRecord.currentTime current for a
     // downloaded item regardless of whether the play was online or offline.
+    // Fire-and-forget off the main actor (beads_mobilemusic-uxi kickback) — the
+    // call returns a Task, so the test awaits `.value` to observe the write.
     @MainActor
-    func testUpdateDownloadedCurrentTimeWritesToExistingRecord() throws {
+    func testUpdateDownloadedCurrentTimeWritesToExistingRecord() async throws {
         let store = try makeInMemoryNavidromeStore()
         let manager = DownloadManager(store: store)
         let record = AudiobookDownloadRecord(
@@ -248,27 +310,29 @@ final class AudiobookDownloadTests: XCTestCase {
         )
         try store.upsert(audiobookDownload: record)
 
-        manager.updateDownloadedCurrentTime(itemID: "book-1", currentTime: 456)
+        await manager.updateDownloadedCurrentTime(itemID: "book-1", currentTime: 456).value
 
         let fetched = try store.audiobookDownload(forBook: "book-1")
         XCTAssertEqual(fetched?.currentTime, 456)
     }
 
-    // No download record exists (the item was never downloaded) — must be a
-    // silent no-op, not a crash or a spuriously-created row.
+    // No download record exists (the item was never downloaded) — the targeted
+    // UPDATE must match zero rows: silent no-op, not a crash and not a
+    // spuriously-created row (the guard now lives in the UPDATE's row-matching,
+    // not a read-then-branch).
     @MainActor
-    func testUpdateDownloadedCurrentTimeNoOpWhenNoRecordExists() throws {
+    func testUpdateDownloadedCurrentTimeNoOpWhenNoRecordExists() async throws {
         let store = try makeInMemoryNavidromeStore()
         let manager = DownloadManager(store: store)
 
-        manager.updateDownloadedCurrentTime(itemID: "never-downloaded", currentTime: 100)
+        await manager.updateDownloadedCurrentTime(itemID: "never-downloaded", currentTime: 100).value
 
         XCTAssertNil(try store.audiobookDownload(forBook: "never-downloaded"))
     }
 
     // Works for an episode's composite record id exactly like a book's plain id.
     @MainActor
-    func testUpdateDownloadedCurrentTimeWritesToEpisodeRecord() throws {
+    func testUpdateDownloadedCurrentTimeWritesToEpisodeRecord() async throws {
         let store = try makeInMemoryNavidromeStore()
         let manager = DownloadManager(store: store)
         let recordID = AudiobookDownloadRecord.episodeRecordID(showID: "show-1", episodeID: "ep-1")
@@ -278,7 +342,7 @@ final class AudiobookDownloadTests: XCTestCase {
         )
         try store.upsert(audiobookDownload: record)
 
-        manager.updateDownloadedCurrentTime(itemID: recordID, currentTime: 789)
+        await manager.updateDownloadedCurrentTime(itemID: recordID, currentTime: 789).value
 
         let fetched = try store.audiobookDownload(forBook: recordID)
         XCTAssertEqual(fetched?.currentTime, 789)

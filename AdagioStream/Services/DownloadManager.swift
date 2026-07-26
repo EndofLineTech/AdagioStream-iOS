@@ -591,12 +591,23 @@ public final class DownloadManager: NSObject, ObservableObject {
     /// `downloadedBook(itemID:)` this does NOT require `.completed` status, so
     /// a still-downloading item's progress isn't silently dropped either.
     /// Called from `AudioPlayerService.syncAudiobookProgress`, the single sync
-    /// funnel already shared by pause/stop/periodic/seek.
-    public func updateDownloadedCurrentTime(itemID: String, currentTime: Double) {
-        guard var record = try? store.audiobookDownload(forBook: itemID) else { return }
-        record.currentTime = currentTime
-        record.updatedAt = Int(Date().timeIntervalSince1970)
-        try? store.upsert(audiobookDownload: record)
+    /// funnel already shared by pause/stop/periodic/seek — that call happens on
+    /// the ~20s main-actor sync tick, so this dispatches into a `Task` and
+    /// returns immediately rather than blocking the main actor on the GRDB
+    /// writer queue (beads_mobilemusic-uxi review kickback). The store does a
+    /// targeted UPDATE (see `NavidromeStore.updateAudiobookDownloadCurrentTime`),
+    /// not a full-row save, so it never re-serializes filesJSON/chaptersJSON on
+    /// this hot path, and it's a no-op when there's no record for `itemID`.
+    /// Fire-and-forget: this can race a concurrent `deleteBookDownload` for the
+    /// same item — an UPDATE against an already-deleted row affects 0 rows and
+    /// is a harmless no-op, so no ordering between the two is needed.
+    /// `@discardableResult` — production callers don't need the handle; tests
+    /// await `.value` to observe the write's completion.
+    @discardableResult
+    public func updateDownloadedCurrentTime(itemID: String, currentTime: Double) -> Task<Void, Never> {
+        Task {
+            try? await store.updateAudiobookDownloadCurrentTime(id: itemID, currentTime: currentTime)
+        }
     }
 
     // MARK: - Podcast episode downloads (E4 / 6b5.1)

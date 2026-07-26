@@ -561,6 +561,24 @@ extension NavidromeStore {
         }
     }
 
+    /// Targeted UPDATE of `currentTime`/`updatedAt` only (beads_mobilemusic-uxi
+    /// kickback fix) — the hot ~20s playback-sync tick was doing a read +
+    /// full-row `save(db)`, re-serializing filesJSON/chaptersJSON (tens of KB)
+    /// through the single writer queue on every tick, alongside bulk library
+    /// syncs. `filter(key:).updateAll` is a genuine SQL UPDATE ... WHERE id = ?
+    /// — 0 rows affected (never an INSERT) when `id` has no row, preserving the
+    /// old read-then-no-op guard without the read. Uses the async writer API
+    /// so a caller on the main actor (`DownloadManager.updateDownloadedCurrentTime`)
+    /// doesn't block synchronously on writer-queue contention.
+    public func updateAudiobookDownloadCurrentTime(id: String, currentTime: Double) async throws {
+        let updatedAt = Int(Date().timeIntervalSince1970)
+        try await writer.write { db in
+            try AudiobookDownloadRecord
+                .filter(key: id)
+                .updateAll(db, Column("currentTime").set(to: currentTime), Column("updatedAt").set(to: updatedAt))
+        }
+    }
+
     /// Deletes a book download row and every on-disk file in its manifest.
     public func deleteAudiobookDownload(forBook bookId: String) throws {
         if let record = try audiobookDownload(forBook: bookId) {
