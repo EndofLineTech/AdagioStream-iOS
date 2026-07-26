@@ -774,9 +774,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         }
     }
 
-    private func pushChannelList(title: String, channels: [Channel]) {
-        let grouped = Dictionary(grouping: channels) { channel -> String in
-            let first = sortableName(channel.name).prefix(1).uppercased()
+    /// Groups (name, item) pairs into first-letter CPListSections with a
+    /// `sectionIndexTitle`, so CarPlay shows its alphabetic jump-list index
+    /// instead of one flat unindexed scroll — the distraction failure mode
+    /// the index API exists to prevent on lists with hundreds of rows.
+    /// Shared by `pushChannelList` (channels) and the Artists/Playlists music
+    /// lists (uxa.4) — same grouping, different item source.
+    private func letterIndexedSections(_ pairs: [(name: String, item: CPListItem)]) -> [CPListSection] {
+        let grouped = Dictionary(grouping: pairs) { pair -> String in
+            let first = sortableName(pair.name).prefix(1).uppercased()
             return first.first?.isLetter == true ? first : "#"
         }
         let sortedKeys = grouped.keys.sorted { a, b in
@@ -784,22 +790,24 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             if b == "#" { return false }
             return a < b
         }
+        return sortedKeys.map { letter in
+            CPListSection(items: grouped[letter]!.map(\.item), header: letter, sectionIndexTitle: letter)
+        }
+    }
 
-        let sections = sortedKeys.map { letter in
-            let items = grouped[letter]!.map { channel in
-                let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel))
-                itemChannelMap[ObjectIdentifier(item)] = channel.id
-                item.handler = { [weak self] _, completion in
-                    self?.playChannelAndShowNowPlaying(channel, within: channels)
-                    completion()
-                }
-                loadChannelIcon(for: channel, into: item)
-                return item
+    private func pushChannelList(title: String, channels: [Channel]) {
+        let pairs = channels.map { channel -> (name: String, item: CPListItem) in
+            let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel))
+            itemChannelMap[ObjectIdentifier(item)] = channel.id
+            item.handler = { [weak self] _, completion in
+                self?.playChannelAndShowNowPlaying(channel, within: channels)
+                completion()
             }
-            return CPListSection(items: items, header: letter, sectionIndexTitle: letter)
+            loadChannelIcon(for: channel, into: item)
+            return (channel.name, item)
         }
 
-        let template = CPListTemplate(title: title, sections: sections)
+        let template = CPListTemplate(title: title, sections: letterIndexedSections(pairs))
         interfaceController.pushTemplate(template, animated: true, completion: nil)
     }
 
@@ -860,8 +868,14 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let items = try await self.fetchArtistItems(api: api)
-                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No artists")] : items)])
+                let entries = try await self.fetchArtistItems(api: api)
+                // uxa.4: letter-index — same treatment as pushChannelList,
+                // hundreds of unindexed rows is the distraction failure mode
+                // the sectionIndexTitle API exists to prevent.
+                let sections = entries.isEmpty
+                    ? [CPListSection(items: [self.emptyMusicItem("No artists")])]
+                    : self.letterIndexedSections(entries)
+                template.updateSections(sections)
             } catch {
                 self.log.log("Music: getArtists failed — \(error)", category: .carplay)
                 template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
@@ -892,8 +906,12 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let items = try await self.fetchPlaylistItems(api: api)
-                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No playlists")] : items)])
+                let entries = try await self.fetchPlaylistItems(api: api)
+                // uxa.4: letter-index — same treatment as pushChannelList.
+                let sections = entries.isEmpty
+                    ? [CPListSection(items: [self.emptyMusicItem("No playlists")])]
+                    : self.letterIndexedSections(entries)
+                template.updateSections(sections)
             } catch {
                 self.log.log("Music: getPlaylists failed — \(error)", category: .carplay)
                 template.updateSections([CPListSection(items: [self.emptyMusicItem("Failed to load")])])
@@ -941,7 +959,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
 
     // MARK: Artists
 
-    private func fetchArtistItems(api: NavidromeAPI) async throws -> [CPListItem] {
+    private func fetchArtistItems(api: NavidromeAPI) async throws -> [(name: String, item: CPListItem)] {
         let artists = try await api.getArtists()
         return artists.map { artist in
             let detail = artist.albumCount > 0 ? "\(artist.albumCount) albums" : nil
@@ -956,7 +974,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             } else {
                 item.setImage(musicNoteImage())
             }
-            return item
+            return (artist.name, item)
         }
     }
 
@@ -982,7 +1000,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
 
     // MARK: Playlists
 
-    private func fetchPlaylistItems(api: NavidromeAPI) async throws -> [CPListItem] {
+    private func fetchPlaylistItems(api: NavidromeAPI) async throws -> [(name: String, item: CPListItem)] {
         let playlists = try await api.getPlaylists()
         return playlists.map { playlist in
             let detail = playlist.songCount > 0 ? "\(playlist.songCount) tracks" : nil
@@ -997,7 +1015,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             } else {
                 item.setImage(musicNoteImage())
             }
-            return item
+            return (playlist.name, item)
         }
     }
 
