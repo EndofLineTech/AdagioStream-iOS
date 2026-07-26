@@ -21,6 +21,7 @@ struct NowPlayingTabView: View {
             audiobookArtwork
                 .frame(width: 360, height: 360)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
+                .accessibilityHidden(true)
 
             VStack(spacing: 12) {
                 Text(book.title)
@@ -58,6 +59,7 @@ struct NowPlayingTabView: View {
             RoundedRectangle(cornerRadius: 24).fill(.secondary.opacity(0.2))
             Image(systemName: "book.closed").font(.system(size: 120)).foregroundStyle(.secondary)
         }
+        .accessibilityHidden(true)
     }
 
     private var audiobookTransport: some View {
@@ -67,18 +69,21 @@ struct NowPlayingTabView: View {
                     .font(.title)
                     .frame(width: 72, height: 72)
             }
+            .accessibilityLabel("Previous chapter")
 
             Button(action: { audioPlayer.togglePlayPause() }) {
                 Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                     .font(.largeTitle)
                     .frame(width: 96, height: 96)
             }
+            .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
 
             Button(action: { audioPlayer.skipToNextChapter() }) {
                 Image(systemName: "forward.fill")
                     .font(.title)
                     .frame(width: 72, height: 72)
             }
+            .accessibilityLabel("Next chapter")
         }
     }
 
@@ -93,6 +98,7 @@ struct NowPlayingTabView: View {
             Image(systemName: "play.slash")
                 .font(.system(size: 96))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Nothing playing")
                 .font(.title)
                 .foregroundStyle(.secondary)
@@ -116,6 +122,7 @@ struct NowPlayingTabView: View {
             artwork(for: channel)
                 .frame(width: 360, height: 360)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
+                .accessibilityHidden(true)
 
             VStack(spacing: 12) {
                 Text(channel.name)
@@ -159,6 +166,7 @@ struct NowPlayingTabView: View {
                 .font(.system(size: 120))
                 .foregroundStyle(.secondary)
         }
+        .accessibilityHidden(true)
     }
 
     private var transportControls: some View {
@@ -168,18 +176,21 @@ struct NowPlayingTabView: View {
                     .font(.title)
                     .frame(width: 72, height: 72)
             }
+            .accessibilityLabel("Previous channel")
 
             Button(action: { audioPlayer.togglePlayPause() }) {
                 Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                     .font(.largeTitle)
                     .frame(width: 96, height: 96)
             }
+            .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
 
             Button(action: { audioPlayer.playNext() }) {
                 Image(systemName: "forward.fill")
                     .font(.title)
                     .frame(width: 72, height: 72)
             }
+            .accessibilityLabel("Next channel")
         }
     }
 }

@@ -56,6 +56,7 @@ struct PodcastShowDetailTVView: View {
                                 let isCurrent = audioPlayer.currentAudiobook?.id == episode.id
                                 Image(systemName: isCurrent ? "play.circle.fill" : "circle")
                                     .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+                                    .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(episode.title ?? "Episode").lineLimit(2)
                                     if let dateText = PodcastShowDetailTVView.formattedPubDate(episode.pubDate) {
@@ -70,6 +71,9 @@ struct PodcastShowDetailTVView: View {
                                 }
                             }
                         }
+                        // uxd.3: the play/circle glyph otherwise reads as its
+                        // raw SF Symbol name ("play circle fill") to VoiceOver.
+                        .accessibilityLabel("\(episode.title ?? "Episode")\(audioPlayer.currentAudiobook?.id == episode.id ? ", now playing" : "")")
                     }
                 }
             }

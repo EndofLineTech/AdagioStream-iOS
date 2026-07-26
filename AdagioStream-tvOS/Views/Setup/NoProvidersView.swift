@@ -6,6 +6,7 @@ struct NoProvidersView: View {
             Image(systemName: "antenna.radiowaves.left.and.right.slash")
                 .font(.system(size: 96))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             Text("No Providers Configured")
                 .font(.title)

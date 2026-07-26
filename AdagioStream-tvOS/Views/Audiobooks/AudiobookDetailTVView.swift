@@ -57,6 +57,7 @@ struct AudiobookDetailTVView: View {
                                     && audioPlayer.currentChapter?.id == chapter.id
                                 Image(systemName: isCurrent ? "play.circle.fill" : "circle")
                                     .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
+                                    .accessibilityHidden(true)
                                 Text(chapter.title).lineLimit(2)
                                 Spacer()
                                 Text(Self.formatTimestamp(chapter.start))
@@ -64,6 +65,9 @@ struct AudiobookDetailTVView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        // uxd.3: the play/circle glyph otherwise reads as its
+                        // raw SF Symbol name ("play circle fill") to VoiceOver.
+                        .accessibilityLabel("\(chapter.title)\(audioPlayer.currentAudiobook?.id == current.id && audioPlayer.currentChapter?.id == chapter.id ? ", now playing" : "")")
                     }
                 }
             }

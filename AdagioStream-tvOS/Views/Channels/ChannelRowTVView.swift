@@ -23,10 +23,15 @@ struct ChannelRowTVView: View {
                     Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
                         .foregroundStyle(.tint)
                         .font(.title2)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.vertical, 8)
         }
+        // uxd.3: without this, VoiceOver would read the raw SF Symbol name
+        // ("speaker wave 2 fill") for the now-playing indicator instead of
+        // its meaning.
+        .accessibilityLabel(isCurrent ? "\(channel.name), \(channel.group), \(isPlaying ? "now playing" : "paused")" : "\(channel.name), \(channel.group)")
     }
 
     @ViewBuilder
