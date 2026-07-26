@@ -178,6 +178,51 @@ final class NavidromeLibraryViewModelTests: XCTestCase {
         XCTAssertTrue(vm.browseAlbums.isEmpty)
     }
 
+    // MARK: - loadMoreBrowseAlbums (uxc.2)
+
+    private static func albumListJSON(idPrefix: String, count: Int) -> String {
+        let albums = (0..<count).map { i in
+            "{\"id\":\"\(idPrefix)\(i)\",\"artistId\":\"ar1\",\"name\":\"Album \(idPrefix)\(i)\",\"songCount\":9,\"year\":1991}"
+        }.joined(separator: ",")
+        return "{\"subsonic-response\":{\"status\":\"ok\",\"version\":\"1.16.1\",\"albumList2\":{\"album\":[\(albums)]}}}"
+    }
+
+    func testLoadMoreBrowseAlbumsAppendsNextPageWhenFirstPageIsFull() async throws {
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: Self.albumListJSON(idPrefix: "p1-", count: 50)),
+            .init(json: Self.albumListJSON(idPrefix: "p2-", count: 10)),
+        ]
+
+        await vm.loadBrowseAlbums(type: .newest)
+        XCTAssertEqual(vm.browseAlbums.count, 50)
+        XCTAssertTrue(vm.browseAlbumsHasMore, "A full 50-item page should signal more may exist")
+
+        await vm.loadMoreBrowseAlbums()
+
+        XCTAssertEqual(vm.browseAlbums.count, 60)
+        XCTAssertFalse(vm.browseAlbumsHasMore, "A 10-item page below the page size signals no more")
+        XCTAssertEqual(vm.browseAlbums[59].id, "p2-9")
+
+        // The load-more request must ask for the NEXT offset (50), not restart from 0.
+        let offsets = MockURLProtocolHandler.capturedRequests.compactMap {
+            URLComponents(url: $0.url!, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "offset" })?.value
+        }
+        XCTAssertEqual(offsets, ["0", "50"])
+    }
+
+    func testLoadMoreBrowseAlbumsNoOpWhenNoMorePages() async throws {
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: Self.albumList2JSON) // 2 albums, below page size — no more
+        ]
+        await vm.loadBrowseAlbums(type: .newest)
+        XCTAssertFalse(vm.browseAlbumsHasMore)
+
+        await vm.loadMoreBrowseAlbums()
+
+        XCTAssertEqual(vm.browseAlbums.count, 2, "loadMore must no-op when hasMore is false")
+    }
+
     // MARK: - loadGenres: loaded state
 
     func testLoadGenresTransitionsToLoaded() async throws {
@@ -322,5 +367,50 @@ final class NavidromeLibraryViewModelTests: XCTestCase {
         XCTAssertNil(vm.selectedGenre)
         XCTAssertTrue(vm.genreTracks.isEmpty)
         XCTAssertEqual(vm.genreTracksState, .idle)
+    }
+
+    // MARK: - loadMoreTracks(forGenre:) (uxc.2)
+
+    private static func makeSongsByGenreJSON(idPrefix: String, count: Int) -> String {
+        let songs = (0..<count).map { i in
+            "{\"id\":\"\(idPrefix)\(i)\",\"albumId\":\"al1\",\"artistId\":\"ar1\",\"title\":\"Song \(idPrefix)\(i)\",\"track\":\(i + 1),\"duration\":200}"
+        }.joined(separator: ",")
+        return "{\"subsonic-response\":{\"status\":\"ok\",\"version\":\"1.16.1\",\"songsByGenre\":{\"song\":[\(songs)]}}}"
+    }
+
+    func testLoadMoreTracksForGenreAppendsNextPageWhenFirstPageIsFull() async throws {
+        let genre = Genre(name: "Trip Hop", songCount: 42, albumCount: 3)
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: Self.makeSongsByGenreJSON(idPrefix: "p1-", count: 50)),
+            .init(json: Self.makeSongsByGenreJSON(idPrefix: "p2-", count: 5)),
+        ]
+
+        await vm.loadTracks(forGenre: genre)
+        XCTAssertEqual(vm.genreTracks.count, 50)
+        XCTAssertTrue(vm.genreTracksHasMore)
+
+        await vm.loadMoreTracks(forGenre: genre)
+
+        XCTAssertEqual(vm.genreTracks.count, 55)
+        XCTAssertFalse(vm.genreTracksHasMore)
+
+        let offsets = MockURLProtocolHandler.capturedRequests.compactMap {
+            URLComponents(url: $0.url!, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "offset" })?.value
+        }
+        XCTAssertEqual(offsets, ["0", "50"])
+    }
+
+    func testLoadMoreTracksForGenreNoOpWhenNoMorePages() async throws {
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: Self.songsByGenreJSON) // 2 songs, below page size — no more
+        ]
+        let genre = Genre(name: "Trip Hop", songCount: 42, albumCount: 3)
+        await vm.loadTracks(forGenre: genre)
+        XCTAssertFalse(vm.genreTracksHasMore)
+
+        await vm.loadMoreTracks(forGenre: genre)
+
+        XCTAssertEqual(vm.genreTracks.count, 2, "loadMore must no-op when hasMore is false")
     }
 }

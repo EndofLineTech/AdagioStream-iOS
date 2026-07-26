@@ -47,6 +47,11 @@ public final class NavidromeLibraryViewModel: ObservableObject {
     /// Per-album star/play-count states for the current browse-albums page.
     /// Keyed by album ID. Populated alongside browseAlbums on each load. (65x.3)
     @Published public private(set) var browseAlbumStarStates: [String: NavidromeAPI.StarState] = [:]
+    /// True when the last fetched page was full-size, meaning more albums may
+    /// exist server-side (uxc.2 — scroll-driven load-more).
+    @Published public private(set) var browseAlbumsHasMore = false
+    /// True while a load-more fetch (not the initial page) is in flight.
+    @Published public private(set) var isLoadingMoreBrowseAlbums = false
 
     // MARK: - Genre list (0xy.4)
 
@@ -61,6 +66,11 @@ public final class NavidromeLibraryViewModel: ObservableObject {
     /// Per-song star/play-count states for the current genre track page.
     /// Keyed by track ID. Populated alongside genreTracks on each load. (65x.3)
     @Published public private(set) var genreTrackStarStates: [String: NavidromeAPI.StarState] = [:]
+    /// True when the last fetched page was full-size, meaning more songs may
+    /// exist server-side (uxc.2 — scroll-driven load-more).
+    @Published public private(set) var genreTracksHasMore = false
+    /// True while a load-more fetch (not the initial page) is in flight.
+    @Published public private(set) var isLoadingMoreGenreTracks = false
 
     // MARK: - Page sizes (single-page, no pagination in 0xy.4)
 
@@ -71,6 +81,11 @@ public final class NavidromeLibraryViewModel: ObservableObject {
 
     /// Maximum songs returned by getSongsByGenre in a single fetch.
     static let genreSongsPageSize = 50
+
+    /// Cap per category (artists/albums/songs) for `search3` (uxc.2). Kept as
+    /// one named constant so the fetch and the truncation-caption check in
+    /// `SearchResultsView` can't drift apart.
+    static let searchResultCap = 20
 
     // MARK: - API source
 
@@ -307,6 +322,7 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         browseAlbumsType = type
         browseAlbums = []
         browseAlbumStarStates = [:]
+        browseAlbumsHasMore = false
         browseAlbumsState = .loading
         do {
             let (albums, starStates) = try await api.getAlbumList2WithStarState(
@@ -316,11 +332,41 @@ public final class NavidromeLibraryViewModel: ObservableObject {
             )
             browseAlbums = albums
             browseAlbumStarStates = starStates
+            browseAlbumsHasMore = BrowsePagination.hasMore(
+                returnedCount: albums.count,
+                requestedPageSize: NavidromeLibraryViewModel.albumBrowsePageSize
+            )
             browseAlbumsState = albums.isEmpty ? .empty : .loaded
         } catch let apiErr as NavidromeAPI.APIError {
             browseAlbumsState = .error(apiErr.errorDescription ?? "Unknown error")
         } catch {
             browseAlbumsState = .error(error.localizedDescription)
+        }
+    }
+
+    /// Fetches the next page of albums (uxc.2 — scroll-driven load-more) and
+    /// appends it to `browseAlbums`. No-ops if there's nothing more, a fetch
+    /// is already in flight, or the initial page hasn't loaded yet. Best-
+    /// effort: a failure just stops further load-more attempts, leaving the
+    /// already-loaded page visible.
+    public func loadMoreBrowseAlbums() async {
+        guard browseAlbumsHasMore, !isLoadingMoreBrowseAlbums, browseAlbumsState == .loaded else { return }
+        isLoadingMoreBrowseAlbums = true
+        defer { isLoadingMoreBrowseAlbums = false }
+        do {
+            let (albums, starStates) = try await api.getAlbumList2WithStarState(
+                type: browseAlbumsType,
+                size: NavidromeLibraryViewModel.albumBrowsePageSize,
+                offset: browseAlbums.count
+            )
+            browseAlbums.append(contentsOf: albums)
+            browseAlbumStarStates.merge(starStates) { _, new in new }
+            browseAlbumsHasMore = BrowsePagination.hasMore(
+                returnedCount: albums.count,
+                requestedPageSize: NavidromeLibraryViewModel.albumBrowsePageSize
+            )
+        } catch {
+            browseAlbumsHasMore = false
         }
     }
 
@@ -353,6 +399,7 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         selectedGenre = genre
         genreTracks = []
         genreTrackStarStates = [:]
+        genreTracksHasMore = false
         genreTracksState = .loading
         do {
             let (tracks, starStates) = try await api.getSongsByGenreWithStarState(
@@ -362,11 +409,39 @@ public final class NavidromeLibraryViewModel: ObservableObject {
             )
             genreTracks = tracks
             genreTrackStarStates = starStates
+            genreTracksHasMore = BrowsePagination.hasMore(
+                returnedCount: tracks.count,
+                requestedPageSize: NavidromeLibraryViewModel.genreSongsPageSize
+            )
             genreTracksState = tracks.isEmpty ? .empty : .loaded
         } catch let apiErr as NavidromeAPI.APIError {
             genreTracksState = .error(apiErr.errorDescription ?? "Unknown error")
         } catch {
             genreTracksState = .error(error.localizedDescription)
+        }
+    }
+
+    /// Fetches the next page of songs for the current genre (uxc.2 —
+    /// scroll-driven load-more) and appends it to `genreTracks`. Mirrors
+    /// `loadMoreBrowseAlbums`.
+    public func loadMoreTracks(forGenre genre: Genre) async {
+        guard genreTracksHasMore, !isLoadingMoreGenreTracks, genreTracksState == .loaded else { return }
+        isLoadingMoreGenreTracks = true
+        defer { isLoadingMoreGenreTracks = false }
+        do {
+            let (tracks, starStates) = try await api.getSongsByGenreWithStarState(
+                genre: genre.name,
+                count: NavidromeLibraryViewModel.genreSongsPageSize,
+                offset: genreTracks.count
+            )
+            genreTracks.append(contentsOf: tracks)
+            genreTrackStarStates.merge(starStates) { _, new in new }
+            genreTracksHasMore = BrowsePagination.hasMore(
+                returnedCount: tracks.count,
+                requestedPageSize: NavidromeLibraryViewModel.genreSongsPageSize
+            )
+        } catch {
+            genreTracksHasMore = false
         }
     }
 
@@ -532,6 +607,7 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         browseAlbums = []
         browseAlbumStarStates = [:]
         browseAlbumsState = .idle
+        browseAlbumsHasMore = false
     }
 
     public func resetGenreDetail() {
@@ -539,6 +615,7 @@ public final class NavidromeLibraryViewModel: ObservableObject {
         genreTracks = []
         genreTrackStarStates = [:]
         genreTracksState = .idle
+        genreTracksHasMore = false
     }
 
     // MARK: - Search (1x1.2)
@@ -589,7 +666,12 @@ public final class NavidromeLibraryViewModel: ObservableObject {
             await MainActor.run { self?.searchState = .loading }
 
             do {
-                let results = try await api.search3WithStarState(query: trimmed)
+                let results = try await api.search3WithStarState(
+                    query: trimmed,
+                    artistCount: NavidromeLibraryViewModel.searchResultCap,
+                    albumCount: NavidromeLibraryViewModel.searchResultCap,
+                    songCount: NavidromeLibraryViewModel.searchResultCap
+                )
                 guard !Task.isCancelled else { return }
                 let plain = NavidromeAPI.SearchResults(
                     artists: results.artists,
@@ -655,4 +737,29 @@ public enum LoadState: Equatable {
     case loaded
     case empty
     case error(String)
+}
+
+// MARK: - Pagination decisions (uxc.2)
+
+/// Pure load-more decision logic for offset-paginated browse lists (album
+/// browse, genre tracks) and the search-truncation caption. Extracted so the
+/// "is there probably more" / "should this fetch another page" logic is
+/// testable without the network — Subsonic's `getAlbumList2`/`getSongsByGenre`
+/// don't return a total count, so a full page is the only load-more signal
+/// available.
+public enum BrowsePagination {
+    /// A full page (returned count >= what was asked for) suggests more may
+    /// exist server-side. `requestedPageSize <= 0` never has more.
+    public static func hasMore(returnedCount: Int, requestedPageSize: Int) -> Bool {
+        requestedPageSize > 0 && returnedCount >= requestedPageSize
+    }
+
+    /// Whether rendering `itemID` in an infinite-scroll list should trigger a
+    /// load-more fetch: only the last item in the current list, only when
+    /// more pages are believed to exist, and only when a fetch isn't already
+    /// in flight (guards against duplicate concurrent fetches as the list
+    /// re-renders).
+    public static func shouldLoadMore(itemID: String, lastItemID: String?, hasMore: Bool, isLoadingMore: Bool) -> Bool {
+        hasMore && !isLoadingMore && itemID == lastItemID
+    }
 }

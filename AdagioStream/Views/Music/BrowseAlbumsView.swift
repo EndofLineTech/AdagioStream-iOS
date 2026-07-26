@@ -99,9 +99,26 @@ struct BrowseAlbumsView: View {
                         album.year.map { "Released \($0), navigate to tracks" }
                             ?? "Navigate to tracks"
                     )
+                    // uxc.2: reaching the last album loads the next page —
+                    // Subsonic's getAlbumList2 supports offset pagination.
+                    .task(id: album.id) {
+                        if BrowsePagination.shouldLoadMore(
+                            itemID: album.id,
+                            lastItemID: viewModel.browseAlbums.last?.id,
+                            hasMore: viewModel.browseAlbumsHasMore,
+                            isLoadingMore: viewModel.isLoadingMoreBrowseAlbums
+                        ) {
+                            await viewModel.loadMoreBrowseAlbums()
+                        }
+                    }
                 }
             }
             .padding(16)
+
+            if viewModel.isLoadingMoreBrowseAlbums {
+                ProgressView()
+                    .padding(.bottom, 16)
+            }
         }
         .refreshable {
             await loadForCurrentType()

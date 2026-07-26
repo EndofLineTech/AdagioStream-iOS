@@ -80,6 +80,8 @@ struct SearchResultsView: View {
                 } header: {
                     Text("Artists")
                         .accessibilityAddTraits(.isHeader)
+                } footer: {
+                    truncationFooter(count: results.artists.count)
                 }
             }
 
@@ -103,6 +105,8 @@ struct SearchResultsView: View {
                 } header: {
                     Text("Albums")
                         .accessibilityAddTraits(.isHeader)
+                } footer: {
+                    truncationFooter(count: results.albums.count)
                 }
             }
 
@@ -139,10 +143,25 @@ struct SearchResultsView: View {
                 } header: {
                     Text("Songs")
                         .accessibilityAddTraits(.isHeader)
+                } footer: {
+                    truncationFooter(count: results.songs.count)
                 }
             }
         }
         .listStyle(.plain)
+    }
+
+    // MARK: - Truncation caption (uxc.2)
+
+    /// Search caps each category at `NavidromeLibraryViewModel.searchResultCap`
+    /// results with no offset/more-results affordance (minimum bar for uxc.2).
+    /// A full-cap result count is the only truncation signal Subsonic's
+    /// `search3` gives us — no total count is returned.
+    @ViewBuilder
+    private func truncationFooter(count: Int) -> some View {
+        if BrowsePagination.hasMore(returnedCount: count, requestedPageSize: NavidromeLibraryViewModel.searchResultCap) {
+            Text("Showing the first \(count) results. Refine your search to see more.")
+        }
     }
 }
 

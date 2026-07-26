@@ -176,6 +176,25 @@ struct GenreDetailView: View {
                     }
                     .accessibilityLabel("Add \(track.title) to a playlist")
                 }
+                // uxc.2: reaching the last song loads the next page —
+                // Subsonic's getSongsByGenre supports offset pagination.
+                .task(id: track.id) {
+                    if BrowsePagination.shouldLoadMore(
+                        itemID: track.id,
+                        lastItemID: tracks.last?.id,
+                        hasMore: viewModel.genreTracksHasMore,
+                        isLoadingMore: viewModel.isLoadingMoreGenreTracks
+                    ) {
+                        await viewModel.loadMoreTracks(forGenre: genre)
+                    }
+                }
+            }
+            if viewModel.isLoadingMoreGenreTracks {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
             }
         }
         .listStyle(.plain)
