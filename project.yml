@@ -130,6 +130,7 @@ targets:
     sources:
       - ShareExtension
       - path: AdagioStream/Constants.swift
+      - path: AdagioStream/Services/ShareURLValidation.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
