@@ -421,6 +421,17 @@ struct AddProviderView: View {
                 }
             }
             .onAppear { populateFromEditing() }
+            .onChange(of: formProviderType) { _, _ in
+                // beads_mobilemusic-uxb kickback finding 4: switching provider
+                // type must not carry over "touched" state from the previous
+                // type's fields — every type shares the same
+                // name/host/username/password ValidationField cases, so
+                // without this an untouched field on the new type could show
+                // as pre-marked touched just because the old type's field of
+                // the same name had content.
+                touchedFields = []
+                error = nil
+            }
             .onDisappear {
                 // beads_mobilemusic-uxb.1: cancel any in-flight save/sign-in when
                 // the sheet goes away, whether via Cancel or an interactive

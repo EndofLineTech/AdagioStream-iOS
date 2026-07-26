@@ -92,6 +92,16 @@ struct WelcomeSetupView: View {
                     trailingButton
                 }
             }
+            .onChange(of: connectionType) { _, _ in
+                // beads_mobilemusic-uxb kickback finding 4: same fix as
+                // AddProviderView — every connection type shares the same
+                // name/host/username/password ValidationField cases, so
+                // switching types (e.g. going back and picking a different
+                // card) must not carry over "touched" state from the type
+                // just left.
+                touchedFields = []
+                error = nil
+            }
         }
     }
 
