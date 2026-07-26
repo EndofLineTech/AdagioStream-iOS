@@ -287,7 +287,7 @@ struct AlbumDownloadAllButton: View {
                 .accessibilityLabel("All tracks downloaded")
                 .accessibilityValue("Downloaded")
 
-        case .downloading(let completed, let total):
+        case .downloading(let completed, let total, let failed):
             Button {
                 enqueueAll()
             } label: {
@@ -296,11 +296,19 @@ struct AlbumDownloadAllButton: View {
                         .font(.subheadline)
                     ProgressView(value: Double(completed), total: Double(total))
                         .progressViewStyle(.linear)
+                    // Distinguishes "stalled on errors" from "still in progress"
+                    // (beads_mobilemusic-uxc kickback) — matches TrackDownloadButton's
+                    // failed vocabulary (exclamationmark.circle, orange).
+                    if failed > 0 {
+                        Label("\(failed) failed", systemImage: "exclamationmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
             .buttonStyle(.bordered)
-            .accessibilityLabel("Downloading \(completed) of \(total) tracks")
-            .accessibilityValue("\(completed) of \(total) complete")
+            .accessibilityLabel("Downloading \(completed) of \(total) tracks" + (failed > 0 ? ", \(failed) failed" : ""))
+            .accessibilityValue("\(completed) of \(total) complete" + (failed > 0 ? ", \(failed) failed" : ""))
 
         case .none:
             Button {

@@ -361,8 +361,12 @@ public enum AggregateDownloadState: Equatable {
     case none
     /// Some (or all, mid-transfer) tracks are downloaded; `completed` of
     /// `total` are done. Covers every in-progress mix — queued, downloading,
-    /// failed, or a combination — the label only cares how many finished.
-    case downloading(completed: Int, total: Int)
+    /// failed, or a combination. `failed` (beads_mobilemusic-uxc kickback) is
+    /// how many of the non-completed tracks are PERMANENTLY failed (not just
+    /// queued/downloading) — a determinate progress bar with no failed count
+    /// looked like live activity even when every remaining track was stalled
+    /// on an error. `failed` never exceeds `total - completed`.
+    case downloading(completed: Int, total: Int, failed: Int)
     /// Every track is `.completed`.
     case allDownloaded
 
@@ -375,7 +379,8 @@ public enum AggregateDownloadState: Equatable {
         if completed == statuses.count { return .allDownloaded }
         let anyActivity = statuses.contains { $0 != nil }
         guard anyActivity else { return .none }
-        return .downloading(completed: completed, total: statuses.count)
+        let failed = statuses.filter { $0 == .failed }.count
+        return .downloading(completed: completed, total: statuses.count, failed: failed)
     }
 }
 
