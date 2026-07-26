@@ -72,6 +72,12 @@ struct AddProviderView: View {
     @State private var error: String?
     @State private var isSaving = false
 
+    // beads_mobilemusic-uxb.1: Task handles for the in-flight save/sign-in so
+    // Cancel (and swipe-to-dismiss, via onDisappear) can actually stop them
+    // instead of merely dismissing the sheet while the mutation races on.
+    @State private var saveTask: Task<Void, Never>?
+    @State private var signInTask: Task<Void, Never>?
+
     init(editing: Provider? = nil, lockedToM3U: Bool = false) {
         self.editing = editing
         self.lockedToM3U = lockedToM3U
@@ -373,6 +379,15 @@ struct AddProviderView: View {
                 }
             }
             .onAppear { populateFromEditing() }
+            .onDisappear {
+                // beads_mobilemusic-uxb.1: cancel any in-flight save/sign-in when
+                // the sheet goes away, whether via Cancel or an interactive
+                // swipe-dismiss — otherwise the background Task can still call
+                // through to providerManager.addProvider after the user believed
+                // they'd aborted.
+                saveTask?.cancel()
+                signInTask?.cancel()
+            }
         }
     }
 
@@ -514,9 +529,16 @@ struct AddProviderView: View {
         guard let host = absSSOHost, !name.isEmpty else { return }
         error = nil
         isSigningIn = true
-        Task {
+        signInTask = Task {
             do {
                 let tokens = try await oidcSession.signIn(host: host)
+                // Cancelled while the OAuth session was up (e.g. sheet dismissed
+                // mid-flow) — bail before seeding tokens or adding the provider so
+                // cancellation doesn't leave a half-added provider behind.
+                guard !Task.isCancelled else {
+                    await MainActor.run { isSigningIn = false }
+                    return
+                }
                 let provider = Provider(
                     name: name,
                     type: .audiobookshelf(host: host, username: "", password: ""),
@@ -656,7 +678,7 @@ struct AddProviderView: View {
                 isEnabled: existing.isEnabled,
                 stripStreamIDs: stripStreamIDs
             )
-            Task {
+            saveTask = Task {
                 await providerManager.updateProvider(updated)
                 if let loadError = providerManager.error {
                     error = loadError
@@ -667,7 +689,7 @@ struct AddProviderView: View {
             }
         } else {
             let provider = Provider(name: name, type: type, stripStreamIDs: stripStreamIDs)
-            Task {
+            saveTask = Task {
                 await providerManager.addProvider(provider)
                 if let loadError = providerManager.error {
                     error = loadError

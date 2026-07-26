@@ -222,6 +222,12 @@ public final class ProviderManager: ObservableObject {
         // below re-runs the EPG fetch and will set this if it's still true.
         error = nil
 
+        // beads_mobilemusic-uxb.1: re-check right before the mutation, not just
+        // at the awaits inside validateProvider — validation can finish and
+        // cancellation can land in the same instant, and a caller (e.g.
+        // AddProviderView's Cancel/dismiss) must never see a half-added provider.
+        guard !Task.isCancelled else { return }
+
         let existingGroups = Set(rawChannels.map(\.group))
 
         providers.append(provider)
@@ -285,6 +291,9 @@ public final class ProviderManager: ObservableObject {
         guard await validateProvider(provider, context: "updateProvider") else { return }
 
         error = nil
+
+        // beads_mobilemusic-uxb.1: same cancellation re-check as addProvider.
+        guard !Task.isCancelled else { return }
 
         providers[index] = provider
         await saveProviders()
