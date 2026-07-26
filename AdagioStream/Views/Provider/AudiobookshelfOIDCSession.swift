@@ -86,6 +86,18 @@ final class AudiobookshelfOIDCSession: NSObject, ASWebAuthenticationPresentation
     private func presentWebSession(authURL: URL) async throws -> URL {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
+                // beads_mobilemusic-uxg: bail before constructing/starting the
+                // session if the Task was already cancelled. Without this, an
+                // already-cancelled Task racing session.start() returning
+                // false (a documented ASWebAuthenticationSession failure
+                // mode) could resume the continuation from two places —
+                // whether the completion handler also fires in that case is
+                // undocumented, so this removes the compound window entirely
+                // rather than relying on it not happening.
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: SignInError.cancelled)
+                    return
+                }
                 let session = ASWebAuthenticationSession(
                     url: authURL,
                     callbackURLScheme: AudiobookshelfOIDC.callbackScheme

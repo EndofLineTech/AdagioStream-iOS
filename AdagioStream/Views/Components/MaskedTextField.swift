@@ -65,9 +65,10 @@ struct MaskedTextField: View {
             .accessibilityLabel(accessibilityLabel)
 
             Button {
-                // Move focus to whichever field is about to become visible
-                // BEFORE flipping isRevealed, so the keyboard never drops
-                // between the two field identities.
+                // beads_mobilemusic-uxg: isRevealed flips first, then focus is
+                // handed to whichever field just became visible — both happen
+                // in this same synchronous action, so the keyboard never drops
+                // between the two field identities regardless of the order.
                 let wasFocused = isFocused != nil
                 isRevealed.toggle()
                 if wasFocused { isFocused = isRevealed }

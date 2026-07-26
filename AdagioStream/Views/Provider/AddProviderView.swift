@@ -633,6 +633,11 @@ struct AddProviderView: View {
                         dismiss()
                     }
                 }
+            } catch AudiobookshelfOIDCSession.SignInError.cancelled {
+                // beads_mobilemusic-uxg: benign cancellation (view is
+                // dismissing) — matches the guard-pattern used elsewhere in
+                // this function; don't surface an error banner for it.
+                await MainActor.run { isSigningIn = false }
             } catch {
                 await MainActor.run {
                     isSigningIn = false
