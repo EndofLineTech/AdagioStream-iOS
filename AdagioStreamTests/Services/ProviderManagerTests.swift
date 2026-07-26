@@ -226,6 +226,40 @@ final class ProviderManagerTests: XCTestCase {
         )
     }
 
+    // MARK: - Cancellation guard (beads_mobilemusic-uxb.1 / kickback regression net)
+    //
+    // addProvider re-checks Task.isCancelled immediately before mutating
+    // `providers`, so a Cancel/dismiss racing the in-flight validation never
+    // lets a half-added provider slip through. Pins that contract: even when
+    // validation itself succeeds, an already-cancelled Task must leave
+    // `providers` untouched.
+
+    @MainActor
+    func testAddProviderInCancelledTaskLeavesProvidersEmpty() async {
+        let manager = ProviderManager()
+        manager.subsonicPingValidator = { _, _, _ in /* success */ }
+
+        let provider = Provider(
+            name: "Cancelled Add",
+            type: .subsonic(
+                host: URL(string: "http://nas.local:4533")!,
+                username: "alice",
+                password: "secret"
+            )
+        )
+
+        let task = Task { @MainActor in
+            await manager.addProvider(provider)
+        }
+        task.cancel()
+        await task.value
+
+        XCTAssertTrue(
+            manager.providers.isEmpty,
+            "A Task cancelled before/during addProvider must never mutate providers, even when validation succeeds"
+        )
+    }
+
     // MARK: - loadChannels(from:) for .subsonic returns [] without throwing
 
     @MainActor
