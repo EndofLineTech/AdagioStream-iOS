@@ -34,8 +34,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     /// True when anything is playing that warrants the mini-player: a radio/
-    /// library `nowPlaying` item OR an Audiobookshelf book (audiobooks are a
-    /// separate path with no `nowPlaying` item — yu8.1/yu8.4).
+    /// library track OR an Audiobookshelf book. uxa.1 gave `PlaybackSource` an
+    /// `.audiobook` case, so `nowPlaying` DOES return the book once one is
+    /// playing (via `playbackSource?.currentItem`) — this is kept as a belt-
+    /// and-suspenders `currentAudiobook != nil` check, not because
+    /// `nowPlaying` is nil for audiobooks. Consumers that need audiobook-only
+    /// state (chapter, global time) still must check `currentAudiobook`/
+    /// `isAudiobookMode` — `NowPlayingItem` doesn't carry those fields.
     public var hasActivePlayback: Bool {
         nowPlaying != nil || currentAudiobook != nil
     }

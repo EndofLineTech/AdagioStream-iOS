@@ -35,9 +35,12 @@ struct NowPlayingView: View {
         return false
     }
 
-    /// True when an Audiobookshelf book is playing (yu8.4). Audiobooks are their
-    /// own playback path — not a `nowPlaying` item — so they get a dedicated
-    /// player surface: chapter title, book-global seek bar, chapter skip.
+    /// True when an Audiobookshelf book is playing (yu8.4). Since uxa.1,
+    /// `audioPlayer.nowPlaying` DOES return the book (PlaybackSource's
+    /// `.audiobook` case) — this is NOT a "no nowPlaying item" gate. It exists
+    /// because `NowPlayingItem` doesn't carry audiobook-only state (chapter,
+    /// book-global time), so this view still needs its own dedicated surface:
+    /// chapter title, book-global seek bar, chapter skip.
     private var isAudiobookMode: Bool { audioPlayer.currentAudiobook != nil }
 
     var body: some View {
