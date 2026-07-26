@@ -196,12 +196,11 @@ struct AddProviderView: View {
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Xtream Codes server URL")
                         TextField("Username", text: $xcUsername)
-                            .textContentType(.init(rawValue: ""))
+                            .textContentType(.username)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Xtream Codes username")
-                        MaskedTextField(placeholder: "Password", text: $xcPassword)
-                            .accessibilityLabel("Xtream Codes password")
+                        MaskedTextField(placeholder: "Password", text: $xcPassword, accessibilityLabel: "Xtream Codes password")
                     }
 
                     if isXtreamCodesHTTP {
@@ -230,12 +229,11 @@ struct AddProviderView: View {
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Navidrome server URL")
                         TextField("Username", text: $subsonicUsername)
-                            .textContentType(.init(rawValue: ""))
+                            .textContentType(.username)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Navidrome username")
-                        MaskedTextField(placeholder: "Password", text: $subsonicPassword)
-                            .accessibilityLabel("Navidrome password")
+                        MaskedTextField(placeholder: "Password", text: $subsonicPassword, accessibilityLabel: "Navidrome password")
                     } header: {
                         Text("Navidrome / Subsonic Settings")
                     } footer: {
@@ -302,12 +300,11 @@ struct AddProviderView: View {
                     if absShowsPasswordFields {
                         Section {
                             TextField("Username", text: $absUsername)
-                                .textContentType(.init(rawValue: ""))
+                                .textContentType(.username)
                                 .autocorrectionDisabled()
                                 .textInputAutocapitalization(.never)
                                 .accessibilityLabel("Audiobookshelf username")
-                            MaskedTextField(placeholder: "Password", text: $absPassword)
-                                .accessibilityLabel("Audiobookshelf password")
+                            MaskedTextField(placeholder: "Password", text: $absPassword, accessibilityLabel: "Audiobookshelf password")
                         } header: {
                             Text("Sign in with username & password")
                         }
