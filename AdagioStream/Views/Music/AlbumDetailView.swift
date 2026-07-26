@@ -271,22 +271,11 @@ struct AlbumDownloadAllButton: View {
 
     @EnvironmentObject private var downloadManager: DownloadManager
 
-    private enum AggregateState {
-        case allDownloaded
-        case someDownloading
-        case none
-    }
-
-    private var aggregateState: AggregateState {
-        guard !tracks.isEmpty else { return .none }
-        let completedCount = tracks.filter { downloadManager.isDownloaded(trackID: $0.id) }.count
-        if completedCount == tracks.count { return .allDownloaded }
-        let activeCount = tracks.filter { track in
-            let status = downloadManager.downloads.first(where: { $0.id == track.id })?.status
-            return status == .queued || status == .downloading
-        }.count
-        if activeCount > 0 || completedCount > 0 { return .someDownloading }
-        return .none
+    private var aggregateState: AggregateDownloadState {
+        let statuses = tracks.map { track in
+            downloadManager.downloads.first(where: { $0.id == track.id })?.status
+        }
+        return AggregateDownloadState.derive(statuses: statuses)
     }
 
     var body: some View {
@@ -298,15 +287,20 @@ struct AlbumDownloadAllButton: View {
                 .accessibilityLabel("All tracks downloaded")
                 .accessibilityValue("Downloaded")
 
-        case .someDownloading:
+        case .downloading(let completed, let total):
             Button {
                 enqueueAll()
             } label: {
-                Label("Download All", systemImage: "arrow.down.circle")
-                    .font(.subheadline)
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Downloading \(completed) of \(total)", systemImage: "arrow.down.circle")
+                        .font(.subheadline)
+                    ProgressView(value: Double(completed), total: Double(total))
+                        .progressViewStyle(.linear)
+                }
             }
             .buttonStyle(.bordered)
-            .accessibilityLabel("Download all tracks in this album")
+            .accessibilityLabel("Downloading \(completed) of \(total) tracks")
+            .accessibilityValue("\(completed) of \(total) complete")
 
         case .none:
             Button {

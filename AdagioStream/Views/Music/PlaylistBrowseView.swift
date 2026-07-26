@@ -427,23 +427,50 @@ struct PlaylistDetailView: View {
 
     // MARK: - Download actions (l31.2)
 
+    /// Aggregate download state across the playlist's tracks (uxc.4) —
+    /// replaces the old binary all-downloaded/not-downloaded check with the
+    /// same determinate `.downloading(completed:total:)` derivation
+    /// `AlbumDownloadAllButton` uses.
+    private var aggregateDownloadState: AggregateDownloadState {
+        let statuses = viewModel.playlistTracks.map { track in
+            downloadManager.downloads.first(where: { $0.id == track.id })?.status
+        }
+        return AggregateDownloadState.derive(statuses: statuses)
+    }
+
     @ViewBuilder
     private var playlistDownloadAllButton: some View {
-        let tracks = viewModel.playlistTracks
-        let allDownloaded = !tracks.isEmpty &&
-            tracks.allSatisfy { downloadManager.isDownloaded(trackID: $0.id) }
-        if allDownloaded {
+        switch aggregateDownloadState {
+        case .allDownloaded:
             Label("All Downloaded", systemImage: "checkmark.circle.fill")
                 .accessibilityLabel("All tracks downloaded")
-        } else {
+
+        case .downloading(let completed, let total):
             Button {
-                for track in tracks {
-                    downloadManager.download(track: track, via: api)
+                enqueueAllPlaylistTracks()
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Downloading \(completed) of \(total)", systemImage: "arrow.down.circle")
+                    ProgressView(value: Double(completed), total: Double(total))
+                        .progressViewStyle(.linear)
                 }
+            }
+            .accessibilityLabel("Downloading \(completed) of \(total) tracks")
+            .accessibilityValue("\(completed) of \(total) complete")
+
+        case .none:
+            Button {
+                enqueueAllPlaylistTracks()
             } label: {
                 Label("Download All", systemImage: "arrow.down.circle")
             }
             .accessibilityLabel("Download all tracks in this playlist")
+        }
+    }
+
+    private func enqueueAllPlaylistTracks() {
+        for track in viewModel.playlistTracks {
+            downloadManager.download(track: track, via: api)
         }
     }
 

@@ -348,6 +348,37 @@ public enum DownloadStatus: String, Codable, CaseIterable {
     case failed
 }
 
+// MARK: - Aggregate download state (uxc.4)
+
+/// Aggregate download state across a set of tracks (an album, a playlist).
+/// Replaces the old binary "all downloaded vs. not" shown by
+/// `AlbumDownloadAllButton`/`playlistDownloadAllButton` with a determinate
+/// `.downloading(completed:total:)` matching per-track `TrackDownloadButton`'s
+/// queued/downloading/completed/failed vocabulary — any track NOT `.completed`
+/// (queued, downloading, failed, or paused) counts toward "not done yet".
+public enum AggregateDownloadState: Equatable {
+    /// No tracks, or none has any download activity.
+    case none
+    /// Some (or all, mid-transfer) tracks are downloaded; `completed` of
+    /// `total` are done. Covers every in-progress mix — queued, downloading,
+    /// failed, or a combination — the label only cares how many finished.
+    case downloading(completed: Int, total: Int)
+    /// Every track is `.completed`.
+    case allDownloaded
+
+    /// Derives the aggregate state from each track's current download status
+    /// (`nil` = not downloaded at all). Pure — no DownloadManager/network
+    /// dependency, so this is unit-testable as a truth table.
+    public static func derive(statuses: [DownloadStatus?]) -> AggregateDownloadState {
+        guard !statuses.isEmpty else { return .none }
+        let completed = statuses.filter { $0 == .completed }.count
+        if completed == statuses.count { return .allDownloaded }
+        let anyActivity = statuses.contains { $0 != nil }
+        guard anyActivity else { return .none }
+        return .downloading(completed: completed, total: statuses.count)
+    }
+}
+
 /// A row in the `downloads` table (v2 schema).
 ///
 /// The `id` is the Navidrome track ID — there is intentionally NO foreign key
