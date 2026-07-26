@@ -64,11 +64,18 @@ public actor ABSProgressSyncQueue {
     /// Current pending updates (snapshot).
     public func snapshot() -> [ABSProgressUpdate] { pending }
 
-    /// The queued offline `currentTime` for one book, or `nil` if nothing is
-    /// pending for it. Used to seed a live resume so reconnecting can't rewind to
-    /// an older server position (ymf.6) when the flush hasn't landed yet.
-    public func pendingPosition(forBook id: String) -> Double? {
-        pending.first { $0.libraryItemId == id }?.currentTime
+    /// The queued offline `currentTime` for one book (or one episode of a show,
+    /// when `episodeId` is given), or `nil` if nothing is pending for it. Used
+    /// to seed a live OR offline resume so playback can't rewind to an older
+    /// position (ymf.6) or start over at 0 when a flush hasn't landed yet.
+    ///
+    /// `episodeId` MUST be passed when looking up an episode — two episodes of
+    /// the same show share `libraryItemId`, so a book-only lookup (`nil`)
+    /// against a show id would match whichever episode happened to be queued,
+    /// not necessarily the one being resumed (beads_mobilemusic-uxc kickback).
+    /// Defaulting to `nil` keeps existing book call sites unchanged.
+    public func pendingPosition(forBook id: String, episodeId: String? = nil) -> Double? {
+        pending.first { $0.libraryItemId == id && $0.episodeId == episodeId }?.currentTime
     }
 
     public var isEmpty: Bool { pending.isEmpty }

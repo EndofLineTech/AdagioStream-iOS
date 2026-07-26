@@ -244,36 +244,46 @@ extension AudioPlayerService {
     /// `AudiobookTimeline` as streaming from the persisted manifest (each file's
     /// global `startOffset`), so chaining, seeking, and chapter math are
     /// identical — only the URLs are `file://` and progress is queued offline.
+    ///
+    /// Resume (beads_mobilemusic-uxc kickback): consults the offline progress
+    /// queue the SAME way the live path (`playAudiobook`) does — a prior
+    /// offline (or offline-fallback) session for this book queues its position
+    /// there and it persists to disk, so it survives an app relaunch even
+    /// before the next reconnect flush. `book.currentTime` (server/library
+    /// cache) is the fallback when nothing is queued.
     public func playDownloadedAudiobook(_ book: Audiobook, download: AudiobookDownloadRecord, via api: AudiobookshelfAPI, startGlobalTime: Double? = nil) {
         let timeline = download.timeline()
         guard !timeline.files.isEmpty else {
             self.error = "This download is incomplete."
             return
         }
-        let resume = AudioPlayerService.resumePosition(
-            override: startGlobalTime,
-            sessionCurrentTime: nil,
-            bookCurrentTime: book.currentTime
-        )
-        guard let located = timeline.locate(global: resume) else { return }
+        Task { @MainActor in
+            let offlinePending = await ABSProgressSyncQueue.shared.pendingPosition(forBook: book.id)
+            let resume = AudioPlayerService.resumePosition(
+                override: startGlobalTime,
+                sessionCurrentTime: offlinePending,
+                bookCurrentTime: book.currentTime
+            )
+            guard let located = timeline.locate(global: resume) else { return }
 
-        let abs = AudiobookSession(
-            book: book,
-            sessionID: "",            // no server session offline
-            timeline: timeline,
-            api: api,
-            startFile: located.file,
-            startGlobalTime: resume,
-            isOffline: true
-        )
-        self.audiobookSession = abs
-        self.currentAudiobook = book
-        self.audiobookDuration = timeline.totalDuration
-        self.audiobookGlobalTime = resume
-        self.currentChapter = timeline.chapter(at: resume)
-        self.currentTrackArtwork = nil
-        self.nowPlayingArtworkURL = nil
-        loadAudiobookFile(located.file, fileOffset: located.fileOffset)
+            let abs = AudiobookSession(
+                book: book,
+                sessionID: "",            // no server session offline
+                timeline: timeline,
+                api: api,
+                startFile: located.file,
+                startGlobalTime: resume,
+                isOffline: true
+            )
+            self.audiobookSession = abs
+            self.currentAudiobook = book
+            self.audiobookDuration = timeline.totalDuration
+            self.audiobookGlobalTime = resume
+            self.currentChapter = timeline.chapter(at: resume)
+            self.currentTrackArtwork = nil
+            self.nowPlayingArtworkURL = nil
+            self.loadAudiobookFile(located.file, fileOffset: located.fileOffset)
+        }
     }
 
     // MARK: - Podcast episode playback (E2 / 72i.1, 72i.2)
@@ -368,48 +378,67 @@ extension AudioPlayerService {
     /// `playDownloadedAudiobook` exactly (single-file `timeline()` rebuild,
     /// `isOffline` session, offline progress queueing) with `kind: .podcast`
     /// so `progressKey`/auto-play-next keep working offline.
+    ///
+    /// Resume (beads_mobilemusic-uxc kickback): a manifest-reconstructed
+    /// `ABSEpisodeDTO` (built by the offline browser with no network fetch)
+    /// carries `userMediaProgress == nil`, so `bookCurrentTime` alone would
+    /// always resume at 0. Consults the offline progress queue keyed by BOTH
+    /// show id and episode id (`pendingPosition(forBook:episodeId:)`) — this
+    /// is episode-aware specifically so two episodes of the same show (same
+    /// `libraryItemId`) can't collide. The queue persists to disk, so this
+    /// resumes correctly even after an app relaunch, as long as the last play
+    /// of this episode happened offline (or fell back to offline) and hasn't
+    /// flushed yet. Progress from an ONLINE-only play of this episode (never
+    /// offline, no relaunch-surviving cache exists for episodes today) is NOT
+    /// covered by this fix; a durable per-episode progress cache (e.g. a
+    /// `currentTime` column on `AudiobookDownloadRecord`, updated at pause/
+    /// stop) would be needed to close that gap — flagged as follow-up work,
+    /// not filed as a bead by this fix (beads_mobilemusic-uxc kickback).
     public func playDownloadedEpisode(_ episode: ABSEpisodeDTO, download: AudiobookDownloadRecord, via api: AudiobookshelfAPI, context: PodcastPlaybackContext, startGlobalTime: Double? = nil) {
         let timeline = download.timeline()
         guard !timeline.files.isEmpty else {
             self.error = "This download is incomplete."
             return
         }
-        let resume = AudioPlayerService.resumePosition(
-            override: startGlobalTime,
-            sessionCurrentTime: nil,
-            bookCurrentTime: episode.userMediaProgress?.currentTime ?? 0
-        )
-        guard let located = timeline.locate(global: resume) else { return }
+        Task { @MainActor in
+            let offlinePending = await ABSProgressSyncQueue.shared.pendingPosition(forBook: context.libraryItemId, episodeId: episode.id)
+            let resume = AudioPlayerService.resumePosition(
+                override: startGlobalTime,
+                sessionCurrentTime: offlinePending,
+                bookCurrentTime: episode.userMediaProgress?.currentTime ?? 0
+            )
+            guard let located = timeline.locate(global: resume) else { return }
 
-        let episodeRecord = Audiobook(
-            id: episode.id,
-            libraryItemId: context.libraryItemId,
-            libraryId: "",
-            title: episode.title ?? "Episode",
-            author: context.showTitle,
-            duration: timeline.totalDuration,
-            currentTime: resume,
-            updatedAt: Int(Date().timeIntervalSince1970)
-        )
+            let episodeRecord = Audiobook(
+                id: episode.id,
+                libraryItemId: context.libraryItemId,
+                libraryId: "",
+                title: episode.title ?? "Episode",
+                author: context.showTitle,
+                duration: timeline.totalDuration,
+                currentTime: resume,
+                updatedAt: Int(Date().timeIntervalSince1970)
+            )
 
-        let abs = AudiobookSession(
-            book: episodeRecord,
-            sessionID: "",            // no server session offline
-            timeline: timeline,
-            api: api,
-            startFile: located.file,
-            startGlobalTime: resume,
-            isOffline: true,
-            kind: .podcast(episodeId: episode.id, context: context)
-        )
-        self.audiobookSession = abs
-        self.currentAudiobook = episodeRecord
-        self.audiobookDuration = timeline.totalDuration
-        self.audiobookGlobalTime = resume
-        self.currentChapter = nil
-        self.currentTrackArtwork = nil
-        self.nowPlayingArtworkURL = nil
-        loadAudiobookFile(located.file, fileOffset: located.fileOffset)
+            let abs = AudiobookSession(
+                book: episodeRecord,
+                sessionID: "",            // no server session offline
+                timeline: timeline,
+                api: api,
+                startFile: located.file,
+                startGlobalTime: resume,
+                isOffline: true,
+                kind: .podcast(episodeId: episode.id, context: context)
+            )
+            self.audiobookSession = abs
+            self.currentAudiobook = episodeRecord
+            self.audiobookDuration = timeline.totalDuration
+            self.audiobookGlobalTime = resume
+            self.currentChapter = nil
+            self.currentTrackArtwork = nil
+            self.nowPlayingArtworkURL = nil
+            self.loadAudiobookFile(located.file, fileOffset: located.fileOffset)
+        }
     }
 
     /// Loads one file into VLC seeked to `fileOffset` seconds. Mirrors the

@@ -65,4 +65,51 @@ final class AudiobookSyncTests: XCTestCase {
         let r = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: seeded, bookCurrentTime: 100)
         XCTAssertEqual(r, 800, accuracy: 0.001)
     }
+
+    // MARK: - Offline episode resume (beads_mobilemusic-uxc kickback)
+    //
+    // Mirrors the exact derivation `playDownloadedEpisode` performs: a
+    // manifest-reconstructed `ABSEpisodeDTO` (built by the offline browser
+    // with no network fetch) carries `userMediaProgress == nil`, so
+    // `bookCurrentTime` is always 0 — the offline progress queue, looked up
+    // via the episode-aware `pendingPosition(forBook:episodeId:)`, is the only
+    // reachable source of a resume position. Uses a disposable on-disk queue
+    // (same pattern as `ABSProgressSyncQueueTests`) — deterministic, no
+    // network, no mocked VLC/session machinery.
+
+    func testReconstructedEpisodeResumesFromMatchingQueueEntry() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("abs-queue-resume-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let queue = ABSProgressSyncQueue(fileURL: tmp)
+        await queue.enqueue(ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-1", currentTime: 640, duration: 1800))
+
+        let offlinePending = await queue.pendingPosition(forBook: "show-1", episodeId: "ep-1")
+        let resume = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: offlinePending, bookCurrentTime: 0)
+        XCTAssertEqual(resume, 640, accuracy: 0.001, "reconstructed episode + matching queue entry resumes there")
+    }
+
+    func testReconstructedEpisodeIgnoresADifferentEpisodesQueuedProgress() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("abs-queue-resume-collision-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let queue = ABSProgressSyncQueue(fileURL: tmp)
+        // Only a DIFFERENT episode of the same show has queued progress.
+        await queue.enqueue(ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-2", currentTime: 900, duration: 1800))
+
+        let offlinePending = await queue.pendingPosition(forBook: "show-1", episodeId: "ep-1")
+        let resume = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: offlinePending, bookCurrentTime: 0)
+        XCTAssertEqual(resume, 0, accuracy: 0.001, "must not pick up a different episode's queued progress")
+    }
+
+    func testReconstructedEpisodeResumesAtZeroWithNoProgressAnywhere() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("abs-queue-resume-empty-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let queue = ABSProgressSyncQueue(fileURL: tmp)
+
+        let offlinePending = await queue.pendingPosition(forBook: "show-1", episodeId: "ep-1")
+        let resume = AudioPlayerService.resumePosition(override: nil, sessionCurrentTime: offlinePending, bookCurrentTime: 0)
+        XCTAssertEqual(resume, 0, accuracy: 0.001)
+    }
 }

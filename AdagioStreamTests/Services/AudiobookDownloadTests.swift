@@ -454,6 +454,27 @@ final class ABSProgressSyncQueueTests: XCTestCase {
         XCTAssertNil(none, "no pending entry → nil")
     }
 
+    // pendingPosition must be episode-aware: two episodes of the same show
+    // share `libraryItemId`, so a lookup for one must never return the
+    // other's queued position (beads_mobilemusic-uxc kickback — offline
+    // episode playback resumed at 0 because the lookup ignored episodeId).
+
+    func testPendingPositionIsEpisodeAwareForSameShow() async throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("abs-queue-ep-pos-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let queue = ABSProgressSyncQueue(fileURL: tmp)
+        await queue.enqueue(ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-1", currentTime: 400, duration: 1800))
+        await queue.enqueue(ABSProgressUpdate(libraryItemId: "show-1", episodeId: "ep-2", currentTime: 900, duration: 1800))
+
+        let ep1 = await queue.pendingPosition(forBook: "show-1", episodeId: "ep-1")
+        XCTAssertEqual(ep1, 400, "must resume the queried episode, not whichever one is queued")
+        let ep2 = await queue.pendingPosition(forBook: "show-1", episodeId: "ep-2")
+        XCTAssertEqual(ep2, 900)
+        let ep3 = await queue.pendingPosition(forBook: "show-1", episodeId: "ep-3")
+        XCTAssertNil(ep3, "a third episode of the same show has no queued progress")
+    }
+
     func testEmptyQueueFlushIsTrivialSuccess() async throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("abs-queue-empty-\(UUID().uuidString).json")
