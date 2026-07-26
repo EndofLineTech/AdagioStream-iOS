@@ -44,6 +44,11 @@ struct CustomPlaylistDetailView: View {
                             }
                         }
                         .onDelete { offsets in
+                            // `offsets.first` only ever has one element: List's
+                            // built-in swipe-to-delete is single-row, and there
+                            // is no multi-select UI for groups (unlike EditButton's
+                            // reorder mode). Not a bug — just narrower than IndexSet
+                            // implies (beads_mobilemusic-uxc kickback nit).
                             if let index = offsets.first {
                                 groupToDelete = playlist.groups[index]
                             }
