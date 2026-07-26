@@ -10,6 +10,17 @@ struct ChannelsTabView: View {
                 if providerManager.isLoading && providerManager.channels.isEmpty {
                     ProgressView("Loading channels…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let error = providerManager.error, providerManager.channels.isEmpty {
+                    // uxa.3: error + Retry, matching the LoadState-style pattern
+                    // already used in AudiobooksTabView/PodcastsTabView — this
+                    // is a remote-only device, so a dead-end with no retry
+                    // affordance was a real gap.
+                    VStack(spacing: 24) {
+                        Text("Couldn't load channels").font(.title2)
+                        Text(error).foregroundStyle(.secondary)
+                        Button("Retry") { Task { await providerManager.loadChannels() } }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if providerManager.channels.isEmpty {
                     Text("No channels available.")
                         .foregroundStyle(.secondary)
