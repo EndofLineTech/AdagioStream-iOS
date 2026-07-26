@@ -437,6 +437,14 @@ extension AudioPlayerService {
         // Radio/library-shared VLC teardown + fresh player.
         currentChannel = nil
         currentTrack = nil
+        // uxa kickback (finding 2): trackDuration/trackElapsed are the library
+        // mini-player hairline's inputs (MiniPlayerView). startLibraryTrack
+        // resets both at track start (AudioPlayerService+Queue.swift); this
+        // path never did, so a library→audiobook transition without an
+        // intervening stop() left the hairline frozen at the last library
+        // track's stale position for the whole audiobook session.
+        trackElapsed = 0.0
+        trackDuration = nil
         // uxa.1: mirror into the PlaybackSource seam (matches d6q.7's radio/
         // library mirroring) — this is what CarPlay's Now Playing button and
         // root "Now Playing" shortcut key off of. Covers both audiobooks and
