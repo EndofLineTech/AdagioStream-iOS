@@ -15,6 +15,25 @@ struct ChannelRowView: View {
     private var logoSize: CGFloat { sizeClass == .regular ? 52 : 40 }
     private var logoRadius: CGFloat { sizeClass == .regular ? 10 : 8 }
 
+    // beads_mobilemusic-uxh (record correction): commit 1847be0's message
+    // cites UpNextView.queueRow as the nested-Button-in-List-row precedent —
+    // wrong, queueRow has no nested Buttons. The real in-codebase precedent
+    // for a row with a nested interactive control is
+    // DownloadsView.swift ~:268-301 (DownloadedItemRowView), which uses a
+    // DIFFERENT model: `.accessibilityElement(children: .combine)` +
+    // `.accessibilityAction(named:)` for its nested delete Button, instead of
+    // leaving it separately focusable.
+    //
+    // This row (and TrackRowView) instead use separately-focusable nested
+    // Buttons for the favorite star / accessory controls — chosen so each
+    // control keeps its own VoiceOver stop, label, and value without a
+    // custom-action menu. That choice is PROVISIONAL pending real-device
+    // VoiceOver verification (tracked by uxh); if verification finds the
+    // nested-Button model doesn't announce/activate correctly, the fallback
+    // is to convert to DownloadsView's combine+accessibilityAction model.
+    // Two models coexisting was drift — this comment is the settlement so it
+    // stops here: new rows should default to the nested-Button model unless
+    // uxh's verification says otherwise.
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {

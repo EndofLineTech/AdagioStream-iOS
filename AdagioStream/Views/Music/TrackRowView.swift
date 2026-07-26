@@ -71,6 +71,16 @@ struct TrackRowView: View {
         // label while the star/download/inline-play Buttons below stay
         // independently focusable — same per-button-granularity model
         // ChannelRowView uses (uxd.1). No caller changes needed.
+        //
+        // beads_mobilemusic-uxh: this separately-focusable-nested-Buttons
+        // model is PROVISIONAL pending real-device VoiceOver verification.
+        // The codebase's other precedent for a nested interactive control in
+        // a List row is DownloadsView.swift ~:268-301, which instead combines
+        // the row into one accessibility element and exposes the nested
+        // Button as an `.accessibilityAction(named:)`. If uxh's verification
+        // finds the nested-Button model here doesn't announce/activate
+        // correctly, fall back to DownloadsView's combine+accessibilityAction
+        // model — see the matching note on ChannelRowView's Button.
         Button(action: onPlay) {
             HStack(spacing: 12) {
                 leadingView
