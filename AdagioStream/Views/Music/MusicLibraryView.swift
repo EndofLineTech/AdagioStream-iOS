@@ -350,13 +350,18 @@ public struct MusicLibraryView: View {
 
     /// Downloaded audiobooks (excludes podcast episodes, which are namespaced
     /// `ep#<showID>#<episodeID>` — see `AudiobookDownloadRecord.isEpisodeDownload`).
+    /// Also requires `allFilesPresent` (beads_mobilemusic-uxc kickback) — a
+    /// `.completed` row whose file(s) were since removed from disk (manual
+    /// deletion, OS storage reclaim) must not appear as a tappable offline
+    /// item. `DownloadsView` is untouched — its own membership check is
+    /// pre-existing and out of scope here.
     private var offlineBooks: [AudiobookDownloadRecord] {
-        downloadManager.audiobookDownloads.filter { $0.status == .completed && !$0.isEpisodeDownload }
+        downloadManager.audiobookDownloads.filter { $0.status == .completed && $0.allFilesPresent && !$0.isEpisodeDownload }
     }
 
-    /// Downloaded podcast episodes.
+    /// Downloaded podcast episodes. See `offlineBooks` for the `allFilesPresent` rationale.
     private var offlineEpisodes: [AudiobookDownloadRecord] {
-        downloadManager.audiobookDownloads.filter { $0.status == .completed && $0.isEpisodeDownload }
+        downloadManager.audiobookDownloads.filter { $0.status == .completed && $0.allFilesPresent && $0.isEpisodeDownload }
     }
 
     /// Shown when offline mode is on. Lists downloaded tracks, audiobooks, and
