@@ -560,7 +560,14 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
                 let state = Self.rootPlaceholderState(
                     providersEmpty: providerManager.didHydrateProviders && providerManager.providers.isEmpty,
                     isLoading: providerManager.isLoading || !providerManager.didHydrateProviders,
-                    hasError: providerManager.error != nil
+                    // uxf: channelLoadError (not the shared `error` field) so an
+                    // unrelated background write (favorite/group-order save,
+                    // EPG warning) can't make a healthy channel list read as
+                    // failed. It's set/cleared inside the same loadChannels()
+                    // run that flips `isLoading`, so the existing $isLoading
+                    // subscription above already re-evaluates this on change —
+                    // no separate subscription needed.
+                    hasError: providerManager.channelLoadError != nil
                 )
                 let placeholder = CPListItem(text: state.text, detailText: state.detailText)
                 placeholder.handler = { _, completion in completion() }
@@ -718,15 +725,6 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             }
             item.setImage(scaled)
         }
-    }
-
-    private func sortableName(_ name: String) -> String {
-        for prefix in sortPrefixes {
-            if name.hasPrefix(prefix) {
-                return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return name
     }
 
     private func refreshChannelListDetailText() {

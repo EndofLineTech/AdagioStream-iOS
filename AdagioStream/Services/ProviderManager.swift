@@ -25,6 +25,15 @@ public final class ProviderManager: ObservableObject {
     @Published public var epgData: [String: [EPGEntry]] = [:]
     @Published public var isLoading = false
     @Published public var error: String?
+    /// Channel-load-only error signal (beads_mobilemusic-uxf). `error` above is
+    /// shared by unrelated background writers (favorite/group-order saves, EPG
+    /// fetch warnings) and is only cleared at `loadChannels()` entry, so a
+    /// stray persistence failure elsewhere could make a consumer keyed on
+    /// `error != nil` report "channels failed to load" while channels are
+    /// healthy. This is set ONLY by `loadChannels()`'s own failure path and
+    /// cleared at its entry — consult this, not `error`, for "did channel
+    /// loading fail" checks (e.g. CarPlay's root placeholder).
+    @Published public var channelLoadError: String?
     /// True once `loadProviders()` has completed at least once. `providers`
     /// starts as an empty array and hydrates asynchronously from Keychain at
     /// launch — before this flips, `providers.isEmpty` is indistinguishable
@@ -383,6 +392,7 @@ public final class ProviderManager: ObservableObject {
         defer { isLoadingChannels = false }
         isLoading = true
         error = nil
+        channelLoadError = nil
 
         let enabled = providers.filter(\.isEnabled)
         let m3uCount = enabled.filter { if case .m3u = $0.type { return true } else { return false } }.count
@@ -449,6 +459,7 @@ public final class ProviderManager: ObservableObject {
 
         if !errors.isEmpty {
             self.error = errors.joined(separator: "\n")
+            self.channelLoadError = self.error
         }
 
         // Deduplicate channels — first provider wins when IDs collide

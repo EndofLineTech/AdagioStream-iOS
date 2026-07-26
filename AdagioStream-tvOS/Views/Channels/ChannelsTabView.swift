@@ -10,11 +10,14 @@ struct ChannelsTabView: View {
                 if providerManager.isLoading && providerManager.channels.isEmpty {
                     ProgressView("Loading channels…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = providerManager.error, providerManager.channels.isEmpty {
+                } else if let error = providerManager.channelLoadError, providerManager.channels.isEmpty {
                     // uxa.3: error + Retry, matching the LoadState-style pattern
                     // already used in AudiobooksTabView/PodcastsTabView — this
                     // is a remote-only device, so a dead-end with no retry
                     // affordance was a real gap.
+                    // uxf: channelLoadError, not the shared `error` field — same
+                    // precision gain as CarPlay's root placeholder, and this is
+                    // a one-line swap since the gate is already channels.isEmpty.
                     VStack(spacing: 24) {
                         Text("Couldn't load channels").font(.title2)
                         Text(error).foregroundStyle(.secondary)

@@ -224,6 +224,14 @@ final class ProviderManagerTests: XCTestCase {
             manager.providers.contains(where: { $0.name == "Bad Navidrome" }),
             "Provider must NOT be persisted when ping fails"
         )
+        // beads_mobilemusic-uxf: a validation failure (not a loadChannels()
+        // failure) must not surface as channelLoadError — that's the signal
+        // CarPlay's root placeholder and tvOS's ChannelsTabView key off of to
+        // show "Couldn't load channels", and this path never touched channels.
+        XCTAssertNil(
+            manager.channelLoadError,
+            "channelLoadError must stay nil for a validation failure, unlike the shared `error` field"
+        )
     }
 
     // MARK: - Cancellation guard (beads_mobilemusic-uxb.1 / kickback regression net)
