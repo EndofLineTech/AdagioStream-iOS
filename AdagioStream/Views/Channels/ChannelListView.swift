@@ -165,6 +165,9 @@ struct ChannelListView: View {
                         .font(.caption)
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
+                        // uxd.2: .mini keeps the chip visually compact; the frame
+                        // enlarges the tappable region to the 44pt minimum.
+                        .frame(minWidth: 44, minHeight: 44)
                     }
                 }
             }

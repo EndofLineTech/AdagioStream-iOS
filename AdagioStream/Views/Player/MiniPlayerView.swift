@@ -101,6 +101,10 @@ struct MiniPlayerView: View {
                                 .foregroundStyle(.red)
                                 .lineLimit(1)
                         } else if audioPlayer.timeShiftBuffer.isTimeShifted {
+                            // uxd.2: the LIVE button used to live here, nested
+                            // inside the outer info-column Button's label — an
+                            // unreliable tap-routing pattern. It's now a sibling
+                            // control in the top-level HStack (see below).
                             HStack(spacing: 4) {
                                 Circle()
                                     .fill(.orange)
@@ -109,17 +113,6 @@ struct MiniPlayerView: View {
                                     .font(.caption)
                                     .foregroundStyle(.orange)
                                     .lineLimit(1)
-                                Button {
-                                    audioPlayer.skipToLive()
-                                } label: {
-                                    Text("LIVE")
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Capsule().fill(.red))
-                                }
-                                .buttonStyle(.plain)
                             }
                         } else if !audioPlayer.statusText.isEmpty {
                             HStack(spacing: 4) {
@@ -147,6 +140,25 @@ struct MiniPlayerView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            // uxd.2: LIVE button — sibling of the info-column Button (was
+            // nested inside its label, which made tap routing unreliable).
+            // 44pt min hit area; the visual pill itself stays small.
+            if audioPlayer.timeShiftBuffer.isTimeShifted {
+                Button {
+                    audioPlayer.skipToLive()
+                } label: {
+                    Text("LIVE")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Skip to live")
+            }
 
             // Play/Pause button
             Button {

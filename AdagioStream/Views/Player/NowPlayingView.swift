@@ -192,6 +192,9 @@ struct NowPlayingView: View {
                                 .background(Capsule().fill(.red))
                         }
                         .buttonStyle(.plain)
+                        // uxd.2: 44pt min hit area — the pill itself stays small.
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Skip to live")
                     }
                     .padding(.top, 8)
                 } else if !audioPlayer.statusText.isEmpty {
@@ -267,8 +270,11 @@ struct NowPlayingView: View {
                                     .accessibilityLabel("Up Next")
                             }
                         }
+                        // uxd.2: was forced to 24x24 (well under the 44pt minimum
+                        // tap target); the picker's own glyph is intrinsically
+                        // sized, so growing the frame only enlarges the hit area.
                         AirPlayRoutePickerView()
-                            .frame(width: 24, height: 24)
+                            .frame(width: 44, height: 44)
                         Button("Done") { dismiss() }
                     }
                 }

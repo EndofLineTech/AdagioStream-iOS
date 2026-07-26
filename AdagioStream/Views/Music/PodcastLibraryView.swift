@@ -407,10 +407,13 @@ struct EpisodeDownloadButton: View {
     @ViewBuilder
     private func button(systemImage: String, tint: Color, label: String, _ action: @escaping () -> Void) -> some View {
         if compact {
+            // uxd.2: 44pt hit area to match TrackDownloadButton — the glyph
+            // itself stays compact via .body, only the tappable frame grows.
             Button(action: action) {
                 Image(systemName: systemImage)
+                    .font(.body)
                     .foregroundStyle(tint)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(label)
