@@ -7,6 +7,7 @@ struct CustomPlaylistDetailView: View {
     @State private var showingAddGroup = false
     @State private var newGroupName = ""
     @State private var showingAddEntry = false
+    @State private var groupToDelete: CustomPlaylistGroup?
 
     private var playlist: CustomPlaylist? {
         playlistManager.playlists.first { $0.id == playlistID }
@@ -37,11 +38,15 @@ struct CustomPlaylistDetailView: View {
                                     playlistManager.moveEntries(from: source, to: destination, in: group.id, in: playlistID)
                                 }
                             } header: {
-                                GroupHeader(group: group, playlistID: playlistID)
+                                GroupHeader(group: group, playlistID: playlistID) {
+                                    groupToDelete = group
+                                }
                             }
                         }
                         .onDelete { offsets in
-                            deleteGroups(at: offsets)
+                            if let index = offsets.first {
+                                groupToDelete = playlist.groups[index]
+                            }
                         }
                         .onMove { source, destination in
                             playlistManager.moveGroups(from: source, to: destination, in: playlistID)
@@ -88,6 +93,28 @@ struct CustomPlaylistDetailView: View {
                 }
             }
         }
+        // uxc.6: group deletion (context menu + swipe) had no confirmation —
+        // mirrors CustomPlaylistListView's playlist-delete confirmationDialog.
+        .confirmationDialog(
+            "Delete Group",
+            isPresented: Binding(
+                get: { groupToDelete != nil },
+                set: { if !$0 { groupToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let group = groupToDelete {
+                    playlistManager.deleteGroup(group.id, from: playlistID)
+                }
+                groupToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { groupToDelete = nil }
+        } message: {
+            if let group = groupToDelete {
+                Text("Are you sure you want to delete \"\(group.name)\"? Its channels will be removed.")
+            }
+        }
     }
 
     private func playEntry(_ entry: CustomPlaylistEntry, in playlist: CustomPlaylist) {
@@ -102,18 +129,14 @@ struct CustomPlaylistDetailView: View {
             playlistManager.removeEntry(group.entries[index].id, from: group.id, in: playlistID)
         }
     }
-
-    private func deleteGroups(at offsets: IndexSet) {
-        guard let playlist else { return }
-        for index in offsets {
-            playlistManager.deleteGroup(playlist.groups[index].id, from: playlistID)
-        }
-    }
 }
 
 private struct GroupHeader: View {
     let group: CustomPlaylistGroup
     let playlistID: UUID
+    /// uxc.6: requests confirmation from the parent instead of deleting
+    /// immediately — the parent owns the shared confirmationDialog.
+    let onDeleteRequest: () -> Void
     @EnvironmentObject var playlistManager: CustomPlaylistManager
     @State private var showingRename = false
     @State private var renameText = ""
@@ -128,7 +151,7 @@ private struct GroupHeader: View {
                     Label("Rename", systemImage: "pencil")
                 }
                 Button(role: .destructive) {
-                    playlistManager.deleteGroup(group.id, from: playlistID)
+                    onDeleteRequest()
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }

@@ -10,6 +10,7 @@ struct CustomPlaylistListView: View {
     @State private var showingAddM3U = false
     @State private var m3uToEdit: Provider?
     @State private var m3uToDelete: Provider?
+    @State private var playlistToDelete: CustomPlaylist?
 
     private var m3uProviders: [Provider] {
         providerManager.providers.filter {
@@ -70,15 +71,15 @@ struct CustomPlaylistListView: View {
                                             Label("Rename", systemImage: "pencil")
                                         }
                                         Button(role: .destructive) {
-                                            playlistManager.deletePlaylist(playlist.id)
+                                            playlistToDelete = playlist
                                         } label: {
                                             Label("Delete", systemImage: "trash")
                                         }
                                     }
                                 }
                                 .onDelete { offsets in
-                                    for index in offsets {
-                                        playlistManager.deletePlaylist(playlistManager.playlists[index].id)
+                                    if let index = offsets.first {
+                                        playlistToDelete = playlistManager.playlists[index]
                                     }
                                 }
                                 .onMove { playlistManager.movePlaylists(from: $0, to: $1) }
@@ -140,6 +141,28 @@ struct CustomPlaylistListView: View {
             } message: {
                 if let provider = m3uToDelete {
                     Text("Are you sure you want to delete \"\(provider.name)\"? Its channels will be removed.")
+                }
+            }
+            // uxc.6: playlist deletion (context menu + swipe) had no
+            // confirmation, unlike the M3U delete above — same pattern.
+            .confirmationDialog(
+                "Delete Playlist",
+                isPresented: Binding(
+                    get: { playlistToDelete != nil },
+                    set: { if !$0 { playlistToDelete = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let playlist = playlistToDelete {
+                        playlistManager.deletePlaylist(playlist.id)
+                    }
+                    playlistToDelete = nil
+                }
+                Button("Cancel", role: .cancel) { playlistToDelete = nil }
+            } message: {
+                if let playlist = playlistToDelete {
+                    Text("Are you sure you want to delete \"\(playlist.name)\"? This can't be undone.")
                 }
             }
             .alert("New Playlist", isPresented: $showingCreateAlert) {
