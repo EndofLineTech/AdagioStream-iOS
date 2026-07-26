@@ -127,6 +127,9 @@ struct AlbumDetailView: View {
                 }
             }
 
+            // uxd.4: no longer blanket-hidden — SubsonicCoverArt manages its
+            // own accessibilityHidden state so the failed-load retry button
+            // stays reachable (see SubsonicCoverArt.swift).
             SubsonicCoverArt(
                 api: api,
                 coverArtID: album.coverArt,
@@ -135,7 +138,6 @@ struct AlbumDetailView: View {
                 height: 200,
                 cornerRadius: 12
             )
-            .accessibilityHidden(true)
 
             VStack(spacing: 4) {
                 Text(album.title)

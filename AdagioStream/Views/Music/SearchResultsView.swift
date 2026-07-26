@@ -175,8 +175,16 @@ private struct SearchAlbumRowView: View {
     /// 65x.3: When non-nil, enables the starred indicator in the title row.
     var starState: NavidromeAPI.StarState? = nil
 
+    // uxd.5: lineLimit(1) over-truncates long titles at accessibility text
+    // sizes; allow a second line once the user has opted into one.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var titleLineLimit: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 1 }
+
     var body: some View {
         HStack(spacing: 12) {
+            // uxd.4: no longer blanket-hidden — SubsonicCoverArt manages its
+            // own accessibilityHidden state so the failed-load retry button
+            // stays reachable.
             SubsonicCoverArt(
                 api: api,
                 coverArtID: album.coverArt,
@@ -185,7 +193,6 @@ private struct SearchAlbumRowView: View {
                 height: 44,
                 cornerRadius: 6
             )
-            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 // Title + optional starred indicator
@@ -193,7 +200,7 @@ private struct SearchAlbumRowView: View {
                     Text(album.title)
                         .font(.body)
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(titleLineLimit)
                     if let state = starState, state.starred {
                         NavidromeStarIndicator(starred: true)
                     }
@@ -231,8 +238,16 @@ private struct SearchSongRowView: View {
     var starState: NavidromeAPI.StarState? = nil
     let onPlay: () -> Void
 
+    // uxd.5: lineLimit(1) over-truncates long titles at accessibility text
+    // sizes; allow a second line once the user has opted into one.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var titleLineLimit: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 1 }
+
     var body: some View {
         HStack(spacing: 12) {
+            // uxd.4: no longer blanket-hidden — SubsonicCoverArt manages its
+            // own accessibilityHidden state so the failed-load retry button
+            // stays reachable.
             SubsonicCoverArt(
                 api: api,
                 coverArtID: track.coverArt,
@@ -241,7 +256,6 @@ private struct SearchSongRowView: View {
                 height: 40,
                 cornerRadius: 6
             )
-            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 // Title + optional starred indicator
@@ -249,7 +263,7 @@ private struct SearchSongRowView: View {
                     Text(track.title)
                         .font(.body)
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(titleLineLimit)
                     if let state = starState, state.starred {
                         NavidromeStarIndicator(starred: true)
                     }

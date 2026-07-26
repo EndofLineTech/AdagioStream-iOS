@@ -77,6 +77,7 @@ struct GroupManagementView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .fixedSize()
+                            .accessibilityLabel("Enable \(group.name)")
                         }
                     }
                     .onMove { source, destination in
@@ -110,6 +111,7 @@ struct GroupManagementView: View {
                         .toggleStyle(.switch)
                         .labelsHidden()
                         .fixedSize()
+                        .accessibilityLabel("Enable \(group.name)")
                     }
                 }
             } header: {

@@ -46,6 +46,10 @@ struct MaskedTextField: View {
                     .opacity(isRevealed ? 0 : 1)
                     .allowsHitTesting(!isRevealed)
                     .focused($isFocused, equals: false)
+                    // uxd.4 (7): opacity+hit-testing hide the inactive field
+                    // visually but leave it in the accessibility tree — a
+                    // second VoiceOver stop for the same credential.
+                    .accessibilityHidden(isRevealed)
 
                 TextField(placeholder, text: $text)
                     .opacity(isRevealed ? 1 : 0)
@@ -55,6 +59,7 @@ struct MaskedTextField: View {
                     // keyboard's learning cache.
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .accessibilityHidden(!isRevealed)
             }
             .textContentType(.password)
             .accessibilityLabel(accessibilityLabel)

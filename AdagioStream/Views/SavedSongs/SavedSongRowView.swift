@@ -32,6 +32,31 @@ struct SavedSongRowView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
+            .accessibilityElement(children: .combine)
+
+            Spacer()
+
+            // uxd.4: the row previously had zero tap target — the Spotify/
+            // Apple Music actions were long-press-menu only. This trailing
+            // Menu gives the same actions a visible, discoverable affordance
+            // (the long-press context menu below still works too).
+            Menu {
+                Button {
+                    searchSpotify()
+                } label: {
+                    Label("Search on Spotify", systemImage: "magnifyingglass")
+                }
+                Button {
+                    Task { await searchAppleMusic() }
+                } label: {
+                    Label("Search on Apple Music", systemImage: "magnifyingglass")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("More options for \(song.title)")
         }
         .contextMenu {
             Button {

@@ -78,9 +78,13 @@ struct AddManualEntryView: View {
                                     if selectedGroupID == group.id {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.accent)
+                                            .accessibilityHidden(true)
                                     }
                                 }
                             }
+                            // uxd.4: the checkmark was visual-only — VoiceOver
+                            // had no way to tell which group was selected.
+                            .accessibilityAddTraits(selectedGroupID == group.id ? .isSelected : [])
                         }
 
                         Button {

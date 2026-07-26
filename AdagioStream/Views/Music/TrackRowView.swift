@@ -55,68 +55,83 @@ struct TrackRowView: View {
 
     let onPlay: () -> Void
 
-    var body: some View {
-        HStack(spacing: 12) {
-            leadingView
+    // uxd.5: lineLimit(1) over-truncates long titles at accessibility text
+    // sizes; allow a second line once the user has opted into one.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private var titleLineLimit: Int { dynamicTypeSize.isAccessibilitySize ? 2 : 1 }
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(track.title)
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    if starIndicator {
-                        NavidromeStarIndicator(starred: true)
+    var body: some View {
+        // uxd.4: the row used to be a plain HStack + .onTapGesture with no
+        // accessibilityElement grouping — VoiceOver would enumerate every
+        // Text separately AND every caller layers its own external
+        // .accessibilityLabel/.accessibilityHint on top (AlbumDetailView,
+        // PlaylistBrowseView, GenreBrowseView), which only produces one
+        // coherent announcement once the root is a real Button: Button
+        // collapses its non-interactive children into the caller-supplied
+        // label while the star/download/inline-play Buttons below stay
+        // independently focusable — same per-button-granularity model
+        // ChannelRowView uses (uxd.1). No caller changes needed.
+        Button(action: onPlay) {
+            HStack(spacing: 12) {
+                leadingView
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(track.title)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                            .lineLimit(titleLineLimit)
+                        if starIndicator {
+                            NavidromeStarIndicator(starred: true)
+                        }
+                    }
+
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                 }
 
-                if let subtitle {
-                    Text(subtitle)
+                Spacer()
+
+                if let duration = track.duration {
+                    Text(duration.durationString)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                        .monospacedDigit()
+                        .accessibilityHidden(true)
+                }
+
+                if let isStarred = starred, let toggle = onToggleStar {
+                    NavidromeStarButton(
+                        starred: isStarred,
+                        accessibilityLabel: isStarred ? "Remove \(track.title) from Saved" : "Save \(track.title)",
+                        onToggle: toggle
+                    )
+                }
+
+                if let api = downloadAPI {
+                    TrackDownloadButton(track: track, api: api)
+                }
+
+                if showsInlinePlayButton {
+                    Button {
+                        onPlay()
+                    } label: {
+                        Image(systemName: "play.circle")
+                            .font(.title3)
+                            .foregroundStyle(.tint)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Play \(track.title)")
                 }
             }
-
-            Spacer()
-
-            if let duration = track.duration {
-                Text(duration.durationString)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-                    .accessibilityHidden(true)
-            }
-
-            if let isStarred = starred, let toggle = onToggleStar {
-                NavidromeStarButton(
-                    starred: isStarred,
-                    accessibilityLabel: isStarred ? "Remove \(track.title) from Saved" : "Save \(track.title)",
-                    onToggle: toggle
-                )
-            }
-
-            if let api = downloadAPI {
-                TrackDownloadButton(track: track, api: api)
-            }
-
-            if showsInlinePlayButton {
-                Button {
-                    onPlay()
-                } label: {
-                    Image(systemName: "play.circle")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Play \(track.title)")
-            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            onPlay()
-        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -144,6 +159,9 @@ struct TrackRowView: View {
                 .accessibilityHidden(true)
 
         case .coverArt(let api, let coverArtID):
+            // uxd.4: no longer blanket-hidden — SubsonicCoverArt manages its
+            // own accessibilityHidden state so the failed-load retry button
+            // stays reachable (see SubsonicCoverArt.swift).
             SubsonicCoverArt(
                 api: api,
                 coverArtID: coverArtID,
@@ -152,7 +170,6 @@ struct TrackRowView: View {
                 height: 40,
                 cornerRadius: 6
             )
-            .accessibilityHidden(true)
         }
     }
 }

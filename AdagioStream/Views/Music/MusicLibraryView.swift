@@ -734,6 +734,9 @@ struct ArtistRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // uxd.4: no longer blanket-hidden — SubsonicCoverArt manages its
+            // own accessibilityHidden state so the failed-load retry button
+            // stays reachable.
             SubsonicCoverArt(
                 api: api,
                 coverArtID: artist.coverArt,
@@ -742,7 +745,6 @@ struct ArtistRowView: View {
                 height: 44,
                 cornerRadius: 8
             )
-            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(artist.name)

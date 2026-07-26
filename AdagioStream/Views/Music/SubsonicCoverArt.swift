@@ -83,13 +83,25 @@ public struct SubsonicCoverArt: View {
             } else if hasFailed {
                 placeholder
                     .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: "arrow.clockwise.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                            .background(Circle().fill(.black.opacity(0.5)))
-                            .padding(4)
+                        // uxd.4: was an unlabeled, sub-44pt .onTapGesture that
+                        // callers' blanket `.accessibilityHidden(true)` (this
+                        // artwork is decorative when loaded) made permanently
+                        // unreachable to VoiceOver. Now a real 44pt Button, and
+                        // this view manages its own accessibilityHidden state
+                        // below instead of leaving it to callers.
+                        Button {
+                            retryID += 1
+                        } label: {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .background(Circle().fill(.black.opacity(0.5)))
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Retry loading cover art")
+                        .padding(4)
                     }
-                    .onTapGesture { retryID += 1 }
             } else {
                 placeholder
             }
@@ -99,6 +111,11 @@ public struct SubsonicCoverArt: View {
         .task(id: taskID) {
             await loadImage()
         }
+        // uxd.4: decorative once loaded (or while never having failed) — the
+        // surrounding row/header supplies the real accessible label. Only
+        // the failed state needs to stay visible so the retry Button above
+        // is reachable.
+        .accessibilityHidden(!hasFailed)
     }
 
     // MARK: - Private

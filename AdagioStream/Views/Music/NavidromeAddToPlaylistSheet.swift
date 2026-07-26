@@ -118,6 +118,9 @@ struct NavidromeAddToPlaylistSheet: View {
                             }
                         } label: {
                             HStack(spacing: 12) {
+                                // uxd.4: no longer blanket-hidden — SubsonicCoverArt
+                                // manages its own accessibilityHidden state so the
+                                // failed-load retry button stays reachable.
                                 SubsonicCoverArt(
                                     api: api,
                                     coverArtID: playlist.coverArt,
@@ -126,7 +129,6 @@ struct NavidromeAddToPlaylistSheet: View {
                                     height: 40,
                                     cornerRadius: 6
                                 )
-                                .accessibilityHidden(true)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(playlist.name)
