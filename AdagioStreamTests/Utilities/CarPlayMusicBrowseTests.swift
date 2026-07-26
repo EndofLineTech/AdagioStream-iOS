@@ -262,27 +262,42 @@ final class CarPlayMusicBrowseTests: XCTestCase {
 
     func testRootPlaceholderStateUnconfiguredWhenNoProviders() {
         XCTAssertEqual(
-            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: true, isLoading: false),
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: true, isLoading: false, hasError: false),
             .unconfigured
         )
-        // Providers empty always wins, even if isLoading happens to be true too.
+        // Providers empty always wins, even if isLoading/hasError happen to be true too.
         XCTAssertEqual(
-            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: true, isLoading: true),
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: true, isLoading: true, hasError: true),
             .unconfigured
         )
     }
 
     func testRootPlaceholderStateLoadingWhenConfiguredAndLoading() {
         XCTAssertEqual(
-            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: true),
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: true, hasError: false),
+            .loading
+        )
+        // Loading wins over a stale error from a prior attempt.
+        XCTAssertEqual(
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: true, hasError: true),
             .loading
         )
     }
 
-    func testRootPlaceholderStateFailedWhenConfiguredNotLoadingStillEmpty() {
+    func testRootPlaceholderStateFailedWhenConfiguredNotLoadingStillEmptyWithError() {
         XCTAssertEqual(
-            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: false),
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: false, hasError: true),
             .failed
+        )
+    }
+
+    /// uxa kickback (finding 3): configured + loaded + zero channels + no
+    /// error (e.g. every group disabled) must NOT read as "failed" — that
+    /// told a working setup to "check your connection".
+    func testRootPlaceholderStateEmptyWhenConfiguredNotLoadingNoError() {
+        XCTAssertEqual(
+            CarPlayTemplateManager.rootPlaceholderState(providersEmpty: false, isLoading: false, hasError: false),
+            .empty
         )
     }
 
@@ -293,6 +308,53 @@ final class CarPlayMusicBrowseTests: XCTestCase {
         XCTAssertNil(CarPlayTemplateManager.RootPlaceholder.loading.detailText)
         XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.failed.text, "Couldn't load channels")
         XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.failed.detailText, "Check your connection")
+        XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.empty.text, "No Channels Available")
+        XCTAssertNil(CarPlayTemplateManager.RootPlaceholder.empty.detailText)
+    }
+
+    // MARK: - letterIndexBuckets (uxa kickback finding 5)
+    //
+    // Pure, framework-free truth-table tests for the grouping/sort-order
+    // decision behind letterIndexedSections. Operates on indices into the
+    // input name array rather than CPListItem so no CarPlay type needs to be
+    // constructed.
+
+    func testLetterIndexBucketsEmptyInput() {
+        let buckets = CarPlayTemplateManager.letterIndexBuckets(for: [], sortPrefixes: [])
+        XCTAssertTrue(buckets.isEmpty)
+    }
+
+    func testLetterIndexBucketsNonLetterLeadingNameGoesToHashBucket() {
+        let buckets = CarPlayTemplateManager.letterIndexBuckets(for: ["1970s Hits", "Zoo"], sortPrefixes: [])
+        XCTAssertEqual(buckets.map(\.letter), ["#", "Z"], "\"#\" sorts before letters")
+        XCTAssertEqual(buckets[0].indices, [0])
+        XCTAssertEqual(buckets[1].indices, [1])
+    }
+
+    func testLetterIndexBucketsDiacriticLeadingNameGetsOwnBucket() {
+        // Pins current behavior: diacritics are NOT folded into the base
+        // letter's bucket (no Unicode normalization applied).
+        let buckets = CarPlayTemplateManager.letterIndexBuckets(for: ["Étude", "Eagle"], sortPrefixes: [])
+        let letters = Set(buckets.map(\.letter))
+        XCTAssertTrue(letters.contains("É"), "Diacritic-leading name must bucket under its own accented letter")
+        XCTAssertTrue(letters.contains("E"))
+        XCTAssertEqual(buckets.count, 2, "É and E must NOT collapse into one bucket")
+    }
+
+    func testLetterIndexBucketsMultiLetterGroupingAndSortOrder() {
+        let names = ["Bravo", "Alpha", "Charlie", "Beta", "Apple"]
+        let buckets = CarPlayTemplateManager.letterIndexBuckets(for: names, sortPrefixes: [])
+        XCTAssertEqual(buckets.map(\.letter), ["A", "B", "C"], "Buckets must sort A→Z with no \"#\" present")
+        XCTAssertEqual(Set(buckets[0].indices), Set([1, 4]), "\"A\" bucket must contain Alpha (1) and Apple (4)")
+        XCTAssertEqual(Set(buckets[1].indices), Set([0, 3]), "\"B\" bucket must contain Bravo (0) and Beta (3)")
+        XCTAssertEqual(buckets[2].indices, [2], "\"C\" bucket must contain Charlie (2)")
+    }
+
+    func testLetterIndexBucketsStripsSortPrefixes() {
+        // "The Beatles" sorts under "B" when "The " is a configured prefix.
+        let buckets = CarPlayTemplateManager.letterIndexBuckets(for: ["The Beatles", "Abba"], sortPrefixes: ["The "])
+        XCTAssertEqual(buckets.map(\.letter), ["A", "B"])
+        XCTAssertEqual(buckets[1].indices, [0])
     }
 }
 #endif

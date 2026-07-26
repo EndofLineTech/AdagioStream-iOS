@@ -24,6 +24,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     private var repeatCancellable: AnyCancellable?
     private var playbackSourceCancellable: AnyCancellable?
     private var isLoadingCancellable: AnyCancellable?
+    private var hydrationCancellable: AnyCancellable?
     private var groupSortCancellables = Set<AnyCancellable>()
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
@@ -136,6 +137,17 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // placeholder would get stuck on "Loading…" forever. Observe isLoading
         // directly so the placeholder always reaches its terminal state.
         isLoadingCancellable = providerManager.$isLoading
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+
+        // uxa kickback (finding 4): re-evaluate once provider hydration
+        // completes so a root list built during the pre-hydration window
+        // (providersEmpty forced false, see rootPlaceholderState call site)
+        // refreshes to the real state instead of sitting on "Loading…".
+        hydrationCancellable = providerManager.$didHydrateProviders
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -536,9 +548,19 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
                 // always showing "Add an account on your phone" — that message
                 // was wrong both mid-load (cold-launch race) and after a
                 // configured provider genuinely failed to load.
+                //
+                // uxa kickback (finding 4): providers hydrate asynchronously
+                // from Keychain at launch (see `ProviderManager.didHydrateProviders`).
+                // Before that finishes, `providers` is still its initial empty
+                // array even for a configured account, and providersEmpty wins
+                // over every other state below — so fold "not yet hydrated"
+                // into both providersEmpty (force false — we don't know yet)
+                // and isLoading (force true) rather than letting it read as
+                // unconfigured.
                 let state = Self.rootPlaceholderState(
-                    providersEmpty: providerManager.providers.isEmpty,
-                    isLoading: providerManager.isLoading
+                    providersEmpty: providerManager.didHydrateProviders && providerManager.providers.isEmpty,
+                    isLoading: providerManager.isLoading || !providerManager.didHydrateProviders,
+                    hasError: providerManager.error != nil
                 )
                 let placeholder = CPListItem(text: state.text, detailText: state.detailText)
                 placeholder.handler = { _, completion in completion() }
@@ -774,15 +796,27 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         }
     }
 
-    /// Groups (name, item) pairs into first-letter CPListSections with a
-    /// `sectionIndexTitle`, so CarPlay shows its alphabetic jump-list index
-    /// instead of one flat unindexed scroll — the distraction failure mode
-    /// the index API exists to prevent on lists with hundreds of rows.
-    /// Shared by `pushChannelList` (channels) and the Artists/Playlists music
-    /// lists (uxa.4) — same grouping, different item source.
-    private func letterIndexedSections(_ pairs: [(name: String, item: CPListItem)]) -> [CPListSection] {
-        let grouped = Dictionary(grouping: pairs) { pair -> String in
-            let first = sortableName(pair.name).prefix(1).uppercased()
+    /// Assigns each name to its CarPlay alphabetic-index bucket ("A".."Z", or
+    /// "#" for anything that doesn't start with a letter after `sortPrefixes`
+    /// stripping) and returns the buckets in section display order — "#"
+    /// first, then A→Z. Indices into the input array (not the items
+    /// themselves) so this stays framework-free and unit-testable without
+    /// constructing any CarPlay types (uxa kickback finding 5).
+    ///
+    /// Diacritics get their own bucket rather than folding into the base
+    /// letter's (e.g. "É" and "E" sort as distinct buckets) — pinned as
+    /// current behavior, not necessarily ideal, by the truth-table tests.
+    nonisolated static func letterIndexBuckets(for names: [String], sortPrefixes: [String]) -> [(letter: String, indices: [Int])] {
+        func sortableName(_ name: String) -> String {
+            for prefix in sortPrefixes {
+                if name.hasPrefix(prefix) {
+                    return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+                }
+            }
+            return name
+        }
+        let grouped = Dictionary(grouping: Array(names.enumerated())) { entry -> String in
+            let first = sortableName(entry.element).prefix(1).uppercased()
             return first.first?.isLetter == true ? first : "#"
         }
         let sortedKeys = grouped.keys.sorted { a, b in
@@ -790,8 +824,20 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             if b == "#" { return false }
             return a < b
         }
-        return sortedKeys.map { letter in
-            CPListSection(items: grouped[letter]!.map(\.item), header: letter, sectionIndexTitle: letter)
+        return sortedKeys.map { letter in (letter, grouped[letter]!.map(\.offset)) }
+    }
+
+    /// Groups (name, item) pairs into first-letter CPListSections with a
+    /// `sectionIndexTitle`, so CarPlay shows its alphabetic jump-list index
+    /// instead of one flat unindexed scroll — the distraction failure mode
+    /// the index API exists to prevent on lists with hundreds of rows.
+    /// Shared by `pushChannelList` (channels) and the Artists/Playlists music
+    /// lists (uxa.4) — same grouping, different item source. Thin wrapper
+    /// around the static, testable `letterIndexBuckets(for:sortPrefixes:)`.
+    private func letterIndexedSections(_ pairs: [(name: String, item: CPListItem)]) -> [CPListSection] {
+        let buckets = Self.letterIndexBuckets(for: pairs.map(\.name), sortPrefixes: sortPrefixes)
+        return buckets.map { letter, indices in
+            CPListSection(items: indices.map { pairs[$0].item }, header: letter, sectionIndexTitle: letter)
         }
     }
 
@@ -1198,12 +1244,19 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         case unconfigured
         case loading
         case failed
+        /// uxa kickback (finding 3): configured + loaded + genuinely zero
+        /// channels (e.g. every group disabled) is NOT a failure — distinct
+        /// copy from both `.unconfigured` and `.failed` so the guidance
+        /// matches reality instead of telling a working setup to "check your
+        /// connection".
+        case empty
 
         var text: String {
             switch self {
             case .unconfigured: return "No Channels"
             case .loading: return "Loading channels…"
             case .failed: return "Couldn't load channels"
+            case .empty: return "No Channels Available"
             }
         }
 
@@ -1212,6 +1265,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             case .unconfigured: return "Add an account on your phone"
             case .loading: return nil
             case .failed: return "Check your connection"
+            case .empty: return nil
             }
         }
     }
@@ -1219,10 +1273,16 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     /// Pure decision logic for which placeholder to show. Extracted as a
     /// static helper so unit tests can verify the state selection without
     /// instantiating a live `CarPlayTemplateManager`/`ProviderManager`.
-    nonisolated static func rootPlaceholderState(providersEmpty: Bool, isLoading: Bool) -> RootPlaceholder {
+    ///
+    /// `hasError` (uxa kickback finding 3) distinguishes a genuine load
+    /// failure from a configured-and-loaded-but-empty account — previously
+    /// every configured+non-loading+empty state collapsed into `.failed`
+    /// regardless of `ProviderManager.error`.
+    nonisolated static func rootPlaceholderState(providersEmpty: Bool, isLoading: Bool, hasError: Bool) -> RootPlaceholder {
         if providersEmpty { return .unconfigured }
         if isLoading { return .loading }
-        return .failed
+        if hasError { return .failed }
+        return .empty
     }
 
     // MARK: - Now Playing Button State Helpers (8rg.2)

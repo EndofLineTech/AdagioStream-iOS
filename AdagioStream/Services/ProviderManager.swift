@@ -25,6 +25,13 @@ public final class ProviderManager: ObservableObject {
     @Published public var epgData: [String: [EPGEntry]] = [:]
     @Published public var isLoading = false
     @Published public var error: String?
+    /// True once `loadProviders()` has completed at least once. `providers`
+    /// starts as an empty array and hydrates asynchronously from Keychain at
+    /// launch — before this flips, `providers.isEmpty` is indistinguishable
+    /// from "genuinely no accounts configured" (uxa kickback finding 4:
+    /// CarPlay's root placeholder read the pre-hydration empty array as
+    /// "unconfigured" for a real account, briefly).
+    @Published public private(set) var didHydrateProviders = false
     /// Section keys (group names + the Favorites sentinel) the user has
     /// expanded. Empty by default so every section starts collapsed, and
     /// groups appearing later start collapsed too. Session-only, not persisted.
@@ -94,6 +101,7 @@ public final class ProviderManager: ObservableObject {
     }
 
     public func loadProviders() async {
+        defer { didHydrateProviders = true }
         // Try Keychain first
         if let data = KeychainService.load(for: Constants.StorageKeys.providers),
            let decoded = try? JSONDecoder().decode([Provider].self, from: data) {
