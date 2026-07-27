@@ -301,6 +301,41 @@ final class CarPlayMusicBrowseTests: XCTestCase {
         )
     }
 
+    // MARK: - shouldShowMusicSetupHint (beads_mobilemusic-iqt)
+    //
+    // The CarPlay Music section shows a "Set Up on iPhone" discoverability
+    // row instead of hiding Music entirely when no Subsonic provider is
+    // configured — but only when the root has other real content. When
+    // nothing at all is configured, the uxa.2 unconfigured placeholder
+    // already prompts setup; showing both would be two setup prompts for
+    // one blank state.
+
+    func testShouldShowMusicSetupHintWhenChannelsPresent() {
+        XCTAssertTrue(
+            CarPlayTemplateManager.shouldShowMusicSetupHint(hasChannels: true, hasAudiobooks: false, hasPodcasts: false)
+        )
+    }
+
+    func testShouldShowMusicSetupHintWhenAudiobooksPresent() {
+        XCTAssertTrue(
+            CarPlayTemplateManager.shouldShowMusicSetupHint(hasChannels: false, hasAudiobooks: true, hasPodcasts: false)
+        )
+    }
+
+    func testShouldShowMusicSetupHintWhenPodcastsPresent() {
+        XCTAssertTrue(
+            CarPlayTemplateManager.shouldShowMusicSetupHint(hasChannels: false, hasAudiobooks: false, hasPodcasts: true)
+        )
+    }
+
+    /// Nothing configured at all — the uxa.2 placeholder handles discoverability
+    /// instead, so the hint must not double up on it.
+    func testShouldNotShowMusicSetupHintWhenNothingConfigured() {
+        XCTAssertFalse(
+            CarPlayTemplateManager.shouldShowMusicSetupHint(hasChannels: false, hasAudiobooks: false, hasPodcasts: false)
+        )
+    }
+
     func testRootPlaceholderCopy() {
         XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.unconfigured.text, "No Channels")
         XCTAssertEqual(CarPlayTemplateManager.RootPlaceholder.unconfigured.detailText, "Add an account on your phone")

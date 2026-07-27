@@ -802,14 +802,6 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             items.append(item)
         }
 
-        // Navidrome music categories (Artists/Albums/Songs/Playlists) — only
-        // when a Subsonic provider is configured. Hoisted to the root (fnv.12)
-        // so the deepest browse path (Artists → albums → tracks → NowPlaying)
-        // stays within CarPlay's 5-template push limit. Each category is a
-        // static item that fetches lazily on tap, so a transient fetch failure
-        // can never hide a category the way the old eager-section build could.
-        let musicItems = providerManager.subsonicAPI != nil ? makeMusicCategoryItems() : []
-
         // ciu.1: Audiobooks category — one root entry gated on an ABS provider,
         // mirroring the Navidrome-music gating. Pushes the book list on tap.
         let audiobookItems = providerManager.audiobookshelfAPI != nil ? [makeAudiobooksCategoryItem()] : []
@@ -819,6 +811,32 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         // same constraint Audiobooks has); an empty/no-podcast-library server just
         // shows "No podcasts" on tap rather than hiding the category.
         let podcastItems = providerManager.audiobookshelfAPI != nil ? [makePodcastsCategoryItem()] : []
+
+        // Navidrome music categories (Artists/Albums/Songs/Playlists) — only
+        // when a Subsonic provider is configured. Hoisted to the root (fnv.12)
+        // so the deepest browse path (Artists → albums → tracks → NowPlaying)
+        // stays within CarPlay's 5-template push limit. Each category is a
+        // static item that fetches lazily on tap, so a transient fetch failure
+        // can never hide a category the way the old eager-section build could.
+        //
+        // beads_mobilemusic-iqt: when no Subsonic provider is configured, show
+        // a tappable "Music — Set Up on iPhone" discoverability row instead of
+        // hiding Music entirely — but only when the root otherwise has real
+        // content (channels or ABS sections). If nothing at all is configured,
+        // the uxa.2 placeholder below already prompts setup; showing both
+        // would be two setup prompts for one blank state.
+        let musicItems: [CPListItem]
+        if providerManager.subsonicAPI != nil {
+            musicItems = makeMusicCategoryItems()
+        } else if Self.shouldShowMusicSetupHint(
+            hasChannels: !items.isEmpty,
+            hasAudiobooks: !audiobookItems.isEmpty,
+            hasPodcasts: !podcastItems.isEmpty
+        ) {
+            musicItems = [makeMusicSetupHintItem()]
+        } else {
+            musicItems = []
+        }
 
         // No secondary source (no Navidrome, no ABS): preserve the historical
         // single, header-less section so channel-only users see no change.
@@ -1176,6 +1194,38 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             completion()
         }
         return item
+    }
+
+    /// Discoverability row shown in place of the real Music section when no
+    /// Subsonic/Navidrome provider is configured (beads_mobilemusic-iqt).
+    /// CarPlay has no account-setup flow of its own, so tapping presents an
+    /// alert pointing the user back to the phone rather than attempting any
+    /// in-car configuration.
+    private func makeMusicSetupHintItem() -> CPListItem {
+        let item = CPListItem(text: "Music", detailText: "Set Up on iPhone")
+        item.setImage(musicNoteImage())
+        item.handler = { [weak self] _, completion in
+            self?.presentMusicSetupHintAlert()
+            completion()
+        }
+        return item
+    }
+
+    /// Single-button informational alert for the Music setup hint. `titleVariants`
+    /// is `CPAlertTemplate`'s only text field (no separate title/body) — ordered
+    /// longest to shortest so CarPlay can drop down on a smaller screen.
+    private func presentMusicSetupHintAlert() {
+        let ok = CPAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+        }
+        let alert = CPAlertTemplate(
+            titleVariants: [
+                "Add a Navidrome account in AdagioStream on your iPhone to browse music here.",
+                "Set Up Music",
+            ],
+            actions: [ok]
+        )
+        interfaceController.presentTemplate(alert, animated: true, completion: nil)
     }
 
     /// Loading-placeholder template shared by the category list pushers.
@@ -1546,6 +1596,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             case .empty: return nil
             }
         }
+    }
+
+    /// Pure decision logic for the Music setup-hint row (beads_mobilemusic-iqt).
+    /// Extracted mirroring `rootPlaceholderState` below: the hint should only
+    /// appear when the root has other real content, so it doesn't double up
+    /// with the uxa.2 unconfigured placeholder when nothing is configured at
+    /// all (that placeholder already tells the user to add an account).
+    nonisolated static func shouldShowMusicSetupHint(hasChannels: Bool, hasAudiobooks: Bool, hasPodcasts: Bool) -> Bool {
+        hasChannels || hasAudiobooks || hasPodcasts
     }
 
     /// Pure decision logic for which placeholder to show. Extracted as a
