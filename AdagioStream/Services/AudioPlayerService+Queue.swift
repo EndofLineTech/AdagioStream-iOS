@@ -627,6 +627,10 @@ extension AudioPlayerService {
         // Transition state: track mode sets currentChannel to nil.
         currentChannel = nil
         currentTrack = track
+        // beads_mobilemusic-cpr kickback: single funnel for both play(track:)
+        // and queue navigation (next/previous), so this tracks "whatever's
+        // currently playing" the same way play(channel:) does for radio.
+        LastPlayedItem.libraryTrack(id: track.id, albumId: track.albumId).save()
         // Artist for now-playing: prefer the track's own denormalised name (c2o,
         // works for every playback source); fall back to the queue-level display
         // artist threaded in from the album screen for older cached rows.

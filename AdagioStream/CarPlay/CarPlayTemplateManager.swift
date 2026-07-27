@@ -93,6 +93,12 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
                     item.setDetailText("\(count) channels")
                 }
                 self.updateNowPlayingButtons()
+                // Precedence: startup wins. attemptStartupStream() sets
+                // hasAttemptedStartupStream and — if it finds a target —
+                // audioPlayer.currentChannel, which makes
+                // attemptCarPlayReconnectResume()'s somethingAlreadyPlaying
+                // gate skip right after. Both are one-shot per connection,
+                // so at most one of the two ever actually plays something.
                 self.attemptStartupStream()
                 self.attemptCarPlayReconnectResume()
             }
@@ -336,61 +342,141 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         hasAttemptedCarPlayReconnectResume = true
 
         let target = resolveCarPlayResumeTarget()
-        // 46u: an in-flight interruption (unmatched .began) means the engine
-        // may be gated — don't fight it with a programmatic play here; the
-        // interruption's own .ended handler owns resuming (or not) in that
-        // case. `interruptionBeganCount != interruptionEndedCount` is the
-        // same "still interrupted" vocabulary AudioPlayerService+Interruption
-        // already logs as `unmatchedBegans`.
+        // Block 1 (cpr kickback): a nil currentChannel does NOT mean nothing
+        // is playing — it's also nil for audiobook and library-track
+        // playback (AudioPlayerService+Audiobook.swift, +Queue.swift).
+        // hasActivePlayback covers all three (AudioPlayerService.swift) so a
+        // user listening on the phone speaker who plugs into CarPlay is
+        // never stomped.
+        //
+        // Block 2 (cpr kickback, 46u): gate on AudioOutput's own
+        // `isInterrupted` rather than `interruptionBeganCount !=
+        // interruptionEndedCount`. The counters are never reset and a
+        // dropped `.ended` — documented as common on CarPlay disconnect
+        // (CarPlaySceneDelegate.swift) — would permanently wedge resume for
+        // the process. `isInterrupted` self-heals the same way 46u already
+        // relies on: cleared by `noteInterruptionEnded()` AND by
+        // `clearInterruptionGateForDeliberatePlay()` on every deliberate-play
+        // path, so a stale unmatched `.began` can't latch this gate shut.
         let outcome = Self.carPlayResumeDecision(
             preference: carPlayReconnectResume,
             targetExists: target != nil,
-            somethingAlreadyPlaying: audioPlayer.currentChannel != nil,
-            interruptionInFlight: audioPlayer.interruptionBeganCount != audioPlayer.interruptionEndedCount,
+            somethingAlreadyPlaying: audioPlayer.hasActivePlayback,
+            interruptionInFlight: AudioOutput.shared.isInterrupted,
             alreadyAttemptedThisConnection: false // this call site IS the one shot; see guard above
         )
 
-        guard outcome == .play, let channel = target else {
+        guard outcome == .play, let target else {
             log.log(
-                "CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): no-op — targetFound=\(target != nil), somethingPlaying=\(audioPlayer.currentChannel != nil)",
+                "CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): no-op — targetFound=\(target != nil), somethingPlaying=\(audioPlayer.hasActivePlayback)",
                 category: .carplay
             )
             return
         }
 
-        log.log("CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): auto-playing \"\(channel.name)\"", category: .carplay)
-        // Route through play(channel:) — the same deliberate-play path a
-        // user tap uses. It clears AudioOutput's interruption gate itself
-        // (see the "Stuck-flag safety" note on AudioOutput.isInterrupted),
-        // exactly like the other automatic-resume call sites in
-        // AudioPlayerService+Interruption.swift and +Reconnect.swift, which
-        // also pass userInitiated: false rather than poking the engine
-        // directly.
-        audioPlayer.channels = providerManager.visibleChannels
-        audioPlayer.play(channel: channel, userInitiated: false)
-        updateRootSections()
+        playCarPlayResumeTarget(target)
     }
 
-    /// Resolves the channel `carPlayReconnectResume` currently points at,
-    /// against the live (loaded) channel list. Returns `nil` when there's
-    /// no configured target, or the target no longer exists — both are
-    /// silent no-ops to the caller, matching acceptance criterion 4.
-    private func resolveCarPlayResumeTarget() -> Channel? {
+    /// What `resolveCarPlayResumeTarget()` found to resume. Channel
+    /// resolution is synchronous — the channel list is already loaded by the
+    /// time this fires. Audiobook and library-track resolution need a
+    /// network fetch (book/album detail), so those cases carry just the
+    /// id(s) needed to fetch; the fetch happens in
+    /// `playCarPlayResumeTarget(_:)`, AFTER the pure decision gate above has
+    /// already said to proceed.
+    private enum CarPlayResumeTarget {
+        case channel(Channel)
+        case audiobook(id: String)
+        case libraryTrack(id: String, albumId: String)
+    }
+
+    /// Resolves what `carPlayReconnectResume` currently points at, against
+    /// the live (loaded) channel list / persisted last-played reference.
+    /// Returns `nil` when there's no configured target, or the target no
+    /// longer exists — both are silent no-ops to the caller, matching
+    /// acceptance criterion 4.
+    private func resolveCarPlayResumeTarget() -> CarPlayResumeTarget? {
         switch carPlayReconnectResume {
         case .off:
             return nil
         case .lastPlayed:
-            // Reuses the existing lastPlayedChannelID UserDefaults key that
-            // AudioPlayerService.play(channel:) already writes on every
-            // channel play (AudioPlayerService.swift) — no new tracking
-            // system needed. Previously write-only; this is its first
-            // reader.
-            guard let id = UserDefaults.standard.string(forKey: "lastPlayedChannelID") else { return nil }
-            return providerManager.visibleChannels.first { $0.id == id }
+            // Warn (cpr kickback): acceptance criterion 3 says "resumes the
+            // previously playing item" — not just channels. LastPlayedItem
+            // is the typed record written at all three play funnels
+            // (play(channel:), playAudiobook, startLibraryTrack); it
+            // supersedes the old channel-only lastPlayedChannelID key, which
+            // is kept as a fallback below for a user who reconnects before
+            // any new-format write has happened after upgrading.
+            switch LastPlayedItem.load() {
+            case .channel(let id, let providerName):
+                guard let channel = providerManager.visibleChannels.first(where: {
+                    $0.id == id && $0.providerName == providerName
+                }) else { return nil }
+                return .channel(channel)
+            case .audiobook(let id):
+                return .audiobook(id: id)
+            case .libraryTrack(let id, let albumId):
+                return .libraryTrack(id: id, albumId: albumId)
+            case nil:
+                guard let id = UserDefaults.standard.string(forKey: "lastPlayedChannelID") else { return nil }
+                guard let channel = providerManager.visibleChannels.first(where: { $0.id == id }) else { return nil }
+                return .channel(channel)
+            }
         case .specific:
             guard let ref = carPlayReconnectSpecificChannel else { return nil }
-            return providerManager.visibleChannels.first {
+            guard let channel = providerManager.visibleChannels.first(where: {
                 $0.id == ref.channelID && $0.providerName == ref.providerName
+            }) else { return nil }
+            return .channel(channel)
+        }
+    }
+
+    /// Plays a resolved resume target. Channel playback is synchronous and
+    /// mirrors the pre-existing behavior exactly. Audiobook/library-track
+    /// playback needs a network fetch first, so `hasActivePlayback` is
+    /// re-checked right before actually starting playback — the fetch is a
+    /// real time window in which the user could have started something else.
+    private func playCarPlayResumeTarget(_ target: CarPlayResumeTarget) {
+        switch target {
+        case .channel(let channel):
+            log.log("CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): auto-playing channel \"\(channel.name)\"", category: .carplay)
+            // Route through play(channel:) — the same deliberate-play path a
+            // user tap uses. It clears AudioOutput's interruption gate itself
+            // (see the "Stuck-flag safety" note on AudioOutput.isInterrupted),
+            // exactly like the other automatic-resume call sites in
+            // AudioPlayerService+Interruption.swift and +Reconnect.swift, which
+            // also pass userInitiated: false rather than poking the engine
+            // directly.
+            audioPlayer.channels = providerManager.visibleChannels
+            audioPlayer.play(channel: channel, userInitiated: false)
+            updateRootSections()
+
+        case .audiobook(let id):
+            guard let api = providerManager.audiobookshelfAPI else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let dto = try? await api.item(id: id) else { return }
+                guard !self.audioPlayer.hasActivePlayback else { return }
+                let book = dto.toRecord(libraryIdFallback: "", updatedAt: Int(Date().timeIntervalSince1970))
+                self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing audiobook \"\(book.title)\"", category: .carplay)
+                // playAudiobook owns resume-position math (server currentTime /
+                // offline pending / book record) — not reimplemented here.
+                self.audioPlayer.playAudiobook(book, via: api)
+            }
+
+        case .libraryTrack(let id, let albumId):
+            guard let api = providerManager.subsonicAPI else { return }
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let (_, tracks) = try? await api.getAlbum(id: albumId),
+                      let track = tracks.first(where: { $0.id == id }) else { return }
+                guard !self.audioPlayer.hasActivePlayback else { return }
+                self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing track \"\(track.title)\"", category: .carplay)
+                // Single-track play, not full queue restoration — no clean
+                // way to recover "the rest of the queue" from a persisted id
+                // alone, and play(track:via:) is the existing single-track
+                // entry point (setQueue with a one-track queue) so this is
+                // not a new code path.
+                self.audioPlayer.play(track: track, via: api)
             }
         }
     }

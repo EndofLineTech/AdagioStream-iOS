@@ -599,6 +599,7 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // d6q.5: disable scrubber for radio (live streams are not seekable).
         updateRemoteCommandsForSource(playbackSource)
         UserDefaults.standard.set(channel.id, forKey: "lastPlayedChannelID")
+        LastPlayedItem.channel(id: channel.id, providerName: channel.providerName).save()
         isActiveSession = false
         isBuffering = true
         isPlaying = false

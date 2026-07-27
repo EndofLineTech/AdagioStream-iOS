@@ -168,6 +168,10 @@ extension AudioPlayerService {
     /// files instead. Respects the existing `offlineMode` app setting.
     public func playAudiobook(_ book: Audiobook, via api: AudiobookshelfAPI, startGlobalTime: Double? = nil) {
         log.log("playAudiobook: \"\(book.title)\" id=\(book.id)", category: .player)
+        // beads_mobilemusic-cpr kickback: this is the single entry funnel for
+        // both live and offline audiobook playback (playDownloadedAudiobook
+        // below is only ever reached from here), so one write covers both.
+        LastPlayedItem.audiobook(id: book.id).save()
 
         let offlineMode = settingsViewModel?.settings.offlineMode ?? false
         let downloaded = DownloadManager.shared.downloadedBook(itemID: book.id)

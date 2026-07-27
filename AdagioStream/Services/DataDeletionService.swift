@@ -33,6 +33,7 @@ struct DataDeletionService {
 
         // 5. UserDefaults — standard
         UserDefaults.standard.removeObject(forKey: "lastPlayedChannelID")
+        LastPlayedItem.clear()
 
         // 6. UserDefaults — app group
         if let groupDefaults = UserDefaults(suiteName: Constants.AppGroup.identifier) {

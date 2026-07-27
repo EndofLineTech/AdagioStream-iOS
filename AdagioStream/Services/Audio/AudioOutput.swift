@@ -53,7 +53,14 @@ public final class AudioOutput {
     /// play(channel:), startLibraryTrack, assertSessionOwnership) also
     /// clears this flag so that an unbalanced began/ended sequence can never
     /// permanently block the engine.
-    private var isInterrupted = false
+    ///
+    /// Exposed read-only (beads_mobilemusic-cpr kickback, Block 2) so callers
+    /// outside this file — CarPlay reconnect-resume — can gate on the SAME
+    /// self-healing signal 46u already relies on, instead of comparing
+    /// AudioPlayerService's interruptionBeganCount/interruptionEndedCount
+    /// (which are never reset and would latch permanently on one dropped
+    /// `.ended`, a documented-common occurrence on CarPlay disconnect).
+    public private(set) var isInterrupted = false
 
     /// Number of consecutive engine.start() failures since the last success.
     /// A sustained streak means the engine is wedged (iOS won't let us bind
