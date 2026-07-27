@@ -210,6 +210,10 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// per-episode GET, which would repeat the Recent-Episodes N+1 mistake
     /// uxc.3 fixed for show-detail fetches.
     public func loadShowDetail(_ show: PodcastShow) async {
+        // Reconnect point: flush any progress queued while offline (E3 / mkj.2)
+        // before hydrating badges from the server batch below — otherwise a
+        // just-synced offline position can render a stale badge.
+        await ABSProgressSyncQueue.shared.flush(via: api)
         selectedShow = show
         selectedShowEpisodes = []
         showDetailState = .loading
@@ -256,6 +260,10 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// always rendered unplayed, same root cause as `loadShowDetail`.
     public func loadRecentEpisodes(order: PodcastEpisodeOrder) async {
         guard recentEpisodesState != .loading else { return }
+        // Reconnect point: flush any progress queued while offline (E3 / mkj.2)
+        // before hydrating badges from the server batch below — otherwise a
+        // just-synced offline position can render a stale badge.
+        await ABSProgressSyncQueue.shared.flush(via: api)
         let shows = podcastShows
         guard !shows.isEmpty else {
             recentEpisodesState = .empty

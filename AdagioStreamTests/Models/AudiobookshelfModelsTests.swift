@@ -253,6 +253,21 @@ final class AudiobookshelfModelsTests: XCTestCase {
         XCTAssertNil(hydrated.userMediaProgress)
     }
 
+    /// Pins the unconditional-overwrite contract: even when the episode
+    /// already carries a (stale) `userMediaProgress`, a batch index entry for
+    /// the same show/episode key always wins — it isn't merged or skipped
+    /// just because the field was already populated.
+    func testEpisodeDTOHydratingProgressOverwritesExistingProgress() {
+        let stale = mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 100, progress: 0.1)
+        let episode = ABSEpisodeDTO(id: "ep-1", title: "Ep 1", duration: 1800, userMediaProgress: stale)
+        let index = ABSEpisodeProgressIndex.build(from: [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 900, progress: 0.5),
+        ])
+        let hydrated = episode.hydratingProgress(from: index, showId: "show-a")
+        XCTAssertEqual(hydrated.userMediaProgress?.currentTime, 900)
+        XCTAssertEqual(hydrated.userMediaProgress?.progress, 0.5)
+    }
+
     func testArrayHydratingProgressMapsEachEpisode() {
         let episodes = [
             ABSEpisodeDTO(id: "ep-1", title: "Ep 1", duration: 1800),
