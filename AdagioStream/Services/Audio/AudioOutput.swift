@@ -76,6 +76,21 @@ public final class AudioOutput {
     /// and the heal itself.
     private var interruptionBeganAt: Date?
 
+    /// Set when `stopAndClearInterruption()` (CarPlay disconnect) ran while
+    /// `isInterrupted` was still true — the exact, documented case where the
+    /// `.ended` notification is at risk of being dropped. This is the ONLY
+    /// evidence the heal below is allowed to act on the drop actually
+    /// happening; `interruptionBeganAt` alone proves an interruption started
+    /// long ago, but says nothing about whether THIS was the CarPlay-disconnect
+    /// scenario or an ordinary still-running interruption (e.g. a phone call
+    /// that ride-out silently stopped audio for at ~bufferDuration — review
+    /// finding on beads_mobilemusic-irg round 1: playback state after ride-out
+    /// is identical in the stale and still-active cases by design, so it
+    /// cannot be the proof). Cleared by `noteInterruptionEnded()` (interruption
+    /// ended normally, no drop occurred) and `clearInterruptionGateForDeliberatePlay()`
+    /// (gate already resolved by a fresh deliberate play).
+    private var interruptionEndedDropRisk = false
+
     /// Number of consecutive engine.start() failures since the last success.
     /// A sustained streak means the engine is wedged (iOS won't let us bind
     /// the route) — the signature of the unrecoverable CarPlay/Siri wedge.
@@ -254,7 +269,22 @@ public final class AudioOutput {
     public func noteInterruptionEnded() {
         isInterrupted = false
         interruptionBeganAt = nil
+        interruptionEndedDropRisk = false
         log.log("AudioOutput: interruption ended — engine restart gate cleared", category: .audioSession)
+    }
+
+    /// Called by `AudioPlayerService.stopAndClearInterruption()` when CarPlay
+    /// disconnects. Records the drop-risk evidence the heal predicate below
+    /// requires: `stopAndClearInterruption()` nils AudioPlayerService's
+    /// `interruptedChannel`/`interruptionTime` unconditionally, whether or not
+    /// the interruption that's still latched here is actually over — this is
+    /// the moment that ambiguity is created, so it's the moment to record it.
+    /// No-op when nothing is currently interrupted (a plain disconnect with no
+    /// interruption in flight has no drop risk to flag).
+    public func noteInterruptionDropRisk() {
+        guard isInterrupted else { return }
+        interruptionEndedDropRisk = true
+        log.log("AudioOutput: interruption drop-risk recorded (stopAndClearInterruption ran while still interrupted)", category: .audioSession)
     }
 
     /// Called by every deliberate-play path (assertSessionOwnership,
@@ -270,56 +300,72 @@ public final class AudioOutput {
         guard isInterrupted else { return }
         isInterrupted = false
         interruptionBeganAt = nil
+        interruptionEndedDropRisk = false
         log.log("AudioOutput: interruption gate cleared by deliberate-play path (was stuck from unmatched .began)", category: .audioSession)
     }
 
     // MARK: - Stale-gate heal (beads_mobilemusic-irg)
 
-    /// Heals a latched `isInterrupted` gate when staleness is provable from
-    /// `interruptionBeganAt` alone — i.e. without relying on
-    /// AudioPlayerService's `interruptedChannel`, which
-    /// `stopAndClearInterruption()` clears on CarPlay disconnect even though
-    /// the interruption may still have been active at that moment.
+    /// Heals a latched `isInterrupted` gate — but ONLY when there is evidence
+    /// that distinguishes "the `.ended` was dropped" from "the interruption is
+    /// still running". Round 1 of this fix tried to prove staleness from
+    /// elapsed time + playback state alone; the review proved that inference
+    /// false for an ordinary >30s phone call: the ride-out fallback stops
+    /// playback at ~bufferDuration (~8s) while the call is still active, so by
+    /// 31s in, `elapsed > 30 && !isPlaying && !isBuffering` all hold for a
+    /// call that has NOT ended — playback state after ride-out is identical
+    /// in the stale and still-active cases by design. Healing on that alone
+    /// let CarPlay reconnect-resume start playback over a live call (46u,
+    /// converted from fails-safe to fails-dangerous).
     ///
-    /// Called from `AudioPlayerService.recoverStaleInterruption()`, which
-    /// already runs at the two points where a dropped `.ended` needs to be
-    /// discovered: CarPlay reconnect and app-foreground return. Uses the
-    /// SAME staleness criteria that method already applies to the
-    /// interruptedChannel case (30s elapsed, not currently playing or
-    /// buffering) so this is provably no more aggressive than the existing,
-    /// already-shipped heal — it just no longer requires interruptedChannel
-    /// to still be set.
+    /// The proof now requires BOTH:
+    ///   1. `interruptionEndedDropRisk` — recorded by `noteInterruptionDropRisk()`
+    ///      only when `stopAndClearInterruption()` (CarPlay disconnect) ran
+    ///      while still interrupted, i.e. the actual documented `.ended`-
+    ///      dropping event. Without this flag, elapsed time and idle playback
+    ///      prove nothing — an ordinary long ride-out looks identical, and the
+    ///      heal must not fire.
+    ///   2. A live probe (`AVAudioSession.isOtherAudioPlaying`, read at heal
+    ///      time and passed into the pure predicate as `foreignAudioDetected`)
+    ///      — the drop-risk flag alone still false-heals if CarPlay reconnects
+    ///      while the call is STILL active (disconnect mid-call → reconnect
+    ///      mid-call, no `.ended` yet). `isOtherAudioPlaying` is validated
+    ///      ground truth for "another app/call currently owns the session" in
+    ///      THIS app: beads_mobilemusic-lfn confirmed it true during a live
+    ///      cellular call via a since-removed CallKit-backed diagnostic
+    ///      (build 162), and production already gates automatic reconnects on
+    ///      it unconditionally (`scheduleDeferredReconnect`,
+    ///      `AudioPlayerService.play()`/`startStream()` takeover-skip) — this
+    ///      heal uses the exact same, already-trusted signal. China-safe: no
+    ///      CallKit in this path, matching beads_mobilemusic-ylb.
     ///
-    /// `isRidingOutInterruption` closes an edge case a plain
-    /// `!isPlaying && !isBuffering` check would miss: during a genuine
-    /// ride-out (Siri/call still active, VLC kept alive), VLC can report a
-    /// transient buffering stall unrelated to the interruption. Without this
-    /// guard a stall past the 30s mark could heal the gate while the
-    /// interruption is provably still in effect — exactly what 46u forbids.
-    /// `stop()` always clears `isRidingOutInterruption` before either path
-    /// that legitimately proves staleness runs (the existing fallback-then-
-    /// stop for radio, and `stopAndClearInterruption()` on CarPlay
-    /// disconnect), so requiring it false here costs nothing on the
-    /// already-safe paths.
+    /// The existing elapsed/not-playing/not-buffering/not-riding-out checks
+    /// stay as secondary guards (unchanged 30s threshold and rationale from
+    /// round 1) — they just no longer stand in as sole proof.
     ///
-    /// No-op (never heals) when the elapsed time is short or a ride-out is
-    /// still in progress — those are the cases where the interruption may
-    /// genuinely still be active (the 46u constraint: never clear
-    /// isInterrupted while that's possible).
+    /// No-op (never heals) when the drop-risk flag isn't set, elapsed time is
+    /// short, playback/ride-out is active, or the probe finds foreign audio —
+    /// any of those leaves open the possibility the interruption is still
+    /// genuinely active (the 46u constraint: never clear isInterrupted while
+    /// that's possible).
     @discardableResult
     public func healStaleInterruptionGateIfNeeded(isPlaying: Bool, isBuffering: Bool, isRidingOutInterruption: Bool) -> Bool {
         let elapsed = interruptionBeganAt.map { Date().timeIntervalSince($0) }
+        let foreignAudioDetected = AVAudioSession.sharedInstance().isOtherAudioPlaying
         guard Self.shouldHealStaleInterruptionGate(
             isInterrupted: isInterrupted,
+            dropRiskFlagSet: interruptionEndedDropRisk,
             elapsedSinceBegan: elapsed,
             isPlaying: isPlaying,
             isBuffering: isBuffering,
-            isRidingOutInterruption: isRidingOutInterruption
+            isRidingOutInterruption: isRidingOutInterruption,
+            foreignAudioDetected: foreignAudioDetected
         ) else { return false }
 
-        log.log("AudioOutput: healing stale interruption gate (\(Int(elapsed ?? 0))s since began, interruptedChannel-based recovery could not prove staleness — beads_mobilemusic-irg)", category: .audioSession)
+        log.log("AudioOutput: healing stale interruption gate (\(Int(elapsed ?? 0))s since began, drop-risk flag set, no foreign audio detected — beads_mobilemusic-irg)", category: .audioSession)
         isInterrupted = false
         interruptionBeganAt = nil
+        interruptionEndedDropRisk = false
         return true
     }
 
@@ -327,17 +373,22 @@ public final class AudioOutput {
     /// so unit tests can cover every combination without instantiating
     /// AudioOutput (constructing `AudioOutput.shared` deadlocks the
     /// simulator's CoreAudio in the test target — see
-    /// AudioOutputRestartPredicateTests.swift). Mirrors the shape of
+    /// AudioOutputRestartPredicateTests.swift) and without a live
+    /// AVAudioSession (`foreignAudioDetected` is passed in as a plain Bool —
+    /// the probe itself is read by the caller). Mirrors the shape of
     /// `shouldRestartEngineOnConfigChange`.
     static func shouldHealStaleInterruptionGate(
         isInterrupted: Bool,
+        dropRiskFlagSet: Bool,
         elapsedSinceBegan: TimeInterval?,
         isPlaying: Bool,
         isBuffering: Bool,
-        isRidingOutInterruption: Bool
+        isRidingOutInterruption: Bool,
+        foreignAudioDetected: Bool
     ) -> Bool {
-        guard isInterrupted, let elapsed = elapsedSinceBegan else { return false }
-        return elapsed > 30 && !isPlaying && !isBuffering && !isRidingOutInterruption
+        guard isInterrupted, dropRiskFlagSet, let elapsed = elapsedSinceBegan else { return false }
+        guard elapsed > 30, !isPlaying, !isBuffering, !isRidingOutInterruption else { return false }
+        return !foreignAudioDetected
     }
 
     // MARK: - Pure restart predicate (testable)

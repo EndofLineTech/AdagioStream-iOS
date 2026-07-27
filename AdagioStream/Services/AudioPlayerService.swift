@@ -922,6 +922,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         // CoreAudio in the test target). When a real interruption has
         // occurred, AudioOutput.shared was already safely constructed by
         // noteInterruptionBegan() at that point, so this is cheap.
+        // "Has ever" latch, not a live-state check: these counters only ever
+        // increment, so this is true whenever ANY .began has gone unmatched
+        // over the process lifetime — not necessarily the current moment.
         if interruptionBeganCount > interruptionEndedCount {
             AudioOutput.shared.healStaleInterruptionGateIfNeeded(
                 isPlaying: isPlaying,
@@ -1074,6 +1077,12 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// won't auto-resume on next CarPlay connect.  Use this when the user
     /// explicitly ends a session (e.g. CarPlay disconnect).
     public func stopAndClearInterruption() {
+        // beads_mobilemusic-irg (review kickback): record the drop-risk
+        // evidence BEFORE clearing interruptedChannel/interruptionTime below.
+        // This IS the CarPlay-disconnect-mid-interruption moment the heal
+        // predicate needs distinguishing evidence for — no-op if nothing is
+        // currently interrupted.
+        AudioOutput.shared.noteInterruptionDropRisk()
         interruptedChannel = nil
         interruptedSource = nil        // d6q.8
         interruptedQueueAPI = nil      // d6q.8

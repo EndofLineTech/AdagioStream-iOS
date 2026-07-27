@@ -239,41 +239,49 @@ final class InterruptionSnapshotStructTests: XCTestCase {
 
 // MARK: - AudioOutput.shouldHealStaleInterruptionGate (beads_mobilemusic-irg)
 //
-// Traced failure sequence (from the bead): interruption .began →
-// AudioOutput.isInterrupted latches true → CarPlay disconnects mid-
-// interruption → CarPlaySceneDelegate calls stopAndClearInterruption(),
-// which nils AudioPlayerService's interruptedChannel/interruptionTime but
-// does NOT touch AudioOutput.isInterrupted → the .ended notification is
-// dropped (documented-common on CarPlay disconnect) → on reconnect,
-// recoverStaleInterruption()'s existing interruptedChannel-based recovery
-// no-ops (interruptedChannel is nil) → isInterrupted stays latched until the
-// next deliberate play, silently skipping CarPlay reconnect-resume.
+// Round 1 traced failure sequence: interruption .began → AudioOutput.isInterrupted
+// latches true → CarPlay disconnects mid-interruption → CarPlaySceneDelegate calls
+// stopAndClearInterruption(), which nils AudioPlayerService's interruptedChannel/
+// interruptionTime but does NOT touch AudioOutput.isInterrupted → the .ended
+// notification is dropped (documented-common on CarPlay disconnect) → on
+// reconnect, recoverStaleInterruption()'s existing interruptedChannel-based
+// recovery no-ops (interruptedChannel is nil) → isInterrupted stays latched
+// until the next deliberate play, silently skipping CarPlay reconnect-resume.
 //
-// The fix: AudioOutput tracks `interruptionBeganAt` independently of
-// AudioPlayerService's interruptedChannel/interruptionTime — set at
-// noteInterruptionBegan(), NOT cleared by stopAndClearInterruption() — so
-// staleness can still be proven at reconnect. shouldHealStaleInterruptionGate
-// is the pure decision extracted from that heal so it can be tested without
-// touching AudioOutput.shared (constructing it deadlocks the simulator's
-// CoreAudio in this test target — see AudioOutputRestartPredicateTests.swift).
+// Round 1's fix (elapsed-time + idle-playback alone) was BLOCKED on review:
+// the ride-out fallback stops playback at ~bufferDuration (~8s) while a real
+// phone call is still active, so an ordinary >30s call satisfies
+// `elapsed > 30 && !isPlaying && !isBuffering` too — playback state after
+// ride-out is identical in the stale and still-active cases by design. That
+// let CarPlay resume start playback OVER a live call (fails-dangerous).
+//
+// Round 2 (this test class): the predicate now requires BOTH (1) a recorded
+// drop-risk flag — set ONLY when stopAndClearInterruption() ran while still
+// interrupted, i.e. the actual documented-common drop event, not just "some
+// interruption happened a while ago" — and (2) a live probe result
+// (`AVAudioSession.isOtherAudioPlaying`, passed in as `foreignAudioDetected`
+// so the predicate stays pure) confirming no foreign audio currently holds
+// the session. Either piece of evidence missing means "cannot distinguish
+// stale from still-active" → must not heal.
 final class StaleInterruptionGateHealPredicateTests: XCTestCase {
 
-    // MARK: The bead's exact sequence — gate WAS latched, staleness IS provable
+    // MARK: Positive — drop-risk flag set, probe clear, elapsed proven
 
-    func testHealsWhenInterruptedChannelWasClearedButGateIsProvablyStale() {
-        // began → (disconnect-cleanup nils interruptedChannel, elsewhere) →
-        // no .ended → reconnect recovery runs with only interruptionBeganAt
-        // as evidence. 45s since .began, playback torn down by stop(), no
-        // ride-out in progress (stop() always clears it) — staleness proven.
+    func testHealsWhenDropRiskSetAndProbeClearAndElapsedPastThreshold() {
+        // The bead's actual sequence: disconnect while interrupted (flag set),
+        // .ended dropped, reconnect 45s later — the call has genuinely ended
+        // by then, so the probe finds no foreign audio holding the session.
         XCTAssertTrue(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 45,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
-            "A latched gate with no balanced .ended, 45s since .began, and no active playback must heal"
+            "Drop-risk flag set + probe clear + elapsed past threshold + idle playback must heal"
         )
     }
 
@@ -281,42 +289,71 @@ final class StaleInterruptionGateHealPredicateTests: XCTestCase {
         XCTAssertTrue(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 30.1,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
-            "Just past the 30s threshold must heal"
+            "Just past the 30s threshold must heal when the rest of the evidence holds"
         )
     }
 
-    // MARK: Negative case — began recently / interruption plausibly still active
+    // MARK: Negative — the exact false-heal the review caught: flag set, but probe says foreign audio present
 
-    func testDoesNotHealWhenInterruptionBeganRecently() {
-        // Same disconnect-cleanup shape, but only 5s since .began — the
-        // interruption (or the CarPlay reconnect cycle itself) may still be
-        // genuinely in progress. The 46u constraint: never clear isInterrupted
-        // while that's possible.
+    func testDoesNotHealWhenProbeDetectsForeignAudioEvenWithDropRiskAndElapsed() {
+        // Disconnect mid-call (flag set) → reconnect mid-call, no .ended yet.
+        // Elapsed and idle-playback both look identical to the stale case —
+        // only the probe distinguishes them. This is the exact scenario the
+        // review blocked round 1 over: must NOT heal.
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
-                elapsedSinceBegan: 5,
+                dropRiskFlagSet: true,
+                elapsedSinceBegan: 45,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: true
             ),
-            "A gate latched only 5s ago must NOT heal — the interruption may still be active"
+            "Must NOT heal when the live probe detects foreign audio, even with the drop-risk flag set and elapsed past threshold — the interruption is still active"
         )
     }
+
+    // MARK: Negative — flag unset means no documented drop occurred, regardless of everything else
+
+    func testDoesNotHealWhenDropRiskFlagNotSetRegardlessOfOtherEvidence() {
+        // No CarPlay disconnect-while-interrupted ever happened (e.g. a plain
+        // long Siri ride-out with no CarPlay involved at all). Elapsed time,
+        // idle playback, and even a clear probe cannot substitute for the
+        // actual documented drop event — nothing proves an .ended was lost.
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                dropRiskFlagSet: false,
+                elapsedSinceBegan: 999,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
+            ),
+            "Must NOT heal when the drop-risk flag was never set — no evidence a .ended was actually dropped"
+        )
+    }
+
+    // MARK: Boundary — exactly 30s must not heal (matches round-1 threshold semantics)
 
     func testDoesNotHealExactlyAtTheThirtySecondThreshold() {
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 30,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
             "Exactly 30s must NOT heal — matches the existing interruptedChannel-based staleness threshold (elapsed > 30, not >=)"
         )
@@ -328,10 +365,12 @@ final class StaleInterruptionGateHealPredicateTests: XCTestCase {
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: false,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 999,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
             "Nothing to heal when isInterrupted is already false"
         )
@@ -341,10 +380,12 @@ final class StaleInterruptionGateHealPredicateTests: XCTestCase {
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: nil,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
             "No interruptionBeganAt evidence means staleness cannot be proven — must not heal"
         )
@@ -356,10 +397,12 @@ final class StaleInterruptionGateHealPredicateTests: XCTestCase {
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 60,
                 isPlaying: true,
                 isBuffering: false,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
             "Must not heal while playback is active, regardless of elapsed time"
         )
@@ -369,10 +412,12 @@ final class StaleInterruptionGateHealPredicateTests: XCTestCase {
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 60,
                 isPlaying: false,
                 isBuffering: true,
-                isRidingOutInterruption: false
+                isRidingOutInterruption: false,
+                foreignAudioDetected: false
             ),
             "Must not heal while buffering, regardless of elapsed time"
         )
@@ -389,10 +434,12 @@ final class StaleInterruptionGateHealPredicateTests: XCTestCase {
         XCTAssertFalse(
             AudioOutput.shouldHealStaleInterruptionGate(
                 isInterrupted: true,
+                dropRiskFlagSet: true,
                 elapsedSinceBegan: 60,
                 isPlaying: false,
                 isBuffering: false,
-                isRidingOutInterruption: true
+                isRidingOutInterruption: true,
+                foreignAudioDetected: false
             ),
             "Must not heal while isRidingOutInterruption is true — the interruption is provably still in effect"
         )
