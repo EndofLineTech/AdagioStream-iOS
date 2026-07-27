@@ -413,14 +413,25 @@ public struct ABSProgressUpdate: Codable, Equatable {
 /// a real ABS server is a one-line change here — not a scatter of `if let
 /// episodeId` branches through the API/sync-queue/player.
 ///
-/// ponytail: UNVALIDATED ASSUMPTION. There is no reachable podcast library to
-/// test against, so this is coded strictly to the documented ABS API shape:
-/// progress keyed by `(libraryItemId, episodeId)` and a dedicated per-episode
-/// play endpoint. If a real server differs (e.g. a flat episode-only id, or no
-/// episode-scoped play endpoint), only `ABSEpisodeProgressKey` and its two
-/// methods below need to change. Follow-up: file a bead to validate podcast
-/// episode progress on device once a podcast library is reachable.
-public struct ABSEpisodeProgressKey: Equatable {
+/// VALIDATED (beads_mobilemusic-yha.6) against the ABS server source at
+/// v2.35.1 — the version confirmed running on the reachable test server
+/// (bookshelf.endofline.tech, via `GET /ping`). No podcast library was
+/// reachable to exercise this live/authenticated, so validation is by
+/// server-source + version correlation rather than an observed response, but
+/// every path/field this seam produces matches the deployed server's route
+/// table and controller code exactly:
+///   - `playPath` ↔ `router.post('/items/:id/play/:episodeId', ...)`
+///     (`ApiRouter.js`)
+///   - `progressPath` (PATCH) ↔ `router.patch('/me/progress/:libraryItemId/:episodeId?', ...)`
+///   - the GET counterpart (`AudiobookshelfAPI.episodeProgress`) ↔
+///     `router.get('/me/progress/:id/:episodeId?', ...)`
+///   - the batch payload's `episodeId` field ↔ `MeController
+///     .batchUpdateMediaProgress` passes each payload straight through to
+///     `User.createUpdateMediaProgressFromPayload`, which branches on
+///     `progressPayload.episodeId` — exact field name match.
+/// Still the one seam to change if a future server version differs — see
+/// `playPath`/`progressPath` below.
+public struct ABSEpisodeProgressKey: Hashable {
     public let libraryItemId: String
     /// `nil` for a book/show-level item; set for a podcast episode.
     public let episodeId: String?
