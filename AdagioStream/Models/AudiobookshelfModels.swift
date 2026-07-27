@@ -355,8 +355,20 @@ public struct ABSChapterDTO: Decodable {
     enum CodingKeys: String, CodingKey { case id, title, start, end }
 }
 
-/// Per-user media progress (from login payload or `?include=progress`).
+/// Per-user media progress (from login payload, `?include=progress`, a single
+/// `GET /api/me/progress/{item}/{episode}`, or a batched `GET /api/me`
+/// `mediaProgress[]` entry).
+///
+/// `libraryItemId`/`episodeId` are `nil` for the embedded shapes (item detail,
+/// `episodeProgress`) where the caller already knows which item/episode this
+/// record belongs to from context — but ARE present on a batched `GET /api/me`
+/// `mediaProgress[]` record (confirmed against the ABS server source,
+/// `User.toOldJSONForBrowser`/`MediaProgress.getOldMediaProgress`, at server
+/// version 2.35.1 — beads_mobilemusic-yha.6), which is what
+/// `ABSEpisodeProgressIndex.build` keys on for the 5aj.1 batch-hydration path.
 public struct ABSMediaProgressDTO: Decodable {
+    public let libraryItemId: String?
+    public let episodeId: String?
     public let currentTime: Double?
     public let progress: Double?
     public let isFinished: Bool?
@@ -364,13 +376,15 @@ public struct ABSMediaProgressDTO: Decodable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        libraryItemId = try? c.decodeIfPresent(String.self, forKey: .libraryItemId)
+        episodeId = try? c.decodeIfPresent(String.self, forKey: .episodeId)
         currentTime = try? c.decodeIfPresent(Double.self, forKey: .currentTime)
         progress = try? c.decodeIfPresent(Double.self, forKey: .progress)
         isFinished = try? c.decodeIfPresent(Bool.self, forKey: .isFinished)
         lastUpdate = try? c.decodeIfPresent(Int64.self, forKey: .lastUpdate)
     }
 
-    enum CodingKeys: String, CodingKey { case currentTime, progress, isFinished, lastUpdate }
+    enum CodingKeys: String, CodingKey { case libraryItemId, episodeId, currentTime, progress, isFinished, lastUpdate }
 }
 
 // MARK: - Offline progress update (E3 / mkj.2; episodeId added E1 / yha.4)
@@ -468,6 +482,64 @@ public struct ABSEpisodeProgressKey: Hashable {
             isFinished: isFinished,
             lastUpdate: lastUpdate
         )
+    }
+}
+
+// MARK: - Batched episode progress hydration (E3 / 5aj.1)
+
+/// Indexes a batched `GET /api/me` `mediaProgress[]` response by
+/// `ABSEpisodeProgressKey` so By-Show and Recent-Episodes lists can hydrate
+/// real per-episode progress with ONE request instead of an N+1
+/// `GET /api/me/progress/{item}/{episode}` per episode — the same class of
+/// serial-fetch mistake uxc.3 already fixed for per-show detail fetches.
+/// Pure — no network. `GET /api/me`'s `mediaProgress[]` shape (each record
+/// carrying `libraryItemId`/`episodeId`) is confirmed against the ABS server
+/// source at v2.35.1 (`User.toOldJSONForBrowser` → `MediaProgress
+/// .getOldMediaProgress()`) — see `ABSEpisodeProgressKey`'s doc and yha.6.
+///
+/// Same-show collision safety: the dictionary key is the FULL
+/// `(libraryItemId, episodeId)` pair (via `ABSEpisodeProgressKey: Hashable`),
+/// so two different shows whose episodes happen to share an id (or two
+/// episodes of the same show) can never collide — only a literal duplicate
+/// `(libraryItemId, episodeId)` pair overwrites, which the server itself
+/// guarantees is unique (one progress record per user per episode).
+public enum ABSEpisodeProgressIndex {
+    /// Book-level records (`episodeId == nil`) are indexed too, keyed by
+    /// `(libraryItemId, nil)` — unused by the podcast hydration call sites
+    /// today, but keeps the index total rather than silently dropping rows.
+    /// Records missing `libraryItemId` (shouldn't happen on a batched
+    /// response, but the field is optional on the shared DTO) are skipped —
+    /// there's no key to hydrate with.
+    public static func build(from records: [ABSMediaProgressDTO]) -> [ABSEpisodeProgressKey: ABSMediaProgressDTO] {
+        var index: [ABSEpisodeProgressKey: ABSMediaProgressDTO] = [:]
+        for record in records {
+            guard let libraryItemId = record.libraryItemId else { continue }
+            index[ABSEpisodeProgressKey(libraryItemId: libraryItemId, episodeId: record.episodeId)] = record
+        }
+        return index
+    }
+}
+
+extension ABSEpisodeDTO {
+    /// Returns a copy with `userMediaProgress` set from a batched progress
+    /// index (5aj.1), keyed by `(showId, id)`. Unmatched episodes pass through
+    /// unchanged (stay unplayed). Pure.
+    ///
+    /// `PodcastEpisodeEntry.activeProgress` (the badge/progress-bar read site)
+    /// already falls back to `hydratedProgress ?? episode.userMediaProgress`,
+    /// so hydrating it here — on the DTO itself — needs no view-layer changes:
+    /// `PodcastEpisodeRowView`/`PodcastEpisodeDetailView` build their `entry`
+    /// straight from the episode they're handed.
+    public func hydratingProgress(from index: [ABSEpisodeProgressKey: ABSMediaProgressDTO], showId: String) -> ABSEpisodeDTO {
+        guard let progress = index[ABSEpisodeProgressKey(libraryItemId: showId, episodeId: id)] else { return self }
+        return ABSEpisodeDTO(id: id, title: title, duration: duration, pubDate: pubDate, audioFile: audioFile, userMediaProgress: progress)
+    }
+}
+
+extension Array where Element == ABSEpisodeDTO {
+    /// Maps `hydratingProgress(from:showId:)` over every episode in the array.
+    public func hydratingProgress(from index: [ABSEpisodeProgressKey: ABSMediaProgressDTO], showId: String) -> [ABSEpisodeDTO] {
+        map { $0.hydratingProgress(from: index, showId: showId) }
     }
 }
 

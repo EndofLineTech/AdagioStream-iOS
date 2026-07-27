@@ -242,6 +242,18 @@ public struct AudiobookshelfAPI {
         try? await get("/api/me/progress/\(libraryItemId)/\(episodeId)")
     }
 
+    /// `GET /api/me` — the batched alternative to per-episode `episodeProgress`
+    /// GETs (E3 / 5aj.1). Returns every one of this user's progress records
+    /// (books AND podcast episodes) in one request; each carries
+    /// `libraryItemId`/`episodeId` so callers can key it via
+    /// `ABSEpisodeProgressIndex.build`. Empty on any error — a failed batch
+    /// fetch degrades to "no hydrated progress" (unplayed), same as a 404 on
+    /// the single-episode path, rather than failing the whole list load.
+    public func allMediaProgress() async -> [ABSMediaProgressDTO] {
+        guard let me: ABSUserDTO = try? await get("/api/me") else { return [] }
+        return me.mediaProgress ?? []
+    }
+
     // MARK: - Core POST
 
     /// Authenticated POST that decodes the JSON response as `T`.

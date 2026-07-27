@@ -202,13 +202,22 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// Loads one show's full episode list (By Show → episode list, c2s.2).
     /// Episodes are stored in server (newest-first) order; views sort for
     /// display via `PodcastPlaybackContext.sortedEpisodes(_:order:)`.
+    ///
+    /// 5aj.1: `media.episodes[]` carries no per-episode progress (ABS embeds it
+    /// nowhere in the episode object), so episodes previously always rendered
+    /// unplayed. Hydrated here from ONE batched `GET /api/me` fetch (run
+    /// concurrently with the item fetch) via `ABSEpisodeProgressIndex` — not a
+    /// per-episode GET, which would repeat the Recent-Episodes N+1 mistake
+    /// uxc.3 fixed for show-detail fetches.
     public func loadShowDetail(_ show: PodcastShow) async {
         selectedShow = show
         selectedShowEpisodes = []
         showDetailState = .loading
         do {
+            async let progressRecords = api.allMediaProgress()
             let item = try await api.item(id: show.id)
-            let episodes = item.episodes()
+            let progressIndex = ABSEpisodeProgressIndex.build(from: await progressRecords)
+            let episodes = item.episodes().hydratingProgress(from: progressIndex, showId: show.id)
             selectedShowEpisodes = episodes
             showDetailState = episodes.isEmpty ? .empty : .loaded
         } catch let apiErr as AudiobookshelfAPI.APIError {
@@ -240,6 +249,11 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
     /// results are gathered with their original index and re-sorted before
     /// `PodcastRecentEpisodes.aggregate` (which folds shows together in the
     /// order given) — see `Self.reordered`.
+    ///
+    /// 5aj.1: per-episode progress is hydrated from ONE batched
+    /// `GET /api/me` fetch (run concurrently with the per-show task group,
+    /// not per episode) via `ABSEpisodeProgressIndex` — episodes previously
+    /// always rendered unplayed, same root cause as `loadShowDetail`.
     public func loadRecentEpisodes(order: PodcastEpisodeOrder) async {
         guard recentEpisodesState != .loading else { return }
         let shows = podcastShows
@@ -251,6 +265,8 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
 
         var results: [(index: Int, show: PodcastShow, episodes: [ABSEpisodeDTO])?] =
             Array(repeating: nil, count: shows.count)
+
+        async let progressRecords = api.allMediaProgress()
 
         await withTaskGroup(of: (Int, PodcastShow, [ABSEpisodeDTO]?).self) { group in
             var nextIndex = 0
@@ -280,7 +296,10 @@ public final class AudiobookshelfLibraryViewModel: ObservableObject {
             }
         }
 
-        let pairs = Self.reordered(results)
+        let progressIndex = ABSEpisodeProgressIndex.build(from: await progressRecords)
+        let pairs = Self.reordered(results).map { pair in
+            (show: pair.show, episodes: pair.episodes.hydratingProgress(from: progressIndex, showId: pair.show.id))
+        }
         let flattened = PodcastRecentEpisodes.aggregate(shows: pairs, order: order)
         recentEpisodes = flattened
         recentEpisodesState = flattened.isEmpty ? .empty : .loaded

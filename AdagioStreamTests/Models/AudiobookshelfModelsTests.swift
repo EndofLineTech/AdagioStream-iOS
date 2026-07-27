@@ -152,4 +152,117 @@ final class AudiobookshelfModelsTests: XCTestCase {
         let dto = try JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(itemJSON.utf8))
         XCTAssertEqual(dto.media?.metadata?.displayAuthor, "Jane Doe")
     }
+
+    // MARK: - 5aj.1 / yha.6: batched episode progress hydration
+
+    private func mediaProgress(libraryItemId: String, episodeId: String?, currentTime: Double, progress: Double, isFinished: Bool = false) -> ABSMediaProgressDTO {
+        let episodeIdJSON = episodeId.map { "\"\($0)\"" } ?? "null"
+        let json = """
+        { "libraryItemId": "\(libraryItemId)", "episodeId": \(episodeIdJSON),
+          "currentTime": \(currentTime), "progress": \(progress), "isFinished": \(isFinished),
+          "lastUpdate": 1720000000000 }
+        """
+        return try! JSONDecoder().decode(ABSMediaProgressDTO.self, from: Data(json.utf8))
+    }
+
+    func testMediaProgressDecodesLibraryItemAndEpisodeIds() throws {
+        // GET /api/me's batched mediaProgress[] shape (confirmed against ABS
+        // server source, v2.35.1 — yha.6) — the fields the index keys on.
+        let record = mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 42, progress: 0.5)
+        XCTAssertEqual(record.libraryItemId, "show-a")
+        XCTAssertEqual(record.episodeId, "ep-1")
+        XCTAssertEqual(record.currentTime, 42)
+    }
+
+    func testMediaProgressWithoutIdsStillDecodes() throws {
+        // The embedded shapes (item-detail userMediaProgress, single
+        // episodeProgress GET) never carry these fields — must stay optional,
+        // not break existing decode paths.
+        let dto = try JSONDecoder().decode(ABSLibraryItemDTO.self, from: Data(itemJSON.utf8))
+        XCTAssertNil(dto.userMediaProgress?.libraryItemId)
+        XCTAssertNil(dto.userMediaProgress?.episodeId)
+        XCTAssertEqual(dto.userMediaProgress?.currentTime ?? 0, 1350.5, accuracy: 0.001)
+    }
+
+    func testEpisodeProgressIndexKeysByLibraryItemAndEpisode() {
+        let records = [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 10, progress: 0.1),
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-2", currentTime: 20, progress: 0.2),
+        ]
+        let index = ABSEpisodeProgressIndex.build(from: records)
+        XCTAssertEqual(index[ABSEpisodeProgressKey(libraryItemId: "show-a", episodeId: "ep-1")]?.currentTime, 10)
+        XCTAssertEqual(index[ABSEpisodeProgressKey(libraryItemId: "show-a", episodeId: "ep-2")]?.currentTime, 20)
+        XCTAssertNil(index[ABSEpisodeProgressKey(libraryItemId: "show-b", episodeId: "ep-1")])
+    }
+
+    /// Two DIFFERENT shows whose episodes happen to share an episode id must
+    /// not collide — the key is the full (libraryItemId, episodeId) pair, not
+    /// just episodeId.
+    func testEpisodeProgressIndexSameEpisodeIdDifferentShowsDoNotCollide() {
+        let records = [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 111, progress: 0.11),
+            mediaProgress(libraryItemId: "show-b", episodeId: "ep-1", currentTime: 222, progress: 0.22),
+        ]
+        let index = ABSEpisodeProgressIndex.build(from: records)
+        XCTAssertEqual(index[ABSEpisodeProgressKey(libraryItemId: "show-a", episodeId: "ep-1")]?.currentTime, 111)
+        XCTAssertEqual(index[ABSEpisodeProgressKey(libraryItemId: "show-b", episodeId: "ep-1")]?.currentTime, 222)
+    }
+
+    func testEpisodeProgressIndexSkipsRecordsWithoutLibraryItemId() {
+        // A record with no libraryItemId (shouldn't happen on a batched
+        // response, but the field is optional on the shared DTO) has no key
+        // to hydrate with — must be skipped, not crash or produce a bogus key.
+        let json = #"{ "episodeId": "ep-1", "currentTime": 1.0, "progress": 0.1, "isFinished": false }"#
+        let record = try! JSONDecoder().decode(ABSMediaProgressDTO.self, from: Data(json.utf8))
+        XCTAssertNil(record.libraryItemId)
+        let index = ABSEpisodeProgressIndex.build(from: [record])
+        XCTAssertTrue(index.isEmpty)
+    }
+
+    func testEpisodeDTOHydratingProgressSetsUserMediaProgressWhenMatched() {
+        let episode = ABSEpisodeDTO(id: "ep-1", title: "Ep 1", duration: 1800)
+        XCTAssertNil(episode.userMediaProgress)
+        let index = ABSEpisodeProgressIndex.build(from: [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 900, progress: 0.5),
+        ])
+        let hydrated = episode.hydratingProgress(from: index, showId: "show-a")
+        XCTAssertEqual(hydrated.userMediaProgress?.currentTime, 900)
+        XCTAssertEqual(hydrated.userMediaProgress?.progress, 0.5)
+        // Everything else about the episode passes through unchanged.
+        XCTAssertEqual(hydrated.id, "ep-1")
+        XCTAssertEqual(hydrated.title, "Ep 1")
+    }
+
+    func testEpisodeDTOHydratingProgressLeavesUnmatchedEpisodeUnplayed() {
+        let episode = ABSEpisodeDTO(id: "ep-2", title: "Ep 2", duration: 1200)
+        let index = ABSEpisodeProgressIndex.build(from: [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 900, progress: 0.5),
+        ])
+        let hydrated = episode.hydratingProgress(from: index, showId: "show-a")
+        XCTAssertNil(hydrated.userMediaProgress)
+    }
+
+    /// Same episode id, different show: hydrating "show-b"'s episode must NOT
+    /// pick up "show-a"'s progress record for the same episodeId.
+    func testEpisodeDTOHydratingProgressRespectsShowScope() {
+        let episode = ABSEpisodeDTO(id: "ep-1", title: "Ep 1", duration: 1800)
+        let index = ABSEpisodeProgressIndex.build(from: [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-1", currentTime: 900, progress: 0.5),
+        ])
+        let hydrated = episode.hydratingProgress(from: index, showId: "show-b")
+        XCTAssertNil(hydrated.userMediaProgress)
+    }
+
+    func testArrayHydratingProgressMapsEachEpisode() {
+        let episodes = [
+            ABSEpisodeDTO(id: "ep-1", title: "Ep 1", duration: 1800),
+            ABSEpisodeDTO(id: "ep-2", title: "Ep 2", duration: 1200),
+        ]
+        let index = ABSEpisodeProgressIndex.build(from: [
+            mediaProgress(libraryItemId: "show-a", episodeId: "ep-2", currentTime: 600, progress: 0.5),
+        ])
+        let hydrated = episodes.hydratingProgress(from: index, showId: "show-a")
+        XCTAssertNil(hydrated[0].userMediaProgress)
+        XCTAssertEqual(hydrated[1].userMediaProgress?.currentTime, 600)
+    }
 }

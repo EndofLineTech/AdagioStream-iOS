@@ -7,6 +7,16 @@ import XCTest
 
 final class AudiobookshelfAPITests: XCTestCase {
 
+    override func setUp() {
+        super.setUp()
+        MockURLProtocolHandler.reset()
+    }
+
+    override func tearDown() {
+        MockURLProtocolHandler.reset()
+        super.tearDown()
+    }
+
     private func makeAPI(host: String) -> AudiobookshelfAPI {
         let auth = AudiobookshelfAuth(
             host: URL(string: host)!,
@@ -76,5 +86,30 @@ final class AudiobookshelfAPITests: XCTestCase {
         let comps = URLComponents(url: url!, resolvingAgainstBaseURL: false)!
         XCTAssertEqual(comps.path, "/audiobookshelf/api/items/abc/cover")
         XCTAssertEqual(comps.queryItems?.first(where: { $0.name == "token" })?.value, "TOK")
+    }
+
+    // MARK: - 5aj.1: batched progress fetch (GET /api/me)
+
+    func testAllMediaProgressDecodesBatchedRecords() async {
+        let api = makeAPI(host: "https://h")
+        let json = """
+        { "mediaProgress": [
+            { "libraryItemId": "show-a", "episodeId": "ep-1", "currentTime": 10.0, "progress": 0.1, "isFinished": false },
+            { "libraryItemId": "show-a", "episodeId": "ep-2", "currentTime": 20.0, "progress": 0.2, "isFinished": true }
+        ] }
+        """
+        MockURLProtocolHandler.responseQueue = [.init(json: json)]
+        let records = await api.allMediaProgress()
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(records.first?.libraryItemId, "show-a")
+        XCTAssertEqual(records.first?.episodeId, "ep-1")
+        XCTAssertEqual(MockURLProtocolHandler.capturedRequests.first?.url?.path, "/api/me")
+    }
+
+    func testAllMediaProgressReturnsEmptyOnServerError() async {
+        let api = makeAPI(host: "https://h")
+        MockURLProtocolHandler.responseQueue = [.init(json: "{}", statusCode: 500)]
+        let records = await api.allMediaProgress()
+        XCTAssertTrue(records.isEmpty)
     }
 }
