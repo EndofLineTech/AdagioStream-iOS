@@ -35,6 +35,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
     private var startupStreamID: String?
     private var hasAttemptedStartupStream = false
+    // beads_mobilemusic-cpr: CarPlay-reconnect resume. Mirrors the
+    // startupStreamID/hasAttemptedStartupStream shape above exactly — same
+    // settings-load Task, same one-shot-on-first-non-empty-snapshot gate,
+    // same silent-no-op-if-never-found behavior. See
+    // `attemptCarPlayReconnectResume()` for why this reuses that shape
+    // instead of inventing a new bounded-wait mechanism.
+    private var carPlayReconnectResume: CarPlayReconnectResume = .off
+    private var carPlayReconnectSpecificChannel: CarPlayResumeChannel?
+    private var hasAttemptedCarPlayReconnectResume = false
     private var providerRecoveryAttempts = 0
     private let maxProviderRecoveryAttempts = 2
     /// Separate counter for the "providers list still empty" reschedule path
@@ -62,7 +71,9 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             )
             sortPrefixes = settings.sortPrefixes
             startupStreamID = settings.startupStreamID
-            log.log("Settings loaded: startupStream=\(settings.startupStreamID ?? "none")", category: .carplay)
+            carPlayReconnectResume = settings.carPlayReconnectResume
+            carPlayReconnectSpecificChannel = settings.carPlayReconnectSpecificChannel
+            log.log("Settings loaded: startupStream=\(settings.startupStreamID ?? "none"), carPlayReconnectResume=\(settings.carPlayReconnectResume.rawValue)", category: .carplay)
         }
         updateNowPlayingButtons()
         setRootTemplate()
@@ -83,6 +94,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
                 }
                 self.updateNowPlayingButtons()
                 self.attemptStartupStream()
+                self.attemptCarPlayReconnectResume()
             }
 
         providerManager.$groupSortOrder
@@ -283,6 +295,133 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
                 self?.audioPlayer.refreshNowPlayingInfo()
             }
         }
+    }
+
+    // MARK: - CarPlay-reconnect resume (beads_mobilemusic-cpr)
+    //
+    // Reconnect signal: this runs from the SAME `$channels` sink that drives
+    // `attemptStartupStream()` above, which fires once per CarPlay scene
+    // connection because `configure()` (which subscribes it) is only ever
+    // called from `CarPlaySceneDelegate.didConnect`. Deliberately NOT hooked
+    // to `AVAudioSession.routeChangeNotification` (`.newDeviceAvailable`):
+    // that notification fires for ANY new audio route (AirPods, a Bluetooth
+    // speaker, etc.), is not CarPlay-specific, and
+    // `AudioPlayerService+Interruption.handleRouteChange` is documented as
+    // deliberately resume-free — a standing product decision this feature
+    // must not disturb when the setting is off (the default).
+
+    /// Gated ENTIRELY behind `carPlayReconnectResume` (default `.off`), so
+    /// with the setting off this is a same-line no-op every time — the
+    /// pre-existing "CarPlay reconnect does not auto-resume" behavior is
+    /// unchanged unless the user opts in.
+    ///
+    /// One-shot: `hasAttemptedCarPlayReconnectResume` is set the first time
+    /// this proceeds past the loading gate below (found or not), so a later
+    /// channel-list reload in the same connection can't fire a second
+    /// attempt. It is deliberately left `false` while `carPlayReconnectResume`
+    /// is still its `.off` default from `AppSettings.default` — the settings
+    /// load in `configure()` is async and can complete after the first
+    /// `$channels` publish, so this self-heals into the real value on the
+    /// next publish instead of latching a false negative.
+    ///
+    /// Loading race: like `attemptStartupStream()`, this only proceeds once
+    /// `providerManager.visibleChannels` is non-empty — if the target
+    /// channel isn't in that first non-empty snapshot (or the account never
+    /// loads), it silently never resumes. No error, no retry loop —
+    /// satisfies acceptance criterion 4 by construction.
+    private func attemptCarPlayReconnectResume() {
+        guard carPlayReconnectResume != .off else { return }
+        guard !hasAttemptedCarPlayReconnectResume else { return }
+        guard !providerManager.visibleChannels.isEmpty else { return }
+        hasAttemptedCarPlayReconnectResume = true
+
+        let target = resolveCarPlayResumeTarget()
+        // 46u: an in-flight interruption (unmatched .began) means the engine
+        // may be gated — don't fight it with a programmatic play here; the
+        // interruption's own .ended handler owns resuming (or not) in that
+        // case. `interruptionBeganCount != interruptionEndedCount` is the
+        // same "still interrupted" vocabulary AudioPlayerService+Interruption
+        // already logs as `unmatchedBegans`.
+        let outcome = Self.carPlayResumeDecision(
+            preference: carPlayReconnectResume,
+            targetExists: target != nil,
+            somethingAlreadyPlaying: audioPlayer.currentChannel != nil,
+            interruptionInFlight: audioPlayer.interruptionBeganCount != audioPlayer.interruptionEndedCount,
+            alreadyAttemptedThisConnection: false // this call site IS the one shot; see guard above
+        )
+
+        guard outcome == .play, let channel = target else {
+            log.log(
+                "CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): no-op — targetFound=\(target != nil), somethingPlaying=\(audioPlayer.currentChannel != nil)",
+                category: .carplay
+            )
+            return
+        }
+
+        log.log("CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): auto-playing \"\(channel.name)\"", category: .carplay)
+        // Route through play(channel:) — the same deliberate-play path a
+        // user tap uses. It clears AudioOutput's interruption gate itself
+        // (see the "Stuck-flag safety" note on AudioOutput.isInterrupted),
+        // exactly like the other automatic-resume call sites in
+        // AudioPlayerService+Interruption.swift and +Reconnect.swift, which
+        // also pass userInitiated: false rather than poking the engine
+        // directly.
+        audioPlayer.channels = providerManager.visibleChannels
+        audioPlayer.play(channel: channel, userInitiated: false)
+        updateRootSections()
+    }
+
+    /// Resolves the channel `carPlayReconnectResume` currently points at,
+    /// against the live (loaded) channel list. Returns `nil` when there's
+    /// no configured target, or the target no longer exists — both are
+    /// silent no-ops to the caller, matching acceptance criterion 4.
+    private func resolveCarPlayResumeTarget() -> Channel? {
+        switch carPlayReconnectResume {
+        case .off:
+            return nil
+        case .lastPlayed:
+            // Reuses the existing lastPlayedChannelID UserDefaults key that
+            // AudioPlayerService.play(channel:) already writes on every
+            // channel play (AudioPlayerService.swift) — no new tracking
+            // system needed. Previously write-only; this is its first
+            // reader.
+            guard let id = UserDefaults.standard.string(forKey: "lastPlayedChannelID") else { return nil }
+            return providerManager.visibleChannels.first { $0.id == id }
+        case .specific:
+            guard let ref = carPlayReconnectSpecificChannel else { return nil }
+            return providerManager.visibleChannels.first {
+                $0.id == ref.channelID && $0.providerName == ref.providerName
+            }
+        }
+    }
+
+    /// Possible outcomes of `carPlayResumeDecision`. `.play` means the
+    /// resolved target should be handed to
+    /// `audioPlayer.play(channel:userInitiated:)`; everything else is a
+    /// silent no-op.
+    enum CarPlayResumeOutcome: Equatable { case skip, play }
+
+    /// Pure decision for the CarPlay-reconnect resume feature
+    /// (beads_mobilemusic-cpr). Takes every input that varies — preference,
+    /// whether a target resolved, whether something is already playing,
+    /// whether an interruption is in flight, and the one-shot guard — and
+    /// returns whether to play. No CarPlay/AVFoundation/ProviderManager
+    /// types involved, so the full truth table (off/lastPlayed/specific ×
+    /// exists/missing × already-playing × interrupted × one-shot) is
+    /// testable without a live CarPlay connection.
+    nonisolated static func carPlayResumeDecision(
+        preference: CarPlayReconnectResume,
+        targetExists: Bool,
+        somethingAlreadyPlaying: Bool,
+        interruptionInFlight: Bool,
+        alreadyAttemptedThisConnection: Bool
+    ) -> CarPlayResumeOutcome {
+        guard preference != .off else { return .skip }
+        guard !alreadyAttemptedThisConnection else { return .skip }
+        guard !somethingAlreadyPlaying else { return .skip }
+        guard !interruptionInFlight else { return .skip }
+        guard targetExists else { return .skip }
+        return .play
     }
 
     private func updateNowPlayingButtons() {
