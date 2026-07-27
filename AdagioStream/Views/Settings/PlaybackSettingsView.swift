@@ -7,6 +7,7 @@ struct PlaybackSettingsView: View {
     @AppStorage(SXMMetadataSource.defaultsKey) private var sxmMetadataSourceRaw = SXMMetadataSource.stellartunerlog.rawValue
     @AppStorage(SXMPollInterval.defaultsKey) private var sxmPollIntervalSeconds = SXMPollInterval.defaultSeconds
     @AppStorage(SXMSportsPriority.defaultsKey) private var preferLiveScores = true
+    @State private var showingCarPlayResumeChannelPicker = false
 
     var body: some View {
         Form {
@@ -68,6 +69,30 @@ struct PlaybackSettingsView: View {
             }
 
             Section {
+                Picker("On Reconnect", selection: carPlayReconnectResumeBinding) {
+                    ForEach(CarPlayReconnectResume.allCases, id: \.self) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                }
+                if viewModel.settings.carPlayReconnectResume == .specific {
+                    Button {
+                        showingCarPlayResumeChannelPicker = true
+                    } label: {
+                        HStack {
+                            Text("Station")
+                            Spacer()
+                            Text(carPlayReconnectSpecificChannelLabel)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("CarPlay")
+            } footer: {
+                Text("Choose what plays when CarPlay reconnects. Off (default) preserves today's behavior — nothing auto-resumes. \"Last Played\" resumes whatever channel played most recently. \"Specific Station\" always resumes the channel you choose; if it's no longer available, playback simply doesn't start.")
+            }
+
+            Section {
                 Picker("Live Sports Score Updates", selection: espnLivePollBinding) {
                     ForEach(ESPNLivePollInterval.allCases, id: \.self) { interval in
                         Text(interval.label).tag(interval)
@@ -121,6 +146,9 @@ struct PlaybackSettingsView: View {
         }
         .navigationTitle("Playback")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingCarPlayResumeChannelPicker) {
+            CarPlayResumeChannelPickerView()
+        }
     }
 
     private var startupStreamBinding: Binding<String?> {
@@ -130,6 +158,26 @@ struct PlaybackSettingsView: View {
                 Task { await viewModel.updateStartupStream(newValue) }
             }
         )
+    }
+
+    private var carPlayReconnectResumeBinding: Binding<CarPlayReconnectResume> {
+        Binding(
+            get: { viewModel.settings.carPlayReconnectResume },
+            set: { newValue in
+                Task { await viewModel.updateCarPlayReconnectResume(newValue) }
+            }
+        )
+    }
+
+    private var carPlayReconnectSpecificChannelLabel: String {
+        guard let ref = viewModel.settings.carPlayReconnectSpecificChannel else { return "Choose…" }
+        // sortedVisibleGroups may not have loaded/matched yet (channel-list
+        // reload race) — fall back to the stored id so the row never reads
+        // as empty while still identifying what's configured.
+        let name = providerManager.channels.first(where: {
+            $0.id == ref.channelID && $0.providerName == ref.providerName
+        })?.name
+        return name ?? ref.channelID
     }
 
     private var espnLivePollBinding: Binding<ESPNLivePollInterval> {

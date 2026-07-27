@@ -56,6 +56,7 @@
 		34CB3D0C2BF98BD9AB6EFB5F /* AddProviderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */; };
 		357CC4FD067139929EF98B2D /* AudiobookshelfRecentEpisodesConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A2EA5944563D84E432D1CDC /* AudiobookshelfRecentEpisodesConcurrencyTests.swift */; };
 		3617CAE3062BFD40C59C70E8 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E220456DACC5137EA0F00B /* Constants.swift */; };
+		36582D50EF221996C8213D11 /* CarPlayReconnectResumeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A71671036E90C90C379917B /* CarPlayReconnectResumeTests.swift */; };
 		37DFD80BAD11C6354ED10E85 /* AudiobookSeekTriggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A21E9291F58148C74CFDF5D /* AudiobookSeekTriggerTests.swift */; };
 		388C6E67648A7F7DF0B8C0DC /* ChannelsAccountsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7515CF1536D0D00A7E4C5568 /* ChannelsAccountsSettingsView.swift */; };
 		3A955CEF2D0EB215DEFA5335 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C26600E229D3A046400EE7F1 /* DownloadManager.swift */; };
@@ -237,6 +238,7 @@
 		D84F32125ED9B4BF635A61AF /* InterruptionRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBED509BBD437DCE5F1823C /* InterruptionRecoveryTests.swift */; };
 		D9A0AB716D1C358EFD4BEA13 /* SXMMetadataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42DA1B728F3A7A2016DE712B /* SXMMetadataService.swift */; };
 		DA4D076D3800841AA5192A68 /* AudiobookshelfModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EBF1B005EE986858FA9935 /* AudiobookshelfModels.swift */; };
+		DB0A2072E4895AC547A6830E /* CarPlayResumeChannelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36F822DC34A3741ED891FBF8 /* CarPlayResumeChannelPickerView.swift */; };
 		DB6E448BE506EEB225B8C176 /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E601D82BA3CB20C6A4A7AA02 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DCE033C54546460FD19A9D90 /* AudioOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAEC5D3D42331FF6DBC36DA /* AudioOutput.swift */; };
 		DE397536EE64988C60602A30 /* ChannelRowViewAccessibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43AA12E2DAEBA402214A0046 /* ChannelRowViewAccessibilityTests.swift */; };
@@ -316,6 +318,7 @@
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongRowView.swift; sourceTree = "<group>"; };
 		09B258B0EF620197CC9833E0 /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
+		0A71671036E90C90C379917B /* CarPlayReconnectResumeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayReconnectResumeTests.swift; sourceTree = "<group>"; };
 		0B48DC2BAF144D6832406885 /* SearchResultsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultsView.swift; sourceTree = "<group>"; };
 		0BBED509BBD437DCE5F1823C /* InterruptionRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterruptionRecoveryTests.swift; sourceTree = "<group>"; };
 		0CBEBDCCEB3D1D6518866984 /* ShareURLValidation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareURLValidation.swift; sourceTree = "<group>"; };
@@ -359,6 +362,7 @@
 		300058C4A834232B92D00C97 /* PodcastPlaybackContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastPlaybackContextTests.swift; sourceTree = "<group>"; };
 		30D92A3B147DA442B283BFD5 /* PodcastShowDetailTVView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastShowDetailTVView.swift; sourceTree = "<group>"; };
 		310F900A75D0B606DEB7F49F /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
+		36F822DC34A3741ED891FBF8 /* CarPlayResumeChannelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayResumeChannelPickerView.swift; sourceTree = "<group>"; };
 		3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationDiagnostics.swift; sourceTree = "<group>"; };
 		38954EF12B4A13F86412B7E2 /* ProviderFormValidationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderFormValidationTests.swift; sourceTree = "<group>"; };
 		3ACF35847EA0740DA4E477A6 /* AddProviderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddProviderView.swift; sourceTree = "<group>"; };
@@ -733,6 +737,7 @@
 				310F900A75D0B606DEB7F49F /* AboutSettingsView.swift */,
 				ED0AFF16CFCF018CEE87BF70 /* AdvancedSettingsView.swift */,
 				E74E1BC12E2BCD838B7CC68B /* AppearanceSettingsView.swift */,
+				36F822DC34A3741ED891FBF8 /* CarPlayResumeChannelPickerView.swift */,
 				7515CF1536D0D00A7E4C5568 /* ChannelsAccountsSettingsView.swift */,
 				25725EB8F5AF7159B8D7A5A1 /* DiagnosticsView.swift */,
 				F0BAD5CE4B48BDF183E2DFD2 /* DownloadsView.swift */,
@@ -788,6 +793,7 @@
 			isa = PBXGroup;
 			children = (
 				625B0047A466E4C6BA6ACCFA /* CarPlayMusicBrowseTests.swift */,
+				0A71671036E90C90C379917B /* CarPlayReconnectResumeTests.swift */,
 				2F942349F00AAF310CADA2F8 /* ExtensionsTests.swift */,
 			);
 			path = Utilities;
@@ -1232,6 +1238,7 @@
 				357CC4FD067139929EF98B2D /* AudiobookshelfRecentEpisodesConcurrencyTests.swift in Sources */,
 				B87CF90DEAD314B5F366FFB2 /* BrowsePaginationTests.swift in Sources */,
 				8432DCB7AEC1149AD0CE3B16 /* CarPlayMusicBrowseTests.swift in Sources */,
+				36582D50EF221996C8213D11 /* CarPlayReconnectResumeTests.swift in Sources */,
 				DE397536EE64988C60602A30 /* ChannelRowViewAccessibilityTests.swift in Sources */,
 				C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */,
 				02D5AF11F671CAFAD103B89E /* DownloadManagerTests.swift in Sources */,
@@ -1308,6 +1315,7 @@
 				F87FB27AD849D80B30DFD8A5 /* AudiobookshelfOIDCFlow.swift in Sources */,
 				EAF5EE4211D7A39F9B441A5E /* AudiobookshelfOIDCSession.swift in Sources */,
 				041D63AAF8CFC358F73E0BBC /* BrowseAlbumsView.swift in Sources */,
+				DB0A2072E4895AC547A6830E /* CarPlayResumeChannelPickerView.swift in Sources */,
 				9F831368D8598DB26C48DD1B /* CarPlaySceneDelegate.swift in Sources */,
 				B22F39FC319FE59403137F17 /* CarPlayTemplateManager+Audiobooks.swift in Sources */,
 				53F557AABE7EA3F463C9DDAB /* CarPlayTemplateManager+Podcasts.swift in Sources */,
