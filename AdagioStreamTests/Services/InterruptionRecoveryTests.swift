@@ -281,6 +281,37 @@ final class AudioPlayerServiceInterruptionStateTests: XCTestCase {
         XCTAssertNil(service.captureInterruptionSnapshot(),
             "captureInterruptionSnapshot() must return nil for an audiobook source — audiobooks don't participate in ride-out/restore")
     }
+
+    /// beads_mobilemusic-cpr kickback (Block 1): CarPlay reconnect-resume's
+    /// "don't stomp existing playback" check previously read
+    /// `currentChannel != nil`, which is nil during audiobook AND
+    /// library-track playback — a false negative that would let resume
+    /// replace a book or track the user was actively listening to.
+    /// `hasActivePlayback` is the correct signal; this test proves it stays
+    /// true exactly where `currentChannel` goes wrong.
+    func testHasActivePlaybackTrueForAudiobookWhileCurrentChannelIsNil() {
+        let service = AudioPlayerService.shared
+        let previousSource = service.playbackSource
+        defer { service.playbackSource = previousSource }
+
+        let book = Audiobook(id: "b2", libraryItemId: "b2", libraryId: "lib1", title: "Another Book", updatedAt: 0)
+        service.playbackSource = .audiobook(book)
+
+        XCTAssertNil(service.currentChannel, "Precondition: currentChannel is nil during audiobook playback")
+        XCTAssertTrue(service.hasActivePlayback, "hasActivePlayback must be true while an audiobook is playing")
+    }
+
+    func testHasActivePlaybackTrueForLibraryTrackWhileCurrentChannelIsNil() {
+        let service = AudioPlayerService.shared
+        let previousSource = service.playbackSource
+        defer { service.playbackSource = previousSource }
+
+        let track = makeTrack(id: "t1", title: "A Track")
+        service.playbackSource = .library(queue: [track], index: 0)
+
+        XCTAssertNil(service.currentChannel, "Precondition: currentChannel is nil during library-track playback")
+        XCTAssertTrue(service.hasActivePlayback, "hasActivePlayback must be true while a library track is playing")
+    }
 }
 
 // MARK: - shouldRestartEngineForBareInterruptionEnded (uxa kickback finding 1)
