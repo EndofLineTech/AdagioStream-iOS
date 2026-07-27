@@ -49,9 +49,9 @@ extension CarPlayTemplateManager {
             await viewModel.loadPodcastShows()
             switch viewModel.podcastShowsState {
             case .error(let message):
-                template.updateSections([CPListSection(items: [self.emptyMusicItem(message)])])
+                template.updateSections([CPListSection(items: [Self.emptyMusicItem(message)])])
             case .empty:
-                template.updateSections([CPListSection(items: [self.emptyMusicItem("No podcasts")])])
+                template.updateSections([CPListSection(items: [Self.emptyMusicItem("No podcasts")])])
             default:
                 if viewModel.podcastLibraries.count > 1 {
                     let items = viewModel.podcastLibraries.map { library in
@@ -85,7 +85,7 @@ extension CarPlayTemplateManager {
         let items = shows.map { show in
             self.podcastShowRowItem(show, coverURL: viewModel.showCoverURLs[show.id], viewModel: viewModel, api: api)
         }
-        return CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No podcasts")] : items)
+        return CPListSection(items: items.isEmpty ? [Self.emptyMusicItem("No podcasts")] : items)
     }
 
     /// One show row: title + author, cover art, tap to drill into episodes.
@@ -117,9 +117,9 @@ extension CarPlayTemplateManager {
             await viewModel.loadShowDetail(show)
             switch viewModel.showDetailState {
             case .error(let message):
-                template.updateSections([CPListSection(items: [self.emptyMusicItem(message)])])
+                template.updateSections([CPListSection(items: [Self.emptyMusicItem(message)])])
             case .empty:
-                template.updateSections([CPListSection(items: [self.emptyMusicItem("No episodes")])])
+                template.updateSections([CPListSection(items: [Self.emptyMusicItem("No episodes")])])
             default:
                 // Server default order (newest-first) — matches PodcastPlaybackContext's
                 // default and the ABS wire order; no in-CarPlay sort-order setting.
@@ -128,7 +128,7 @@ extension CarPlayTemplateManager {
                 let items = episodes.map { episode in
                     self.podcastEpisodeRowItem(episode, show: show, context: context, api: api)
                 }
-                template.updateSections([CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No episodes")] : items)])
+                template.updateSections([CPListSection(items: items.isEmpty ? [Self.emptyMusicItem("No episodes")] : items)])
             }
         }
     }

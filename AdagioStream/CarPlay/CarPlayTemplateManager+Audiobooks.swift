@@ -46,9 +46,9 @@ extension CarPlayTemplateManager {
             await viewModel.loadBooks()
             switch viewModel.booksState {
             case .error(let message):
-                template.updateSections([CPListSection(items: [self.emptyMusicItem(message)])])
+                template.updateSections([CPListSection(items: [Self.emptyMusicItem(message)])])
             case .empty:
-                template.updateSections([CPListSection(items: [self.emptyMusicItem("No audiobooks")])])
+                template.updateSections([CPListSection(items: [Self.emptyMusicItem("No audiobooks")])])
             default:
                 if viewModel.libraries.count > 1 {
                     let items = viewModel.libraries.map { library in
@@ -82,7 +82,7 @@ extension CarPlayTemplateManager {
         let items = books.map { book in
             self.audiobookRowItem(book, coverURL: viewModel.coverURLs[book.id], api: api)
         }
-        return CPListSection(items: items.isEmpty ? [self.emptyMusicItem("No audiobooks")] : items)
+        return CPListSection(items: items.isEmpty ? [Self.emptyMusicItem("No audiobooks")] : items)
     }
 
     /// One book row: title + author/progress detail, cover art, tap-to-resume.
