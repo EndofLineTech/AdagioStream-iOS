@@ -35,6 +35,9 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
     private var startupStreamID: String?
     private var hasAttemptedStartupStream = false
+    /// Reentrancy guard: a rapid double-tap on the Music setup hint row would
+    /// call presentTemplate a second time while the alert is already up.
+    private var isPresentingMusicSetupHintAlert = false
     // beads_mobilemusic-cpr: CarPlay-reconnect resume. Mirrors the
     // startupStreamID/hasAttemptedStartupStream shape above exactly — same
     // settings-load Task, same one-shot-on-first-non-empty-snapshot gate,
@@ -1215,8 +1218,15 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
     /// is `CPAlertTemplate`'s only text field (no separate title/body) — ordered
     /// longest to shortest so CarPlay can drop down on a smaller screen.
     private func presentMusicSetupHintAlert() {
+        // Reentrancy guard: bail if the alert is already up rather than
+        // stacking a second presentTemplate call on top of it (CarPlay's
+        // behavior for concurrent presents is undocumented, and modal-stack
+        // errors are a known crash class).
+        guard !isPresentingMusicSetupHintAlert else { return }
+        isPresentingMusicSetupHintAlert = true
         let ok = CPAlertAction(title: "OK", style: .default) { [weak self] _ in
             self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+            self?.isPresentingMusicSetupHintAlert = false
         }
         let alert = CPAlertTemplate(
             titleVariants: [
@@ -1225,7 +1235,13 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
             ],
             actions: [ok]
         )
-        interfaceController.presentTemplate(alert, animated: true, completion: nil)
+        interfaceController.presentTemplate(alert, animated: true) { [weak self] success, _ in
+            // Use the completion variant (not nil) so a failed present can't
+            // wedge the flag with no dismiss action to clear it.
+            if !success {
+                self?.isPresentingMusicSetupHintAlert = false
+            }
+        }
     }
 
     /// Loading-placeholder template shared by the category list pushers.
