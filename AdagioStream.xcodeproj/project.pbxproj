@@ -15,6 +15,7 @@
 		082C24BA4D5890A3DEE3ED77 /* PlaybackSourceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90EA7B7E639C3061BD1738E1 /* PlaybackSourceTests.swift */; };
 		08A0033190BF715BAB016FA5 /* AudiobookshelfAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95CF7A4D97272323FD09FA06 /* AudiobookshelfAPI.swift */; };
 		0A2389BA8F472425FD0C9015 /* MigrationDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */; };
+		0A8E59EFA875C70EC8A55430 /* NavidromeAPI+Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0485AC09F4C2454EE887338B /* NavidromeAPI+Library.swift */; };
 		0AABADCA5BEADDDCA45DB178 /* ProviderFormValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38954EF12B4A13F86412B7E2 /* ProviderFormValidationTests.swift */; };
 		0C023121A064BEA7468A8957 /* ChannelGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C219AC59D27C269A7EEEC7 /* ChannelGroup.swift */; };
 		0DAC568BE7B0C8BC2172B719 /* ChannelRowTVView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADAB79854EF16906B0C6713E /* ChannelRowTVView.swift */; };
@@ -105,6 +106,7 @@
 		61CE33A905A8833C68EFF09F /* NowPlayingInfoBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B632288DF472949A8C596C7 /* NowPlayingInfoBuilderTests.swift */; };
 		6208B950E2CCF78ED6BE5AE9 /* AudioPlayerService+Interruption.swift in Sources */ = {isa = PBXBuildFile; fileRef = 755BAE291B6E60141F01123A /* AudioPlayerService+Interruption.swift */; };
 		6264C9210FBB43F11223820E /* TrackFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7AF6FF3A50B6779F3EF4D9 /* TrackFixtures.swift */; };
+		62D5808713F5334DDE57BFFB /* NavidromeAPI+Playlists.swift in Sources */ = {isa = PBXBuildFile; fileRef = F05865C24BC3F52099EDE437 /* NavidromeAPI+Playlists.swift */; };
 		63D8C99CC026C4356F96D15B /* AudiobookDownloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E594B98414D60B340DCEFCB /* AudiobookDownloadTests.swift */; };
 		64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D292EB2856F819A576B56777 /* NavidromeModels.swift */; };
 		64F52CD1C4A2C9C45AAE434E /* EPGParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CF4778448EC75225E98912 /* EPGParserTests.swift */; };
@@ -162,6 +164,7 @@
 		8BD2738AFA1FA0AF524ABFF4 /* AudioPlayerService+TimeShift.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F63B819E60446D359D60E1E /* AudioPlayerService+TimeShift.swift */; };
 		8F65506BDA72BC28D1162110 /* VLCAudioCallbackBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */; };
 		903AB7D66FED2024F9516131 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DD655FE0B0CC486FB1E43572 /* PrivacyInfo.xcprivacy */; };
+		905E184E9494DBCB99C0ED77 /* NavidromeAPI+Library.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0485AC09F4C2454EE887338B /* NavidromeAPI+Library.swift */; };
 		931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */; };
 		9534A3E749C1D88199513E42 /* PodcastShowDetailTVView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D92A3B147DA442B283BFD5 /* PodcastShowDetailTVView.swift */; };
 		9623E67CA7985B8FA11275FB /* VLCAudioCallbackBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */; };
@@ -217,6 +220,7 @@
 		BFAECCB2212A4A8CC2F47922 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6DF8068974307878A687DB0 /* KeychainServiceTests.swift */; };
 		C0814BA417A9237B8348F95F /* EPGView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7085743DF9FDAF7CAEDB0CA /* EPGView.swift */; };
 		C0FB070B968B097DDB3F9881 /* DataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D317808303BD060CB0340505 /* DataExportService.swift */; };
+		C1F138C72FAC5F2EE6EB5617 /* NavidromeAPI+Playlists.swift in Sources */ = {isa = PBXBuildFile; fileRef = F05865C24BC3F52099EDE437 /* NavidromeAPI+Playlists.swift */; };
 		C2B54041F3BEB8534F71011A /* DataDeletionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BA6BA55D8B2218DA3C7CE2D /* DataDeletionService.swift */; };
 		C33682D5D1ABB2E9969E7F39 /* DebugLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275533EFCFE43202F2ADCCA7 /* DebugLoggerTests.swift */; };
 		C35C0860690F7370E71A853C /* PlaybackSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81245276C98A5709B721113 /* PlaybackSource.swift */; };
@@ -317,6 +321,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0485AC09F4C2454EE887338B /* NavidromeAPI+Library.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NavidromeAPI+Library.swift"; sourceTree = "<group>"; };
 		08A6AA53BFBE8800CC897000 /* PlaybackRateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackRateTests.swift; sourceTree = "<group>"; };
 		09037EC9D6025B184F4A718E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0982A54986A0B2346C8D34F4 /* SavedSongRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedSongRowView.swift; sourceTree = "<group>"; };
@@ -511,6 +516,7 @@
 		EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBrowseView.swift; sourceTree = "<group>"; };
 		EEE08083D11C9AA6AC229258 /* AudiobookshelfAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudiobookshelfAPITests.swift; sourceTree = "<group>"; };
 		F02043870B8775DF9E809C5C /* NavidromeAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavidromeAPITests.swift; sourceTree = "<group>"; };
+		F05865C24BC3F52099EDE437 /* NavidromeAPI+Playlists.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NavidromeAPI+Playlists.swift"; sourceTree = "<group>"; };
 		F0AE0DE53F32FA8F7F9BDE3C /* AudioPlayerService+NowPlayingInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AudioPlayerService+NowPlayingInfo.swift"; sourceTree = "<group>"; };
 		F0BAD5CE4B48BDF183E2DFD2 /* DownloadsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadsView.swift; sourceTree = "<group>"; };
 		F0F8559DFD52269DF97E1E63 /* TrackDownloadButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackDownloadButton.swift; sourceTree = "<group>"; };
@@ -1022,6 +1028,8 @@
 				DBE8A28F0EA7A77587F5E65F /* M3UParser.swift */,
 				3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */,
 				7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */,
+				0485AC09F4C2454EE887338B /* NavidromeAPI+Library.swift */,
+				F05865C24BC3F52099EDE437 /* NavidromeAPI+Playlists.swift */,
 				8FB864F08076A1C5C5CFA8F5 /* NavidromeStore.swift */,
 				20796E24826A70D504E871C4 /* PersistenceService.swift */,
 				3CDF66CB2ED9CA8F2749FD17 /* ProviderFormValidation.swift */,
@@ -1373,6 +1381,8 @@
 				4EA878465057E1C26D33A0E8 /* MigrationDiagnostics.swift in Sources */,
 				50EAABFC70A007E1531BF67E /* MiniPlayerView.swift in Sources */,
 				C85820E109EA2CBDBE1BEE4F /* MusicLibraryView.swift in Sources */,
+				905E184E9494DBCB99C0ED77 /* NavidromeAPI+Library.swift in Sources */,
+				C1F138C72FAC5F2EE6EB5617 /* NavidromeAPI+Playlists.swift in Sources */,
 				498ACC4F91C0773EF45C183A /* NavidromeAPI.swift in Sources */,
 				7BC7258215469E754549E37A /* NavidromeAddToPlaylistSheet.swift in Sources */,
 				685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */,
@@ -1472,6 +1482,8 @@
 				FE7BEB23314503599322A8EC /* M3UExporter.swift in Sources */,
 				B4E5DE3101F142674E43546F /* M3UParser.swift in Sources */,
 				0A2389BA8F472425FD0C9015 /* MigrationDiagnostics.swift in Sources */,
+				0A8E59EFA875C70EC8A55430 /* NavidromeAPI+Library.swift in Sources */,
+				62D5808713F5334DDE57BFFB /* NavidromeAPI+Playlists.swift in Sources */,
 				698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */,
 				AB8C32FBC756EC0A6D9E594E /* NavidromeLibraryViewModel.swift in Sources */,
 				64C41FD9C2B7DFE9706C43FF /* NavidromeModels.swift in Sources */,
@@ -1546,7 +1558,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 219;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1577,7 +1589,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 219;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1675,7 +1687,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 219;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1705,7 +1717,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 219;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1733,7 +1745,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 219;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1755,7 +1767,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 219;
+				CURRENT_PROJECT_VERSION = 220;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
