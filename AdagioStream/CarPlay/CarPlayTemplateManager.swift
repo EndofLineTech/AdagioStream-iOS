@@ -388,6 +388,7 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         case channel(Channel)
         case audiobook(id: String)
         case libraryTrack(id: String, albumId: String)
+        case podcastEpisode(showId: String, episodeId: String)
     }
 
     /// Resolves what `carPlayReconnectResume` currently points at, against
@@ -417,6 +418,8 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
                 return .audiobook(id: id)
             case .libraryTrack(let id, let albumId):
                 return .libraryTrack(id: id, albumId: albumId)
+            case .podcastEpisode(let showId, let episodeId):
+                return .podcastEpisode(showId: showId, episodeId: episodeId)
             case nil:
                 guard let id = UserDefaults.standard.string(forKey: "lastPlayedChannelID") else { return nil }
                 guard let channel = providerManager.visibleChannels.first(where: { $0.id == id }) else { return nil }
@@ -454,13 +457,65 @@ class CarPlayTemplateManager: NSObject, CPNowPlayingTemplateObserver {
         case .audiobook(let id):
             guard let api = providerManager.audiobookshelfAPI else { return }
             Task { @MainActor [weak self] in
-                guard let self, let dto = try? await api.item(id: id) else { return }
+                guard let self else { return }
+                // Round-2 kickback (BLOCK): a network-only fetch here made
+                // offline resume dead in the exact scenario the feature exists
+                // for (no network at car start, or offlineMode on) — the guard
+                // returned before playAudiobook was ever called, so its own
+                // offline fallback never got a chance to run. Skip the network
+                // fetch entirely when offline mode is on (mirrors playAudiobook's
+                // own top-of-function branch); otherwise attempt it and fall
+                // back to the downloaded record on failure, exactly like
+                // `MusicLibraryView.playOfflineBook`'s minimal reconstruction.
+                let offlineMode = self.audioPlayer.settingsViewModel?.settings.offlineMode ?? false
+                let dto = offlineMode ? nil : try? await api.item(id: id)
+                let book: Audiobook?
+                if let dto {
+                    book = dto.toRecord(libraryIdFallback: "", updatedAt: Int(Date().timeIntervalSince1970))
+                } else if let downloaded = DownloadManager.shared.downloadedBook(itemID: id) {
+                    book = Audiobook(
+                        id: downloaded.id,
+                        libraryItemId: downloaded.id,
+                        libraryId: "",
+                        title: downloaded.title,
+                        author: downloaded.author,
+                        duration: downloaded.duration,
+                        updatedAt: downloaded.updatedAt
+                    )
+                } else {
+                    book = nil
+                }
+                guard let book else { return }
                 guard !self.audioPlayer.hasActivePlayback else { return }
-                let book = dto.toRecord(libraryIdFallback: "", updatedAt: Int(Date().timeIntervalSince1970))
                 self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing audiobook \"\(book.title)\"", category: .carplay)
                 // playAudiobook owns resume-position math (server currentTime /
                 // offline pending / book record) — not reimplemented here.
                 self.audioPlayer.playAudiobook(book, via: api)
+            }
+
+        case .podcastEpisode(let showId, let episodeId):
+            guard let api = providerManager.audiobookshelfAPI else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Same offline-first shape as the .audiobook case above: skip
+                // the network fetch when offline mode is on, otherwise attempt
+                // it and fall back to the downloaded episode record on failure.
+                let offlineMode = self.audioPlayer.settingsViewModel?.settings.offlineMode ?? false
+                let item = offlineMode ? nil : try? await api.item(id: showId)
+                let resolved: (episode: ABSEpisodeDTO, context: PodcastPlaybackContext)?
+                if let item, let episode = item.episodes().first(where: { $0.id == episodeId }) {
+                    let episodes = PodcastPlaybackContext.sortedEpisodes(item.episodes(), order: .newestFirst)
+                    let context = PodcastPlaybackContext(libraryItemId: showId, showTitle: item.showTitle, episodes: episodes, order: .newestFirst)
+                    resolved = (episode, context)
+                } else {
+                    // Offline fallback — reuses the same manifest reconstruction
+                    // MusicLibraryView.playOfflineEpisode uses, not duplicated here.
+                    resolved = DownloadManager.shared.downloadedEpisode(showID: showId, episodeID: episodeId)?.reconstructedEpisode()
+                }
+                guard let (episode, context) = resolved else { return }
+                guard !self.audioPlayer.hasActivePlayback else { return }
+                self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing podcast episode \"\(episode.title ?? episode.id)\"", category: .carplay)
+                self.audioPlayer.playPodcastEpisode(episode, via: api, context: context, startGlobalTime: episode.userMediaProgress?.currentTime)
             }
 
         case .libraryTrack(let id, let albumId):
