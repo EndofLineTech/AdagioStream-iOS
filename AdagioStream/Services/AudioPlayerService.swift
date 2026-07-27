@@ -898,6 +898,38 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// active playback, the interruption handler clearly missed the resume
     /// event — force-clear and restart.
     public func recoverStaleInterruption() {
+        // beads_mobilemusic-irg: heal AudioOutput's isInterrupted gate
+        // independently of interruptedChannel below. A CarPlay disconnect
+        // mid-interruption routes through stopAndClearInterruption(), which
+        // nils interruptedChannel/interruptionTime without touching
+        // AudioOutput.isInterrupted — if the .ended notification is then
+        // dropped (common on CarPlay disconnect), the guard below never
+        // fires and the gate would stay latched until the next deliberate
+        // play. AudioOutput tracks its own began-timestamp that survives
+        // that cleanup, so this call proves staleness (or doesn't) on its
+        // own evidence. Deliberately NOT inside the interruptedChannel guard
+        // below — interruptedChannel being nil is exactly the case this
+        // exists to cover.
+        //
+        // Gated on an unmatched .began (beganCount > endedCount) so this
+        // never touches AudioOutput.shared when no interruption has ever
+        // occurred — recoverStaleInterruption() runs on every foreground
+        // transition (AdagioStreamApp's scenePhase → setBackgroundMode),
+        // including the very first one at cold launch, and constructing
+        // AudioOutput.shared for the first time outside a real interruption
+        // is the same singleton-construction hazard documented in
+        // AudioOutputRestartPredicateTests.swift (deadlocks the simulator's
+        // CoreAudio in the test target). When a real interruption has
+        // occurred, AudioOutput.shared was already safely constructed by
+        // noteInterruptionBegan() at that point, so this is cheap.
+        if interruptionBeganCount > interruptionEndedCount {
+            AudioOutput.shared.healStaleInterruptionGateIfNeeded(
+                isPlaying: isPlaying,
+                isBuffering: isBuffering,
+                isRidingOutInterruption: isRidingOutInterruption
+            )
+        }
+
         guard let channel = interruptedChannel,
               let elapsed = interruptionTime.map({ Date().timeIntervalSince($0) }),
               elapsed > 30,

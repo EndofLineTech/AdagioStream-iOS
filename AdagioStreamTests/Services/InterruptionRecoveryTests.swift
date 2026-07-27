@@ -237,6 +237,168 @@ final class InterruptionSnapshotStructTests: XCTestCase {
     }
 }
 
+// MARK: - AudioOutput.shouldHealStaleInterruptionGate (beads_mobilemusic-irg)
+//
+// Traced failure sequence (from the bead): interruption .began →
+// AudioOutput.isInterrupted latches true → CarPlay disconnects mid-
+// interruption → CarPlaySceneDelegate calls stopAndClearInterruption(),
+// which nils AudioPlayerService's interruptedChannel/interruptionTime but
+// does NOT touch AudioOutput.isInterrupted → the .ended notification is
+// dropped (documented-common on CarPlay disconnect) → on reconnect,
+// recoverStaleInterruption()'s existing interruptedChannel-based recovery
+// no-ops (interruptedChannel is nil) → isInterrupted stays latched until the
+// next deliberate play, silently skipping CarPlay reconnect-resume.
+//
+// The fix: AudioOutput tracks `interruptionBeganAt` independently of
+// AudioPlayerService's interruptedChannel/interruptionTime — set at
+// noteInterruptionBegan(), NOT cleared by stopAndClearInterruption() — so
+// staleness can still be proven at reconnect. shouldHealStaleInterruptionGate
+// is the pure decision extracted from that heal so it can be tested without
+// touching AudioOutput.shared (constructing it deadlocks the simulator's
+// CoreAudio in this test target — see AudioOutputRestartPredicateTests.swift).
+final class StaleInterruptionGateHealPredicateTests: XCTestCase {
+
+    // MARK: The bead's exact sequence — gate WAS latched, staleness IS provable
+
+    func testHealsWhenInterruptedChannelWasClearedButGateIsProvablyStale() {
+        // began → (disconnect-cleanup nils interruptedChannel, elsewhere) →
+        // no .ended → reconnect recovery runs with only interruptionBeganAt
+        // as evidence. 45s since .began, playback torn down by stop(), no
+        // ride-out in progress (stop() always clears it) — staleness proven.
+        XCTAssertTrue(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 45,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "A latched gate with no balanced .ended, 45s since .began, and no active playback must heal"
+        )
+    }
+
+    func testHealsAtJustPastTheThirtySecondThreshold() {
+        XCTAssertTrue(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 30.1,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "Just past the 30s threshold must heal"
+        )
+    }
+
+    // MARK: Negative case — began recently / interruption plausibly still active
+
+    func testDoesNotHealWhenInterruptionBeganRecently() {
+        // Same disconnect-cleanup shape, but only 5s since .began — the
+        // interruption (or the CarPlay reconnect cycle itself) may still be
+        // genuinely in progress. The 46u constraint: never clear isInterrupted
+        // while that's possible.
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 5,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "A gate latched only 5s ago must NOT heal — the interruption may still be active"
+        )
+    }
+
+    func testDoesNotHealExactlyAtTheThirtySecondThreshold() {
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 30,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "Exactly 30s must NOT heal — matches the existing interruptedChannel-based staleness threshold (elapsed > 30, not >=)"
+        )
+    }
+
+    // MARK: Guard: gate not latched at all
+
+    func testDoesNotHealWhenNotInterrupted() {
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: false,
+                elapsedSinceBegan: 999,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "Nothing to heal when isInterrupted is already false"
+        )
+    }
+
+    func testDoesNotHealWhenNoInterruptionEverBegan() {
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: nil,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "No interruptionBeganAt evidence means staleness cannot be proven — must not heal"
+        )
+    }
+
+    // MARK: 46u guard: never heal while playback or a ride-out may still be active
+
+    func testDoesNotHealWhilePlaying() {
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 60,
+                isPlaying: true,
+                isBuffering: false,
+                isRidingOutInterruption: false
+            ),
+            "Must not heal while playback is active, regardless of elapsed time"
+        )
+    }
+
+    func testDoesNotHealWhileBuffering() {
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 60,
+                isPlaying: false,
+                isBuffering: true,
+                isRidingOutInterruption: false
+            ),
+            "Must not heal while buffering, regardless of elapsed time"
+        )
+    }
+
+    func testDoesNotHealDuringActiveRideOutEvenPastThreshold() {
+        // Edge case a plain !isPlaying && !isBuffering check would miss:
+        // during a genuine Siri/call ride-out, VLC can report a transient
+        // buffering stall unrelated to the interruption. isRidingOutInterruption
+        // is the signal that the interruption itself (not just VLC) is still
+        // active — stop() always clears it before either legitimate staleness
+        // path (radio fallback-then-stop, or stopAndClearInterruption on
+        // CarPlay disconnect) runs.
+        XCTAssertFalse(
+            AudioOutput.shouldHealStaleInterruptionGate(
+                isInterrupted: true,
+                elapsedSinceBegan: 60,
+                isPlaying: false,
+                isBuffering: false,
+                isRidingOutInterruption: true
+            ),
+            "Must not heal while isRidingOutInterruption is true — the interruption is provably still in effect"
+        )
+    }
+}
+
 // MARK: - AudioPlayerService observable state for interruption fields (iOS only)
 
 #if os(iOS)

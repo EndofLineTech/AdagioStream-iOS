@@ -62,6 +62,20 @@ public final class AudioOutput {
     /// `.ended`, a documented-common occurrence on CarPlay disconnect).
     public private(set) var isInterrupted = false
 
+    /// When the currently-latched `isInterrupted` gate went up, tracked
+    /// independently of AudioPlayerService's `interruptedChannel`/
+    /// `interruptionTime` — those fields get nil'd by
+    /// `stopAndClearInterruption()` on CarPlay disconnect, which can happen
+    /// mid-interruption. If the `.ended` notification is then dropped (a
+    /// documented-common occurrence on CarPlay disconnect —
+    /// CarPlaySceneDelegate.swift), `interruptedChannel` alone can no longer
+    /// prove staleness on reconnect. This timestamp survives that cleanup
+    /// so `healStaleInterruptionGateIfNeeded` still has evidence to heal
+    /// from (beads_mobilemusic-irg). Set by `noteInterruptionBegan()`,
+    /// cleared by `noteInterruptionEnded()`, `clearInterruptionGateForDeliberatePlay()`,
+    /// and the heal itself.
+    private var interruptionBeganAt: Date?
+
     /// Number of consecutive engine.start() failures since the last success.
     /// A sustained streak means the engine is wedged (iOS won't let us bind
     /// the route) — the signature of the unrecoverable CarPlay/Siri wedge.
@@ -230,6 +244,7 @@ public final class AudioOutput {
     /// change that Siri or a phone call fires while it takes over the session.
     public func noteInterruptionBegan() {
         isInterrupted = true
+        interruptionBeganAt = Date()
         log.log("AudioOutput: interruption began — engine restart suppressed during ride-out", category: .audioSession)
     }
 
@@ -238,6 +253,7 @@ public final class AudioOutput {
     /// config-change or deliberate start.
     public func noteInterruptionEnded() {
         isInterrupted = false
+        interruptionBeganAt = nil
         log.log("AudioOutput: interruption ended — engine restart gate cleared", category: .audioSession)
     }
 
@@ -253,7 +269,75 @@ public final class AudioOutput {
     public func clearInterruptionGateForDeliberatePlay() {
         guard isInterrupted else { return }
         isInterrupted = false
+        interruptionBeganAt = nil
         log.log("AudioOutput: interruption gate cleared by deliberate-play path (was stuck from unmatched .began)", category: .audioSession)
+    }
+
+    // MARK: - Stale-gate heal (beads_mobilemusic-irg)
+
+    /// Heals a latched `isInterrupted` gate when staleness is provable from
+    /// `interruptionBeganAt` alone — i.e. without relying on
+    /// AudioPlayerService's `interruptedChannel`, which
+    /// `stopAndClearInterruption()` clears on CarPlay disconnect even though
+    /// the interruption may still have been active at that moment.
+    ///
+    /// Called from `AudioPlayerService.recoverStaleInterruption()`, which
+    /// already runs at the two points where a dropped `.ended` needs to be
+    /// discovered: CarPlay reconnect and app-foreground return. Uses the
+    /// SAME staleness criteria that method already applies to the
+    /// interruptedChannel case (30s elapsed, not currently playing or
+    /// buffering) so this is provably no more aggressive than the existing,
+    /// already-shipped heal — it just no longer requires interruptedChannel
+    /// to still be set.
+    ///
+    /// `isRidingOutInterruption` closes an edge case a plain
+    /// `!isPlaying && !isBuffering` check would miss: during a genuine
+    /// ride-out (Siri/call still active, VLC kept alive), VLC can report a
+    /// transient buffering stall unrelated to the interruption. Without this
+    /// guard a stall past the 30s mark could heal the gate while the
+    /// interruption is provably still in effect — exactly what 46u forbids.
+    /// `stop()` always clears `isRidingOutInterruption` before either path
+    /// that legitimately proves staleness runs (the existing fallback-then-
+    /// stop for radio, and `stopAndClearInterruption()` on CarPlay
+    /// disconnect), so requiring it false here costs nothing on the
+    /// already-safe paths.
+    ///
+    /// No-op (never heals) when the elapsed time is short or a ride-out is
+    /// still in progress — those are the cases where the interruption may
+    /// genuinely still be active (the 46u constraint: never clear
+    /// isInterrupted while that's possible).
+    @discardableResult
+    public func healStaleInterruptionGateIfNeeded(isPlaying: Bool, isBuffering: Bool, isRidingOutInterruption: Bool) -> Bool {
+        let elapsed = interruptionBeganAt.map { Date().timeIntervalSince($0) }
+        guard Self.shouldHealStaleInterruptionGate(
+            isInterrupted: isInterrupted,
+            elapsedSinceBegan: elapsed,
+            isPlaying: isPlaying,
+            isBuffering: isBuffering,
+            isRidingOutInterruption: isRidingOutInterruption
+        ) else { return false }
+
+        log.log("AudioOutput: healing stale interruption gate (\(Int(elapsed ?? 0))s since began, interruptedChannel-based recovery could not prove staleness — beads_mobilemusic-irg)", category: .audioSession)
+        isInterrupted = false
+        interruptionBeganAt = nil
+        return true
+    }
+
+    /// Pure predicate behind `healStaleInterruptionGateIfNeeded`, extracted
+    /// so unit tests can cover every combination without instantiating
+    /// AudioOutput (constructing `AudioOutput.shared` deadlocks the
+    /// simulator's CoreAudio in the test target — see
+    /// AudioOutputRestartPredicateTests.swift). Mirrors the shape of
+    /// `shouldRestartEngineOnConfigChange`.
+    static func shouldHealStaleInterruptionGate(
+        isInterrupted: Bool,
+        elapsedSinceBegan: TimeInterval?,
+        isPlaying: Bool,
+        isBuffering: Bool,
+        isRidingOutInterruption: Bool
+    ) -> Bool {
+        guard isInterrupted, let elapsed = elapsedSinceBegan else { return false }
+        return elapsed > 30 && !isPlaying && !isBuffering && !isRidingOutInterruption
     }
 
     // MARK: - Pure restart predicate (testable)
