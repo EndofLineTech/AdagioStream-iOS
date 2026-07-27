@@ -55,11 +55,14 @@ A plan without bd issues is just a comment. The epic and its children ARE the pl
 
 ## Building
 
-After a successful build, always install and launch in the simulator to verify:
+After a successful build, always install and launch in the simulator to verify.
+
+The simulator name "iPhone 17 Pro" is ambiguous on this machine (two registered) — resolve a UDID first and use `-destination 'id=...'`. DerivedData lives on the cache drive at `/Volumes/CacheDrive/Library/DerivedData/Build/Products/...` (a shared build dir, NOT the per-project `~/Library/Developer/Xcode/DerivedData/AdagioStream-<hash>/...` layout):
 
 ```bash
-xcodebuild -scheme AdagioStream -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
-xcrun simctl boot "iPhone 17 Pro" 2>/dev/null; xcrun simctl install "iPhone 17 Pro" ~/Library/Developer/Xcode/DerivedData/AdagioStream-*/Build/Products/Debug-iphonesimulator/AdagioStream.app && xcrun simctl launch "iPhone 17 Pro" com.adagiostream.app
+UDID=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro (' | grep -oE '[0-9A-F-]{36}')
+xcodebuild -scheme AdagioStream -destination "id=$UDID" build
+xcrun simctl boot "$UDID" 2>/dev/null; xcrun simctl install "$UDID" /Volumes/CacheDrive/Library/DerivedData/Build/Products/Debug-iphonesimulator/AdagioStream.app && xcrun simctl launch "$UDID" com.adagiostream.app
 ```
 
 ## Testing
