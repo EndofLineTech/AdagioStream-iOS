@@ -194,6 +194,38 @@ public enum CarPlaySourceOrder: String, Codable, CaseIterable {
     }
 }
 
+/// CarPlay-reconnect resume behavior (beads_mobilemusic-cpr). Controls what,
+/// if anything, auto-plays when the CarPlay scene reconnects. Default `.off`
+/// preserves the pre-existing deliberate "no auto-resume" behavior — this is
+/// an opt-in override, not a replacement.
+public enum CarPlayReconnectResume: String, Codable, CaseIterable {
+    case off
+    case lastPlayed
+    case specific
+
+    public var label: String {
+        switch self {
+        case .off: "Off"
+        case .lastPlayed: "Last Played"
+        case .specific: "Specific Station"
+        }
+    }
+}
+
+/// Stable identity for the user's chosen "Specific station" CarPlay-resume
+/// target. `channelID` alone can collide across providers (Xtream/M3U ids
+/// are provider-local), so `providerName` disambiguates and lets the target
+/// survive a channel-list reload the same way `Channel.providerName` does.
+public struct CarPlayResumeChannel: Codable, Equatable {
+    public var channelID: String
+    public var providerName: String?
+
+    public init(channelID: String, providerName: String?) {
+        self.channelID = channelID
+        self.providerName = providerName
+    }
+}
+
 /// Polling cadence for the ESPN scoreboard overlay.
 public enum ESPNLivePollInterval: Int, Codable, CaseIterable {
     case off = 0
@@ -250,6 +282,12 @@ public struct AppSettings: Codable {
     /// never affected by this setting (episode-only trigger, see
     /// `AudioPlayerService.shouldAutoDeleteEpisode`).
     public var autoDeleteEpisodeAfterPlayed: Bool
+    /// CarPlay-reconnect resume behavior (beads_mobilemusic-cpr). Default
+    /// `.off` — existing users see no behavior change until they opt in.
+    public var carPlayReconnectResume: CarPlayReconnectResume
+    /// The user's chosen "Specific station" CarPlay-resume target. Only
+    /// meaningful when `carPlayReconnectResume == .specific`; nil otherwise.
+    public var carPlayReconnectSpecificChannel: CarPlayResumeChannel?
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -271,7 +309,9 @@ public struct AppSettings: Codable {
         carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst,
         podcastEpisodeSortOrder: PodcastEpisodeSortOrder = .newestFirst,
         podcastEpisodeEndBehavior: PodcastEpisodeEndBehavior = .nextUnplayed,
-        autoDeleteEpisodeAfterPlayed: Bool = false
+        autoDeleteEpisodeAfterPlayed: Bool = false,
+        carPlayReconnectResume: CarPlayReconnectResume = .off,
+        carPlayReconnectSpecificChannel: CarPlayResumeChannel? = nil
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -293,6 +333,8 @@ public struct AppSettings: Codable {
         self.podcastEpisodeSortOrder = podcastEpisodeSortOrder
         self.podcastEpisodeEndBehavior = podcastEpisodeEndBehavior
         self.autoDeleteEpisodeAfterPlayed = autoDeleteEpisodeAfterPlayed
+        self.carPlayReconnectResume = carPlayReconnectResume
+        self.carPlayReconnectSpecificChannel = carPlayReconnectSpecificChannel
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -320,6 +362,8 @@ public struct AppSettings: Codable {
         podcastEpisodeSortOrder = try container.decodeIfPresent(PodcastEpisodeSortOrder.self, forKey: .podcastEpisodeSortOrder) ?? .newestFirst
         podcastEpisodeEndBehavior = try container.decodeIfPresent(PodcastEpisodeEndBehavior.self, forKey: .podcastEpisodeEndBehavior) ?? .nextUnplayed
         autoDeleteEpisodeAfterPlayed = try container.decodeIfPresent(Bool.self, forKey: .autoDeleteEpisodeAfterPlayed) ?? false
+        carPlayReconnectResume = try container.decodeIfPresent(CarPlayReconnectResume.self, forKey: .carPlayReconnectResume) ?? .off
+        carPlayReconnectSpecificChannel = try container.decodeIfPresent(CarPlayResumeChannel.self, forKey: .carPlayReconnectSpecificChannel)
     }
 }
 

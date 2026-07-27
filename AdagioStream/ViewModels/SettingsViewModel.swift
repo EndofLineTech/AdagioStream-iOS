@@ -88,6 +88,7 @@ public final class SettingsViewModel: ObservableObject {
         bufferDuration: \(Int(settings.bufferDuration))s
         artworkDisplayMode: \(settings.artworkDisplayMode)
         startupStreamID: \(settings.startupStreamID == nil ? "unset" : "set (redacted)")
+        carPlayReconnectResume: \(settings.carPlayReconnectResume.rawValue)
         --- Display ---
         appearanceMode: \(settings.appearanceMode)
         textSizeMode: \(settings.textSizeMode)
@@ -240,6 +241,23 @@ public final class SettingsViewModel: ObservableObject {
     /// episode-ended path — see `AudioPlayerService.audiobookFileEnded`).
     public func updateAutoDeleteEpisodeAfterPlayed(_ enabled: Bool) async {
         settings.autoDeleteEpisodeAfterPlayed = enabled
+        await saveSettings()
+    }
+
+    /// CarPlay-reconnect resume behavior (beads_mobilemusic-cpr). Off by
+    /// default; changing this does NOT touch `handleRouteChange` — the
+    /// resume logic lives entirely in `CarPlayTemplateManager`, gated on
+    /// this setting, so route-change behavior is unaffected regardless of
+    /// value here.
+    public func updateCarPlayReconnectResume(_ mode: CarPlayReconnectResume) async {
+        settings.carPlayReconnectResume = mode
+        await saveSettings()
+    }
+
+    /// The "Specific station" CarPlay-resume target. `nil` clears it (e.g.
+    /// when the user switches the mode away from `.specific`).
+    public func updateCarPlayReconnectSpecificChannel(_ channel: CarPlayResumeChannel?) async {
+        settings.carPlayReconnectSpecificChannel = channel
         await saveSettings()
     }
 }
