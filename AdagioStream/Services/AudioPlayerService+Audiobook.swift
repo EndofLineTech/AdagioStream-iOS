@@ -308,6 +308,11 @@ extension AudioPlayerService {
     /// server session can't be opened, play from the local file instead.
     public func playPodcastEpisode(_ episode: ABSEpisodeDTO, via api: AudiobookshelfAPI, context: PodcastPlaybackContext, startGlobalTime: Double? = nil) {
         log.log("playPodcastEpisode: \"\(episode.title ?? episode.id)\" show=\(context.showTitle ?? context.libraryItemId)", category: .player)
+        // beads_mobilemusic-cpr kickback round 2 (Fix 2): this is the single
+        // entry funnel for both live and offline episode playback
+        // (playDownloadedEpisode below is only ever reached from here), so one
+        // write covers both — mirrors playAudiobook's LastPlayedItem write above.
+        LastPlayedItem.podcastEpisode(showId: context.libraryItemId, episodeId: episode.id).save()
 
         let offlineMode = settingsViewModel?.settings.offlineMode ?? false
         let downloaded = DownloadManager.shared.downloadedEpisode(showID: context.libraryItemId, episodeID: episode.id)

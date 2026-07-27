@@ -2,18 +2,36 @@
 //
 // beads_mobilemusic-cpr kickback (Warn): CarPlay reconnect-resume's
 // "last played" option must resume the previously playing ITEM — channel,
-// audiobook, or library track — not just radio channels. These tests cover
-// the typed persistence round-trip for all three cases, plus overwrite and
-// clear semantics, using a dedicated UserDefaults suite so this test doesn't
-// clobber (or get clobbered by) real app state or other tests.
+// audiobook, library track, or podcast episode — not just radio channels.
+// These tests cover the typed persistence round-trip for all four cases,
+// plus overwrite and clear semantics.
+//
+// Round 2 kickback (Fix 3): `LastPlayedItem.defaults` is a test seam
+// (production always uses `.standard`) pointed at a dedicated
+// per-test-case UserDefaults suite here, so these tests neither read real
+// app state nor leave a `lastPlayedItem` key behind in `.standard` for
+// other tests to trip over. The suite is wiped in `tearDown` and the seam
+// is restored to `.standard` so no other test file observes the override.
 
 import XCTest
 @testable import AdagioStream
 
 final class LastPlayedItemTests: XCTestCase {
 
+    private let suiteName = "LastPlayedItemTests"
+    private var suite: UserDefaults!
+
+    override func setUp() {
+        super.setUp()
+        suite = UserDefaults(suiteName: suiteName)
+        suite.removePersistentDomain(forName: suiteName)
+        LastPlayedItem.defaults = suite
+    }
+
     override func tearDown() {
         LastPlayedItem.clear()
+        suite.removePersistentDomain(forName: suiteName)
+        LastPlayedItem.defaults = .standard
         super.tearDown()
     }
 
@@ -60,6 +78,17 @@ final class LastPlayedItemTests: XCTestCase {
         }
         XCTAssertEqual(id, "trk-1")
         XCTAssertEqual(albumId, "alb-1")
+    }
+
+    func testPodcastEpisodeRoundTrips() {
+        LastPlayedItem.clear()
+        LastPlayedItem.podcastEpisode(showId: "show-1", episodeId: "ep-1").save()
+
+        guard case .podcastEpisode(let showId, let episodeId) = LastPlayedItem.load() else {
+            XCTFail("Expected .podcastEpisode"); return
+        }
+        XCTAssertEqual(showId, "show-1")
+        XCTAssertEqual(episodeId, "ep-1")
     }
 
     // MARK: - Overwrite (whatever played most recently wins)

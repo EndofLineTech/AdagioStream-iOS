@@ -476,10 +476,7 @@ public struct MusicLibraryView: View {
     /// full show episode list, so auto-play-next is scoped to this one episode
     /// (mirrors `PodcastRecentEpisodesView`'s single-episode context).
     private func playOfflineEpisode(_ record: AudiobookDownloadRecord) {
-        guard let absAPI,
-              let (showID, episodeID) = AudiobookDownloadRecord.parseEpisodeRecordID(record.id) else { return }
-        let episode = ABSEpisodeDTO(id: episodeID, title: record.title, duration: record.duration)
-        let context = PodcastPlaybackContext(libraryItemId: showID, showTitle: record.author, episodes: [episode])
+        guard let absAPI, let (episode, context) = record.reconstructedEpisode() else { return }
         audioPlayer.playPodcastEpisode(episode, via: absAPI, context: context)
     }
 

@@ -185,6 +185,19 @@ extension AudiobookDownloadRecord {
         parseEpisodeRecordID(recordID)?.showID ?? recordID
     }
 
+    /// Reconstructs the minimal `ABSEpisodeDTO` + single-episode
+    /// `PodcastPlaybackContext` this record represents, for playback with no
+    /// server round-trip. `nil` when `id` isn't an episode record (see
+    /// `parseEpisodeRecordID`). Shared by `MusicLibraryView.playOfflineEpisode`
+    /// (uxc.1) and CarPlay's resume-target offline fallback
+    /// (beads_mobilemusic-cpr kickback round 2) — one reconstruction, not two.
+    public func reconstructedEpisode() -> (episode: ABSEpisodeDTO, context: PodcastPlaybackContext)? {
+        guard let (showID, episodeID) = Self.parseEpisodeRecordID(id) else { return nil }
+        let episode = ABSEpisodeDTO(id: episodeID, title: title, duration: duration)
+        let context = PodcastPlaybackContext(libraryItemId: showID, showTitle: author, episodes: [episode])
+        return (episode, context)
+    }
+
     /// Maps one podcast episode into a 1-file download manifest: index 0,
     /// startOffset 0, empty chapters — the whole episode is a single audio file
     /// with no internal chapter structure (E2 scope), so `timeline()` rebuilds
