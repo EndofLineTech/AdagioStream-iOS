@@ -396,7 +396,15 @@ extension AudioPlayerService {
                         self.log.log("Short interruption ended — reactivating audio session for radio \"\(channel.name)\"", category: .interruption)
                         // Delay to let the audio route settle (CarPlay route transitions
                         // need time to switch back from phone/Siri to media output).
+                        // beads_mobilemusic-crr: capture the generation so a stop()
+                        // in the 0.5s gap (e.g. CarPlay disconnect right after .ended)
+                        // cancels this resume instead of being misread as "VLC died".
+                        let generation = self.playbackGeneration
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            guard self.playbackGeneration == generation else {
+                                self.log.log("Post-interruption resume cancelled — playback stopped since scheduling", category: .interruption)
+                                return
+                            }
                             let session = AVAudioSession.sharedInstance()
                             // Cycle through deactivate to clear the stale route
                             // that the interruption left behind, then go through
@@ -418,10 +426,16 @@ extension AudioPlayerService {
                             if vlcAlive {
                                 // VLC is fine — nothing else to do, audio resumes from cache
                                 self.log.log("VLC survived interruption — seamless resume", category: .interruption)
-                            } else {
+                            } else if AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: vlcAlive, shouldResume: shouldResume) {
                                 // VLC died during the interruption — cold restart
                                 self.log.log("VLC died during interruption — cold restarting \"\(channel.name)\"", category: .interruption)
                                 self.play(channel: channel, userInitiated: false)
+                            } else {
+                                // beads_mobilemusic-crr: the system told us NOT to
+                                // resume (car turned off / source withdrawn) —
+                                // restarting here would resurrect audio on the
+                                // phone speaker.
+                                self.log.log("VLC dead after interruption but shouldResume=false — not restarting", category: .interruption)
                             }
 
                             // Diagnostic: watch the session for a few seconds after
@@ -437,7 +451,14 @@ extension AudioPlayerService {
                         // then check if VLC survived.  If not, cold-restart the track.
                         let savedAPI = self.interruptedQueueAPI ?? self.queueAPI
                         let savedElapsed = self.interruptedElapsedSeconds
+                        // beads_mobilemusic-crr: same stop()-detection as the radio
+                        // branch above — see the generation capture comment there.
+                        let generation = self.playbackGeneration
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            guard self.playbackGeneration == generation else {
+                                self.log.log("Post-interruption resume cancelled — playback stopped since scheduling", category: .interruption)
+                                return
+                            }
                             let session = AVAudioSession.sharedInstance()
                             do {
                                 try session.setActive(false, options: .notifyOthersOnDeactivation)
@@ -452,6 +473,11 @@ extension AudioPlayerService {
 
                             if vlcAlive {
                                 self.log.log("VLC survived library interruption — seamless resume at index=\(index)", category: .interruption)
+                            } else if !AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: vlcAlive, shouldResume: shouldResume) {
+                                // beads_mobilemusic-crr: shouldResume=false means the
+                                // system withdrew the audio source — do not resurrect
+                                // on the phone speaker.
+                                self.log.log("VLC dead after interruption but shouldResume=false — not restarting", category: .interruption)
                             } else {
                                 self.log.log("VLC died during library interruption — cold restarting track at index=\(index)", category: .interruption)
                                 guard let api = savedAPI, index < queue.count else {
@@ -492,7 +518,14 @@ extension AudioPlayerService {
                         let bufferFileURL = self.timeShiftBuffer.stopCapture()
                         self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
                         self.log.log("Scheduling 500ms delayed restart for radio \"\(channel.name)\"", category: .interruption)
+                        // beads_mobilemusic-crr: a stop() in the 0.5s gap (e.g.
+                        // CarPlay disconnect) must cancel this restart.
+                        let generation = self.playbackGeneration
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            guard self.playbackGeneration == generation else {
+                                self.log.log("Post-interruption resume cancelled — playback stopped since scheduling", category: .interruption)
+                                return
+                            }
                             self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
                         }
 
@@ -504,7 +537,14 @@ extension AudioPlayerService {
                         let savedAPI = self.interruptedQueueAPI
                         let savedElapsed = self.interruptedElapsedSeconds
                         self.log.log("Scheduling 500ms delayed restart for library track index=\(index)", category: .interruption)
+                        // beads_mobilemusic-crr: a stop() in the 0.5s gap (e.g.
+                        // CarPlay disconnect) must cancel this restart.
+                        let generation = self.playbackGeneration
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            guard self.playbackGeneration == generation else {
+                                self.log.log("Post-interruption resume cancelled — playback stopped since scheduling", category: .interruption)
+                                return
+                            }
                             guard let api = savedAPI, index < queue.count else {
                                 self.log.log("Library long-interruption resume: missing API or index OOB — safe no-op", category: .interruption)
                                 return
@@ -631,6 +671,16 @@ extension AudioPlayerService {
     /// so the decision is unit-testable without a live AVAudioSession/engine.
     nonisolated static func shouldRestartEngineForBareInterruptionEnded(audiobookSessionActive: Bool) -> Bool {
         audiobookSessionActive
+    }
+
+    /// beads_mobilemusic-crr: after a short ride-out interruption ends with VLC
+    /// dead, may we cold-restart playback? Only if the system said the app may
+    /// resume (`.shouldResume`). Car-off/USB-unplug ends interruptions with
+    /// shouldResume=false — restarting then resurrects audio on the phone
+    /// speaker. Pure static predicate (mirrors
+    /// `shouldRestartEngineForBareInterruptionEnded`) for unit-testability.
+    nonisolated static func shouldColdRestartAfterInterruption(vlcAlive: Bool, shouldResume: Bool) -> Bool {
+        !vlcAlive && shouldResume
     }
 
     /// Reactivates the audio session and cold-restarts a library track, then

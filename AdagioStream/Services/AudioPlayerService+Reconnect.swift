@@ -59,6 +59,19 @@ extension AudioPlayerService {
         !userInitiated && reconnectInFlightSince != nil
     }
 
+    /// beads_mobilemusic-crr: pure decision — must a path-monitor-driven
+    /// reconnect stand down because an audio-session interruption is in
+    /// progress? Either signal suffices: `ridingOut` covers the short
+    /// ride-out window, `interruptedSourceActive` covers the long path
+    /// (fallback already stopped VLC, source captured awaiting .ended).
+    /// The interruption handler owns the resume decision in both windows.
+    nonisolated static func shouldSuppressPathReconnect(
+        ridingOut: Bool,
+        interruptedSourceActive: Bool
+    ) -> Bool {
+        ridingOut || interruptedSourceActive
+    }
+
     // MARK: - Network Path Monitor
 
     /// Human-readable summary of the last observed network path, for debug
@@ -118,6 +131,21 @@ extension AudioPlayerService {
         log.log("Path transition: \(reason), expensive=\(path.isExpensive), constrained=\(path.isConstrained)", category: .player)
 
         guard let channel = currentChannel else { return }
+
+        // beads_mobilemusic-crr: while an interruption is in progress (riding
+        // out, or a source captured awaiting .ended), the interruption handler
+        // owns the resume decision. A network transition during a car-off
+        // interruption (cellular→wifi as the user walks inside) must not
+        // restart playback on the phone speaker. Deliberately NOT gated on
+        // isActiveSession — a dead stream with network back is this feature's
+        // legitimate case.
+        if AudioPlayerService.shouldSuppressPathReconnect(
+            ridingOut: isRidingOutInterruption,
+            interruptedSourceActive: interruptedSource != nil
+        ) {
+            log.log("Path-driven reconnect suppressed — interruption in progress owns the resume decision", category: .player)
+            return
+        }
 
         let elapsed = Date().timeIntervalSince(lastPathReconnectTime)
         if elapsed < pathReconnectCooldown {

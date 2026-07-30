@@ -330,6 +330,13 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     /// True while an audio session interruption is active and VLC is being
     /// kept alive (short-interruption path).  Suppresses syncState reactions.
     internal var isRidingOutInterruption = false
+    /// beads_mobilemusic-crr: bumped at the top of stop() so delayed
+    /// post-interruption resume blocks can detect an intervening stop.
+    /// A block captures the generation when it is scheduled; if stop() ran
+    /// before the block fires (e.g. CarPlay disconnect right after
+    /// interruption .ended), the generations mismatch and the block must
+    /// not restart playback — otherwise music resurrects on the phone speaker.
+    internal var playbackGeneration: Int = 0
     /// Fires when a short interruption exceeds bufferDuration, falling back
     /// to the old stop-and-capture path.
     internal var interruptionFallbackWorkItem: DispatchWorkItem?
@@ -1092,6 +1099,10 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
     }
 
     public func stop() {
+        // beads_mobilemusic-crr: invalidate any delayed post-interruption
+        // resume blocks scheduled before this stop — they compare against
+        // the generation they captured at scheduling time.
+        playbackGeneration += 1
         log.log("stop() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         // Audiobookshelf E2: close the server session (releases transcode
         // resources) and clear audiobook state. stopAudiobook is a no-op when

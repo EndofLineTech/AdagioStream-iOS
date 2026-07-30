@@ -548,4 +548,39 @@ final class BareInterruptionEndedRestartPredicateTests: XCTestCase {
         )
     }
 }
+
+// MARK: - shouldColdRestartAfterInterruption (beads_mobilemusic-crr)
+//
+// Build 388 field log: car turned off → interruption .ended fires with
+// shouldResume=false → 10ms later CarPlay disconnect runs stop() → the
+// delayed ride-out block saw vlcAlive=false (BECAUSE stop() ran) and
+// misread it as "VLC died during interruption", cold-restarting playback
+// on the phone speaker. The cold-restart decision must consult shouldResume.
+final class ColdRestartAfterInterruptionPredicateTests: XCTestCase {
+
+    func testRestartsWhenVLCDeadAndSystemSaysResume() {
+        XCTAssertTrue(
+            AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: false, shouldResume: true),
+            "VLC dead + shouldResume=true is the legitimate cold-restart case"
+        )
+    }
+
+    func testNoRestartWhenVLCDeadButShouldResumeFalse() {
+        XCTAssertFalse(
+            AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: false, shouldResume: false),
+            "Car-off ends interruptions with shouldResume=false — restarting would resurrect audio on the phone speaker"
+        )
+    }
+
+    func testNoColdRestartWhenVLCAlive() {
+        XCTAssertFalse(
+            AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: true, shouldResume: true),
+            "VLC alive means seamless resume — never cold restart"
+        )
+        XCTAssertFalse(
+            AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: true, shouldResume: false),
+            "VLC alive means seamless resume — never cold restart"
+        )
+    }
+}
 #endif

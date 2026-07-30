@@ -95,6 +95,40 @@ final class ReconnectGuardTests: XCTestCase {
 // path is covered by the pure decision function above plus manual/field
 // verification.
 
+// MARK: - shouldSuppressPathReconnect (beads_mobilemusic-crr)
+//
+// Build 388 field log: while riding out a car-off interruption (no .ended
+// yet), the path monitor saw the cellular→wifi transition as the user walked
+// inside and called play(), restarting audio on the phone speaker. While an
+// interruption is in progress, its handler owns the resume decision.
+final class PathReconnectSuppressionPredicateTests: XCTestCase {
+
+    func testSuppressedWhileRidingOutInterruption() {
+        XCTAssertTrue(
+            AudioPlayerService.shouldSuppressPathReconnect(ridingOut: true, interruptedSourceActive: true),
+            "Short ride-out window must suppress path-driven reconnect"
+        )
+    }
+
+    func testSuppressedWhileInterruptedSourceCapturedAwaitingEnded() {
+        // Long path: the fallback already stopped VLC (ridingOut cleared) but
+        // interruptedSource is still captured awaiting .ended.
+        XCTAssertTrue(
+            AudioPlayerService.shouldSuppressPathReconnect(ridingOut: false, interruptedSourceActive: true),
+            "Captured interrupted source awaiting .ended must suppress path-driven reconnect"
+        )
+    }
+
+    func testNotSuppressedWhenNoInterruptionInProgress() {
+        // The reconnect feature's legitimate case: dead stream, network back,
+        // no interruption anywhere in flight.
+        XCTAssertFalse(
+            AudioPlayerService.shouldSuppressPathReconnect(ridingOut: false, interruptedSourceActive: false),
+            "No interruption in progress — path-driven reconnect must proceed"
+        )
+    }
+}
+
 #if os(iOS)
 @MainActor
 final class ReconnectGuardSingletonTests: XCTestCase {
