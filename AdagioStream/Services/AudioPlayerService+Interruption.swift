@@ -151,11 +151,25 @@ extension AudioPlayerService {
                 case .radio(let channel):
                     let bufferFileURL = self.timeShiftBuffer.stopCapture()
                     self.log.log("Time-shift buffer: \(bufferFileURL != nil ? "available" : "none")", category: .interruption)
+                    // beads_mobilemusic-crr: a stop() in the 0.5s gap (e.g.
+                    // CarPlay disconnect) must cancel this restart.
+                    let generation = self.playbackGeneration
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        guard self.playbackGeneration == generation else {
+                            self.log.log("Post-interruption resume cancelled — playback stopped since scheduling", category: .interruption)
+                            return
+                        }
                         self.reactivateAndPlay(channel: channel, bufferFileURL: bufferFileURL)
                     }
                 case .library(let queue, let index):
+                    // beads_mobilemusic-crr: a stop() in the 0.5s gap (e.g.
+                    // CarPlay disconnect) must cancel this restart.
+                    let generation = self.playbackGeneration
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        guard self.playbackGeneration == generation else {
+                            self.log.log("Post-interruption resume cancelled — playback stopped since scheduling", category: .interruption)
+                            return
+                        }
                         guard let api = savedAPI, index < queue.count else {
                             self.log.log("Secondary hint library resume: missing API or index OOB — safe no-op", category: .interruption)
                             return
@@ -473,12 +487,7 @@ extension AudioPlayerService {
 
                             if vlcAlive {
                                 self.log.log("VLC survived library interruption — seamless resume at index=\(index)", category: .interruption)
-                            } else if !AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: vlcAlive, shouldResume: shouldResume) {
-                                // beads_mobilemusic-crr: shouldResume=false means the
-                                // system withdrew the audio source — do not resurrect
-                                // on the phone speaker.
-                                self.log.log("VLC dead after interruption but shouldResume=false — not restarting", category: .interruption)
-                            } else {
+                            } else if AudioPlayerService.shouldColdRestartAfterInterruption(vlcAlive: vlcAlive, shouldResume: shouldResume) {
                                 self.log.log("VLC died during library interruption — cold restarting track at index=\(index)", category: .interruption)
                                 guard let api = savedAPI, index < queue.count else {
                                     self.log.log("Library interruption resume: missing API or index out of bounds — safe no-op", category: .interruption)
@@ -493,6 +502,11 @@ extension AudioPlayerService {
                                         self.log.log("Library interruption resume: seeked to \(String(format: "%.1f", elapsed))s", category: .interruption)
                                     }
                                 }
+                            } else {
+                                // beads_mobilemusic-crr: shouldResume=false means the
+                                // system withdrew the audio source — do not resurrect
+                                // on the phone speaker.
+                                self.log.log("VLC dead after interruption but shouldResume=false — not restarting", category: .interruption)
                             }
                         }
 

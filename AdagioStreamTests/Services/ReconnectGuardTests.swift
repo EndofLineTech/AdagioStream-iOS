@@ -119,6 +119,16 @@ final class PathReconnectSuppressionPredicateTests: XCTestCase {
         )
     }
 
+    func testSuppressedWhileRidingOutEvenWithoutCapturedSource() {
+        // beads_mobilemusic-crr review: complete the truth table — the ride-out
+        // flag alone must suppress, even if the captured source is (unexpectedly)
+        // already cleared.
+        XCTAssertTrue(
+            AudioPlayerService.shouldSuppressPathReconnect(ridingOut: true, interruptedSourceActive: false),
+            "Ride-out in progress must suppress path-driven reconnect regardless of captured source"
+        )
+    }
+
     func testNotSuppressedWhenNoInterruptionInProgress() {
         // The reconnect feature's legitimate case: dead stream, network back,
         // no interruption anywhere in flight.

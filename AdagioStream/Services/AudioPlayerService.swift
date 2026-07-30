@@ -980,6 +980,9 @@ public final class AudioPlayerService: NSObject, ObservableObject, VLCMediaPlaye
         }
     }
     public func pause() {
+        // beads_mobilemusic-crr: pause = playback intent withdrawn — cancels
+        // any scheduled post-interruption restart (same as stop()).
+        playbackGeneration += 1
         log.log("pause() channel=\"\(currentChannel?.name ?? "nil")\"", category: .player)
         // Audiobookshelf E2: flush a progress sync before the stream pauses.
         if audiobookSession != nil { pauseAudiobook() }
