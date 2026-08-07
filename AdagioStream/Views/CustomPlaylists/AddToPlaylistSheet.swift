@@ -33,9 +33,13 @@ struct AddToPlaylistSheet: View {
                                 if selectedPlaylistID == playlist.id {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(.accent)
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
+                        // uxd.4: expose selection to VoiceOver — the checkmark
+                        // was visual-only.
+                        .accessibilityAddTraits(selectedPlaylistID == playlist.id ? .isSelected : [])
                     }
 
                     Button {
@@ -59,9 +63,11 @@ struct AddToPlaylistSheet: View {
                                     if selectedGroupID == group.id {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.accent)
+                                            .accessibilityHidden(true)
                                     }
                                 }
                             }
+                            .accessibilityAddTraits(selectedGroupID == group.id ? .isSelected : [])
                         }
 
                         Button {

@@ -64,4 +64,66 @@ final class ExtensionsTests: XCTestCase {
         let queryDict = Dictionary(uniqueKeysWithValues: components.queryItems!.map { ($0.name, $0.value!) })
         XCTAssertEqual(queryDict["category_id"], "5")
     }
+
+    // MARK: - Int.durationString
+
+    func testDurationStringZero() {
+        XCTAssertEqual(0.durationString, "0:00")
+    }
+
+    func testDurationStringUnderAnHour() {
+        XCTAssertEqual(90.durationString, "1:30")
+    }
+
+    func testDurationStringRollsOverAtAnHour() {
+        // beads_mobilemusic-t96.2: the buggy SwiftUI copies rendered "125:30"
+        // for a track over an hour instead of rolling to h:mm:ss.
+        XCTAssertEqual(7530.durationString, "2:05:30")
+        XCTAssertEqual(3600.durationString, "1:00:00")
+    }
+
+    // MARK: - URL.redactedForLog
+
+    func testRedactedForLogRedactsXtreamPathCredentials() {
+        let url = URL(string: "http://example.com/live/alice/sesame/123.ts")!
+        XCTAssertEqual(url.redactedForLog, "http://example.com/live/***/***/123.ts")
+    }
+
+    func testRedactedForLogRedactsXtreamQueryCredentials() {
+        let url = URL(string: "http://example.com/player_api.php?username=alice&password=sesame&action=get_live_streams")!
+        let redacted = url.redactedForLog
+        XCTAssertFalse(redacted.contains("alice"))
+        XCTAssertFalse(redacted.contains("sesame"))
+        XCTAssertTrue(redacted.contains("username=%2A%2A%2A") || redacted.contains("username=***"))
+    }
+
+    func testRedactedForLogRedactsSubsonicQueryCredentials() {
+        // beads_mobilemusic-t96.6: Subsonic auth uses u/p/t/s query params
+        // instead of Xtream's username/password.
+        let url = URL(string: "http://navidrome.example.com/rest/ping.view?u=alice&p=sesame&t=abcdef&s=salt123&v=1.16.1&c=AdagioStream&f=json")!
+        let redacted = url.redactedForLog
+        XCTAssertFalse(redacted.contains("alice"))
+        XCTAssertFalse(redacted.contains("sesame"))
+        XCTAssertFalse(redacted.contains("abcdef"))
+        XCTAssertFalse(redacted.contains("salt123"))
+        // Non-credential params survive untouched.
+        XCTAssertTrue(redacted.contains("v=1.16.1"))
+        XCTAssertTrue(redacted.contains("c=AdagioStream"))
+    }
+
+    func testRedactedForLogRedactsABSTokenParam() {
+        // ymf.3: ABS stream/cover URLs carry a live JWT access token in ?token=.
+        let jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1In0.sig"
+        let url = URL(string: "https://abs.example.com/audiobookshelf/s/item/abc/track.m4b?token=\(jwt)&width=400")!
+        let redacted = url.redactedForLog
+        XCTAssertFalse(redacted.contains(jwt), "the access token must not appear in logs")
+        XCTAssertTrue(redacted.contains("token=***"))
+        XCTAssertTrue(redacted.contains("width=400"), "non-credential params survive")
+
+        // token= mid-query (not just at start) must also be redacted.
+        let mid = URL(string: "https://abs.example.com/audiobookshelf/api/items/abc/cover?width=400&token=\(jwt)")!
+        let midRedacted = mid.redactedForLog
+        XCTAssertFalse(midRedacted.contains(jwt), "mid-query token must not appear in logs")
+        XCTAssertTrue(midRedacted.contains("token=***"))
+    }
 }

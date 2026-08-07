@@ -2,17 +2,17 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class ChannelListViewModel: ObservableObject {
-    @Published var searchText = ""
-    @Published var selectedGroup: String?
+public final class ChannelListViewModel: ObservableObject {
+    @Published public var searchText = ""
+    @Published public var selectedGroup: String?
 
-    let providerManager: ProviderManager
+    public let providerManager: ProviderManager
 
-    init(providerManager: ProviderManager) {
+    public init(providerManager: ProviderManager) {
         self.providerManager = providerManager
     }
 
-    var filteredChannels: [Channel] {
+    public var filteredChannels: [Channel] {
         var result = providerManager.channels
 
         if let group = selectedGroup {
@@ -26,18 +26,18 @@ final class ChannelListViewModel: ObservableObject {
         return result
     }
 
-    var groups: [ChannelGroup] {
+    public var groups: [ChannelGroup] {
         let grouped = Dictionary(grouping: filteredChannels, by: \.group)
         return grouped.map { ChannelGroup(name: $0.key, channels: $0.value) }
             .sorted { $0.name < $1.name }
     }
 
-    var allGroupNames: [String] {
+    public var allGroupNames: [String] {
         let names = Set(providerManager.channels.map(\.group))
         return names.sorted()
     }
 
-    func refresh() async {
+    public func refresh() async {
         await providerManager.loadChannels()
     }
 }

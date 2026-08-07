@@ -7,8 +7,12 @@ struct AddProviderView: View {
     /// Pass an existing provider to edit it; leave nil to add a new one.
     var editing: Provider?
 
+    /// When true, adding is locked to M3U: the type picker is hidden and only the
+    /// M3U form shows. Used by the "Custom M3Us" tab entry point. Ignored when editing.
+    var lockedToM3U = false
+
     @State private var name = ""
-    @State private var providerType = 0 // 0 = M3U, 1 = Xtream Codes
+    @State private var formProviderType: FormProviderType
 
     // M3U fields
     @State private var m3uURL = ""
@@ -20,55 +24,376 @@ struct AddProviderView: View {
     @State private var xcPassword = ""
     @State private var stripStreamIDs = false
 
+    // Subsonic fields
+    @State private var subsonicHost = ""
+    @State private var subsonicUsername = ""
+    @State private var subsonicPassword = ""
+
+    // Audiobookshelf fields
+    @State private var absHost = ""
+    @State private var absUsername = ""
+    @State private var absPassword = ""
+
+    // Audiobookshelf discovery (URL-first flow, bug 1e4). `.task(id: absHost)`
+    // drives it; `absDiscoveryToken` is bumped by "Retry" to re-run without an
+    // edit. `absDiscoveryPhase` is the single source of truth for the UI.
+    @State private var absDiscoveryPhase: ABSDiscoveryPhase = .idle
+    @State private var absDiscoveryToken = 0
+    @State private var isSigningIn = false
+
+    enum ABSDiscoveryPhase: Equatable {
+        case idle
+        case checking
+        case done(AudiobookshelfOIDC.Discovery)
+        case failed(String)
+    }
+
+    /// Convenience: the successful discovery, if any.
+    private var absDiscovery: AudiobookshelfOIDC.Discovery? {
+        if case .done(let d) = absDiscoveryPhase { return d }
+        return nil
+    }
+
+    /// Show username/password when the server advertises local auth, when
+    /// discovery failed, or when it hasn't run yet (empty/http URL) — so the
+    /// user is never locked out of the password path. Floor: if SSO is NOT the
+    /// offered path (e.g. authMethods ["ldap"]), still show password so an
+    /// unrecognized auth method can't hide every credential field.
+    private var absShowsPasswordFields: Bool {
+        switch absDiscoveryPhase {
+        case .done(let d): return d.supportsLocal || !d.supportsOpenID
+        case .idle, .failed: return true
+        case .checking: return false
+        }
+    }
+    /// Retains the ASWebAuthenticationSession driver for the flow's lifetime.
+    @State private var oidcSession = AudiobookshelfOIDCSession()
+
     @State private var error: String?
     @State private var isSaving = false
 
+    // beads_mobilemusic-uxb.1: Task handles for the in-flight save/sign-in so
+    // Cancel (and swipe-to-dismiss, via onDisappear) can actually stop them
+    // instead of merely dismissing the sheet while the mutation races on.
+    @State private var saveTask: Task<Void, Never>?
+    @State private var signInTask: Task<Void, Never>?
+
+    // beads_mobilemusic-uxb.3: inline field-level validation captions.
+    // `touchedFields` is sticky once a field has held non-empty content, so a
+    // pristine empty form stays clean but feedback appears as soon as the
+    // user has interacted with a field (and stays if they later clear it) —
+    // without needing FocusState wiring through MaskedTextField's internal
+    // reveal-toggle focus state.
+    private enum ValidationField: Hashable { case name, host, username, password }
+    @State private var hasSubmitted = false
+    @State private var touchedFields: Set<ValidationField> = []
+
+    private func markTouched(_ field: ValidationField, if value: String) {
+        if !value.isEmpty { touchedFields.insert(field) }
+    }
+
+    @ViewBuilder
+    private func caption(_ message: String?, field: ValidationField) -> some View {
+        if let message, hasSubmitted || touchedFields.contains(field) {
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.red)
+        }
+    }
+
+    init(editing: Provider? = nil, lockedToM3U: Bool = false) {
+        self.editing = editing
+        self.lockedToM3U = lockedToM3U
+        // Derive the initial form type on first paint so editing shows the right
+        // form immediately (no one-frame Xtream flash). When adding a new provider,
+        // default the picker to Xtream Codes since M3U is no longer a picker option
+        // (it's added from the Custom M3Us tab).
+        let initialType: FormProviderType
+        if let editing {
+            switch editing.type {
+            case .m3u: initialType = .m3u
+            case .xtreamCodes: initialType = .xtreamCodes
+            case .subsonic: initialType = .subsonic
+            case .audiobookshelf: initialType = .audiobookshelf
+            }
+        } else {
+            initialType = lockedToM3U ? .m3u : .xtreamCodes
+        }
+        _formProviderType = State(initialValue: initialType)
+    }
+
     private var isEditing: Bool { editing != nil }
+
+    /// M3U is excluded from the picker: new M3Us are added from the Custom M3Us tab.
+    private var pickerTypes: [FormProviderType] {
+        FormProviderType.allCases.filter { $0 != .m3u }
+    }
+
+    /// Hide the type picker when there's nothing to choose: locked to M3U, or
+    /// editing an M3U provider (whose type can't change and isn't a picker option).
+    private var hidePicker: Bool {
+        lockedToM3U || (isEditing && formProviderType == .m3u)
+    }
+
+    // MARK: - Typed provider-form enum (replaces fragile Int picker)
+
+    private enum FormProviderType: CaseIterable {
+        case m3u
+        case xtreamCodes
+        case subsonic
+        case audiobookshelf
+
+        var label: String {
+            switch self {
+            case .m3u: return "M3U"
+            case .xtreamCodes: return "Xtream Codes"
+            case .subsonic: return "Navidrome"
+            case .audiobookshelf: return "Audiobookshelf"
+            }
+        }
+
+        /// beads_mobilemusic-3h6.5: icon + one-line description for the
+        /// card-based picker (mirrors WelcomeSetupView's onboarding cards).
+        var icon: String {
+            switch self {
+            case .m3u: return "music.note.list"
+            case .xtreamCodes: return "server.rack"
+            case .subsonic: return "music.note"
+            case .audiobookshelf: return "books.vertical"
+            }
+        }
+
+        var cardDescription: String {
+            switch self {
+            case .m3u: return "Connect using a playlist URL"
+            case .xtreamCodes: return "Connect with server URL, username, and password"
+            case .subsonic: return "Connect to a Navidrome or Subsonic music server"
+            case .audiobookshelf: return "Connect to an Audiobookshelf server"
+            }
+        }
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Account Details") {
                     TextField("Name", text: $name)
-                    Picker("Type", selection: $providerType) {
-                        Text("M3U Playlist").tag(0)
-                        Text("Xtream Codes").tag(1)
+                        .accessibilityLabel("Account name")
+                        .onChange(of: name) { _, newValue in markTouched(.name, if: newValue) }
+                    caption(fieldErrors.name, field: .name)
+                }
+
+                // beads_mobilemusic-3h6.5: card-based type selection (replaces the
+                // segmented picker), styled after WelcomeSetupView's onboarding
+                // cards. M3U is excluded — it's added from the Custom M3Us tab.
+                if !hidePicker {
+                    Section("Provider Type") {
+                        ForEach(pickerTypes, id: \.self) { type in
+                            providerTypeCard(type)
+                        }
                     }
-                    .pickerStyle(.segmented)
                     .disabled(isEditing)
                 }
 
-                if providerType == 0 {
+                switch formProviderType {
+                case .m3u:
                     Section("M3U Settings") {
                         TextField("Playlist URL", text: $m3uURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Playlist URL")
+                            .onChange(of: m3uURL) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
                         TextField("EPG URL (optional)", text: $epgURL)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("EPG URL, optional")
                     }
-                } else {
+
+                case .xtreamCodes:
                     Section("Xtream Codes Settings") {
                         TextField("Server URL", text: $xcHost)
                             .keyboardType(.URL)
                             .textContentType(.URL)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Xtream Codes server URL")
+                            .onChange(of: xcHost) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
                         TextField("Username", text: $xcUsername)
-                            .textContentType(.init(rawValue: ""))
+                            .textContentType(.username)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
-                        MaskedTextField(placeholder: "Password", text: $xcPassword)
+                            .accessibilityLabel("Xtream Codes username")
+                            .onChange(of: xcUsername) { _, newValue in markTouched(.username, if: newValue) }
+                        caption(fieldErrors.username, field: .username)
+                        MaskedTextField(placeholder: "Password", text: $xcPassword, accessibilityLabel: "Xtream Codes password")
+                            .onChange(of: xcPassword) { _, newValue in markTouched(.password, if: newValue) }
+                        caption(fieldErrors.password, field: .password)
+                    }
+
+                    if isXtreamCodesHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
                     }
 
                     Section {
                         Toggle("Strip numeric prefix from channel names", isOn: $stripStreamIDs)
                     } footer: {
                         Text("Enable this if your channel names start with a number and pipe (e.g. \"5204 | Radio: Bruins\"). This strips the prefix so channels display and match correctly.")
+                    }
+
+                case .subsonic:
+                    Section {
+                        TextField("Server URL", text: $subsonicHost)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Navidrome server URL")
+                            .onChange(of: subsonicHost) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
+                        TextField("Username", text: $subsonicUsername)
+                            .textContentType(.username)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Navidrome username")
+                            .onChange(of: subsonicUsername) { _, newValue in markTouched(.username, if: newValue) }
+                        caption(fieldErrors.username, field: .username)
+                        MaskedTextField(placeholder: "Password", text: $subsonicPassword, accessibilityLabel: "Navidrome password")
+                            .onChange(of: subsonicPassword) { _, newValue in markTouched(.password, if: newValue) }
+                        caption(fieldErrors.password, field: .password)
+                    } header: {
+                        Text("Navidrome / Subsonic Settings")
+                    } footer: {
+                        Text("Include http:// or https://, e.g. http://nas.local:4533")
+                    }
+
+                    if isSubsonicHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
+                    }
+
+                case .audiobookshelf:
+                    // URL-first: only the server URL shows until discovery reveals
+                    // which auth methods the server offers. Discovery runs off the
+                    // committed URL via `.task(id:)` — SwiftUI cancels/restarts it
+                    // on every edit, so there is no fragile self-referential
+                    // "did the host change while I slept" re-check (bug 1e4).
+                    Section {
+                        TextField("Server URL", text: $absHost)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .accessibilityLabel("Audiobookshelf server URL")
+                            .task(id: AnyHashable([absHost, String(absDiscoveryToken)])) { await discoverABS() }
+                            .onChange(of: absHost) { _, newValue in markTouched(.host, if: newValue) }
+                        caption(fieldErrors.host, field: .host)
+                    } header: {
+                        Text("Audiobookshelf Settings")
+                    } footer: {
+                        Text("Include http:// or https://, e.g. https://abs.example.com. Requires server 2.26.0 or newer.")
+                    }
+
+                    // Visible discovery state (replaces the old silent `try?`).
+                    if case .checking = absDiscoveryPhase {
+                        Section {
+                            HStack {
+                                ProgressView().controlSize(.small)
+                                Text("Checking sign-in options…")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("Checking sign-in options")
+                        }
+                    }
+                    if case .failed(let message) = absDiscoveryPhase {
+                        Section {
+                            Label(message, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                                .font(.footnote)
+                            Button("Retry") { absDiscoveryToken &+= 1 }
+                                .accessibilityLabel("Retry checking sign-in options")
+                        } footer: {
+                            Text("Couldn't reach the server to check sign-in options. Enter your username and password below, or fix the URL and retry.")
+                        }
+                    }
+
+                    // Username/password: shown when the server offers local auth,
+                    // OR whenever discovery failed / hasn't run (so the user is
+                    // never locked out and the http password path still works).
+                    if absShowsPasswordFields {
+                        Section {
+                            TextField("Username", text: $absUsername)
+                                .textContentType(.username)
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .accessibilityLabel("Audiobookshelf username")
+                                .onChange(of: absUsername) { _, newValue in markTouched(.username, if: newValue) }
+                            caption(fieldErrors.username, field: .username)
+                            MaskedTextField(placeholder: "Password", text: $absPassword, accessibilityLabel: "Audiobookshelf password")
+                                .onChange(of: absPassword) { _, newValue in markTouched(.password, if: newValue) }
+                            caption(fieldErrors.password, field: .password)
+                        } header: {
+                            Text("Sign in with username & password")
+                        }
+                    }
+
+                    if !isEditing, let discovery = absDiscovery, discovery.supportsOpenID {
+                        Section {
+                            Button {
+                                signInWithSSO()
+                            } label: {
+                                HStack {
+                                    if isSigningIn {
+                                        ProgressView().controlSize(.small)
+                                    } else {
+                                        Image(systemName: "person.badge.key")
+                                    }
+                                    Text(discovery.buttonText)
+                                }
+                            }
+                            .disabled(isSigningIn || name.isEmpty || absSSOHost == nil)
+                            .accessibilityLabel("Sign in with single sign-on")
+                        } footer: {
+                            Text("Enter a name above, then sign in through your identity provider. No password is stored.")
+                        }
+
+                        Section {
+                            DisclosureGroup("SSO server requirements") {
+                                Text(Self.ssoSetupHelp)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .accessibilityLabel("SSO server requirements")
+                        }
+                    }
+
+                    if isAudiobookshelfHTTP {
+                        Section {
+                            Label(
+                                "This connection is not encrypted. Your credentials and library info could be visible on the network.",
+                                systemImage: "exclamationmark.triangle"
+                            )
+                            .foregroundStyle(.orange)
+                            .font(.footnote)
+                        }
                     }
                 }
 
@@ -79,7 +404,7 @@ struct AddProviderView: View {
                     }
                 }
             }
-            .navigationTitle(isEditing ? "Edit Account" : "Add Account")
+            .navigationTitle(isEditing ? "Edit Account" : (lockedToM3U ? "Add M3U" : "Add Account"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -96,49 +421,323 @@ struct AddProviderView: View {
                 }
             }
             .onAppear { populateFromEditing() }
+            .onChange(of: formProviderType) { _, _ in
+                // beads_mobilemusic-uxb kickback finding 4: switching provider
+                // type must not carry over "touched" state from the previous
+                // type's fields — every type shares the same
+                // name/host/username/password ValidationField cases, so
+                // without this an untouched field on the new type could show
+                // as pre-marked touched just because the old type's field of
+                // the same name had content.
+                touchedFields = []
+                error = nil
+            }
+            .onDisappear {
+                // beads_mobilemusic-uxb.1: cancel any in-flight save/sign-in when
+                // the sheet goes away, whether via Cancel or an interactive
+                // swipe-dismiss — otherwise the background Task can still call
+                // through to providerManager.addProvider after the user believed
+                // they'd aborted.
+                saveTask?.cancel()
+                signInTask?.cancel()
+            }
         }
     }
+
+    /// beads_mobilemusic-3h6.5: one selectable card per provider type — icon,
+    /// name, one-line description, single tap to choose. Same visual language
+    /// as WelcomeSetupView.connectionCard, kept local since this is the only
+    /// other place it's used.
+    private func providerTypeCard(_ type: FormProviderType) -> some View {
+        let isSelected = formProviderType == type
+        return Button {
+            formProviderType = type
+        } label: {
+            HStack(spacing: 16) {
+                Image(systemName: type.icon)
+                    .font(.title2)
+                    .frame(width: 44)
+                    .foregroundStyle(Color.accentColor)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(type.label)
+                        .font(.headline)
+                    Text(type.cardDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.body)
+                        .foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(type.label), \(type.cardDescription)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    // MARK: - Validation
 
     private static let allowedSchemes: Set<String> = ["http", "https"]
 
-    private var isValid: Bool {
-        guard !name.isEmpty else { return false }
-        if providerType == 0 {
-            guard let url = URL(string: m3uURL),
-                  let scheme = url.scheme?.lowercased(),
-                  Self.allowedSchemes.contains(scheme) else { return false }
-            return true
-        } else {
-            guard let url = URL(string: xcHost),
-                  let scheme = url.scheme?.lowercased(),
-                  Self.allowedSchemes.contains(scheme) else { return false }
-            return !xcUsername.isEmpty && !xcPassword.isEmpty
+    private var isSubsonicHTTP: Bool {
+        guard formProviderType == .subsonic,
+              let url = URL(string: subsonicHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
+    private var isXtreamCodesHTTP: Bool {
+        guard formProviderType == .xtreamCodes,
+              let url = URL(string: xcHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
+    private var isAudiobookshelfHTTP: Bool {
+        guard formProviderType == .audiobookshelf,
+              let url = URL(string: absHost),
+              let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http"
+    }
+
+    /// Valid HTTPS ABS host, or nil. SSO carries code/code_verifier/tokens, so
+    /// the discovery + sign-in path is https-only (the password path still
+    /// accepts http via `allowedSchemes`, unchanged).
+    private var absSSOHost: URL? {
+        guard let url = URL(string: absHost),
+              url.scheme?.lowercased() == "https" else { return nil }
+        return url
+    }
+
+    /// Server-side setup the app cannot do itself, surfaced in the SSO section
+    /// (wv4.4). Condensed to the essentials (3h6.7) — full detail in
+    /// docs/design/audiobookshelf-sso-setup.md for server admins.
+    static let ssoSetupHelp = """
+    Your Audiobookshelf admin needs to allow-list adagiostream://oauth as a mobile redirect URI, and your identity provider needs the server's mobile-redirect URI allow-listed too.
+
+    • Enter the server URL including any base path (e.g. https://host/audiobookshelf).
+    • Requires a trusted certificate and Audiobookshelf 2.26.0+.
+    """
+
+    // MARK: - Audiobookshelf OpenID / SSO (wv4.3)
+
+    /// URL-first `GET /status` discovery, driven by `.task(id: absHost)`.
+    ///
+    /// Runs on the main actor; SwiftUI cancels and restarts it whenever `absHost`
+    /// (or the Retry token) changes, so there is no manual "did the host change
+    /// while I slept" re-check — the previous root cause (bug 1e4), where that
+    /// self-referential guard non-deterministically dropped the result and the
+    /// silent `try?` hid the failure, giving the user no SSO button and no error.
+    ///
+    /// Failures are now VISIBLE: `.failed` surfaces an inline message + Retry and
+    /// still shows the password fields, so the user is never locked out.
+    @MainActor
+    private func discoverABS() async {
+        guard formProviderType == .audiobookshelf, !isEditing else {
+            absDiscoveryPhase = .idle
+            return
+        }
+        // No https URL yet → idle (password path still available for http, and
+        // SSO is https-only). Empty/partial input shouldn't show errors.
+        guard let host = absSSOHost else {
+            absDiscoveryPhase = .idle
+            return
+        }
+        // Debounce: a cancellable sleep. If the user keeps typing, SwiftUI
+        // cancels this task and starts a fresh one — the sleep throws and we bail.
+        do {
+            try await Task.sleep(nanoseconds: 500_000_000)
+        } catch {
+            return // cancelled — a newer task owns discovery
+        }
+        absDiscoveryPhase = .checking
+        do {
+            let discovery = try await AudiobookshelfOIDC.discover(host: host)
+            guard !Task.isCancelled else { return }
+            absDiscoveryPhase = .done(discovery)
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            DebugLogger.shared.log(
+                "ABS discovery failed for \(host.absoluteString): \(message)",
+                category: .general
+            )
+            absDiscoveryPhase = .failed(message)
         }
     }
+
+    /// Runs the OpenID flow, seeds the returned tokens into the Keychain, then
+    /// creates a token-only ABS provider (empty username/password). The provider
+    /// validation reuses the seeded tokens (no password login).
+    private func signInWithSSO() {
+        guard let host = absSSOHost, !name.isEmpty else { return }
+        error = nil
+        isSigningIn = true
+        signInTask = Task {
+            do {
+                let tokens = try await oidcSession.signIn(host: host)
+                // Cancelled while the OAuth session was up (e.g. sheet dismissed
+                // mid-flow) — bail before seeding tokens or adding the provider so
+                // cancellation doesn't leave a half-added provider behind.
+                guard !Task.isCancelled else {
+                    await MainActor.run { isSigningIn = false }
+                    return
+                }
+                let provider = Provider(
+                    name: name,
+                    type: .audiobookshelf(host: host, username: "", password: ""),
+                    stripStreamIDs: false
+                )
+                // Seed BEFORE addProvider so its validation uses these tokens.
+                let auth = AudiobookshelfAuth(
+                    host: host, username: "", password: "",
+                    providerID: provider.id.uuidString
+                )
+                // beads_mobilemusic-uxb kickback finding 2: re-check right
+                // before the Keychain write — cancellation can land in the gap
+                // between the guard above and here.
+                guard !Task.isCancelled else {
+                    await MainActor.run { isSigningIn = false }
+                    return
+                }
+                await auth.seedTokens(tokens)
+                await providerManager.addProvider(provider)
+
+                // If cancellation landed during addProvider, its own
+                // isCancelled guard skips the mutation and the provider never
+                // reaches providerManager.providers — but the tokens seeded
+                // above are now orphaned in the Keychain under provider.id.
+                // Clean them up rather than leaving a credential-less token
+                // pair behind for an account that was never added.
+                let wasAdded = providerManager.providers.contains { $0.id == provider.id }
+                if Task.isCancelled && !wasAdded {
+                    await auth.discardSeededTokens()
+                    await MainActor.run { isSigningIn = false }
+                    return
+                }
+
+                await MainActor.run {
+                    isSigningIn = false
+                    if let loadError = providerManager.error {
+                        error = loadError
+                    } else {
+                        dismiss()
+                    }
+                }
+            } catch AudiobookshelfOIDCSession.SignInError.cancelled {
+                // beads_mobilemusic-uxg: benign cancellation (view is
+                // dismissing) — matches the guard-pattern used elsewhere in
+                // this function; don't surface an error banner for it.
+                await MainActor.run { isSigningIn = false }
+            } catch {
+                await MainActor.run {
+                    isSigningIn = false
+                    self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
+    }
+
+    // beads_mobilemusic-uxb.3: single source of truth for validation, shared
+    // with WelcomeSetupView via ProviderFormValidation (was duplicated here).
+    private var validationKind: ProviderFormValidation.ProviderKind {
+        switch formProviderType {
+        case .m3u: return .m3u
+        case .xtreamCodes: return .xtreamCodes
+        case .subsonic: return .subsonic
+        case .audiobookshelf: return .audiobookshelf
+        }
+    }
+
+    private var currentHostText: String {
+        switch formProviderType {
+        case .m3u: return m3uURL
+        case .xtreamCodes: return xcHost
+        case .subsonic: return subsonicHost
+        case .audiobookshelf: return absHost
+        }
+    }
+
+    private var currentUsernameText: String {
+        switch formProviderType {
+        case .m3u: return ""
+        case .xtreamCodes: return xcUsername
+        case .subsonic: return subsonicUsername
+        case .audiobookshelf: return absUsername
+        }
+    }
+
+    private var currentPasswordText: String {
+        switch formProviderType {
+        case .m3u: return ""
+        case .xtreamCodes: return xcPassword
+        case .subsonic: return subsonicPassword
+        case .audiobookshelf: return absPassword
+        }
+    }
+
+    private var fieldErrors: ProviderFormValidation.Result {
+        ProviderFormValidation.validate(
+            kind: validationKind,
+            name: name,
+            host: currentHostText,
+            username: currentUsernameText,
+            password: currentPasswordText
+        )
+    }
+
+    private var isValid: Bool {
+        fieldErrors.isValid
+    }
+
+    // MARK: - Populate from editing
 
     private func populateFromEditing() {
         guard let provider = editing else { return }
         name = provider.name
         switch provider.type {
         case .m3u(let url, let epg):
-            providerType = 0
+            formProviderType = .m3u
             m3uURL = url.absoluteString
             epgURL = epg?.absoluteString ?? ""
         case .xtreamCodes(let host, let username, let password):
-            providerType = 1
+            formProviderType = .xtreamCodes
             xcHost = host.absoluteString
             xcUsername = username
             xcPassword = password
+        case .subsonic(let host, let username, let password):
+            formProviderType = .subsonic
+            subsonicHost = host.absoluteString
+            subsonicUsername = username
+            subsonicPassword = password
+        case .audiobookshelf(let host, let username, let password):
+            formProviderType = .audiobookshelf
+            absHost = host.absoluteString
+            absUsername = username
+            absPassword = password
         }
         stripStreamIDs = provider.stripStreamIDs
     }
 
+    // MARK: - Save
+
     private func save() {
+        hasSubmitted = true
         isSaving = true
         error = nil
 
         let type: Provider.ProviderType
-        if providerType == 0 {
+        switch formProviderType {
+        case .m3u:
             guard let url = URL(string: m3uURL) else {
                 error = "Invalid playlist URL"
                 isSaving = false
@@ -151,20 +750,42 @@ struct AddProviderView: View {
                 return u
             }()
             type = .m3u(url: url, epgURL: epg)
-        } else {
+
+        case .xtreamCodes:
             guard let host = URL(string: xcHost) else {
                 error = "Invalid server URL"
                 isSaving = false
                 return
             }
             type = .xtreamCodes(host: host, username: xcUsername, password: xcPassword)
+
+        case .subsonic:
+            guard let host = URL(string: subsonicHost) else {
+                error = "Invalid server URL"
+                isSaving = false
+                return
+            }
+            type = .subsonic(host: host, username: subsonicUsername, password: subsonicPassword)
+
+        case .audiobookshelf:
+            guard let host = URL(string: absHost) else {
+                error = "Invalid server URL"
+                isSaving = false
+                return
+            }
+            type = .audiobookshelf(host: host, username: absUsername, password: absPassword)
         }
 
         if let existing = editing {
-            let updated = Provider(id: existing.id, name: name, type: type, isEnabled: existing.isEnabled, stripStreamIDs: stripStreamIDs)
-            Task {
+            let updated = Provider(
+                id: existing.id,
+                name: name,
+                type: type,
+                isEnabled: existing.isEnabled,
+                stripStreamIDs: stripStreamIDs
+            )
+            saveTask = Task {
                 await providerManager.updateProvider(updated)
-                await providerManager.loadChannels()
                 if let loadError = providerManager.error {
                     error = loadError
                     isSaving = false
@@ -174,7 +795,7 @@ struct AddProviderView: View {
             }
         } else {
             let provider = Provider(name: name, type: type, stripStreamIDs: stripStreamIDs)
-            Task {
+            saveTask = Task {
                 await providerManager.addProvider(provider)
                 if let loadError = providerManager.error {
                     error = loadError

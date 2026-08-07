@@ -9,7 +9,7 @@ struct SavedSongsView: View {
             Group {
                 if savedSongsManager.songs.isEmpty {
                     EmptyStateView(
-                        title: "No Loved Songs",
+                        title: "No Saved Songs",
                         systemImage: "heart",
                         description: "Tap the heart in Now Playing to save songs."
                     )
@@ -23,7 +23,7 @@ struct SavedSongsView: View {
                     }
                 }
             }
-            .navigationTitle("Loved")
+            .navigationTitle("Saved")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { EditButton() }
             .environment(\.editMode, $editMode)

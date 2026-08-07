@@ -2,14 +2,14 @@ import Combine
 import Foundation
 
 @MainActor
-final class ESPNScoreService: ObservableObject {
-    static let shared = ESPNScoreService()
+public final class ESPNScoreService: ObservableObject {
+    public static let shared = ESPNScoreService()
 
     /// Channel ID → matched game info, updated on each poll.
-    @Published var gamesByChannel: [String: ESPNGameInfo] = [:]
+    @Published public var gamesByChannel: [String: ESPNGameInfo] = [:]
 
     private let log = DebugLogger.shared
-    private let session = PinnedURLSession.espn
+    private let session = APISession.espn
     private var livePollInterval: TimeInterval = 15
     private let idlePollInterval: TimeInterval = 60
 
@@ -37,7 +37,7 @@ final class ESPNScoreService: ObservableObject {
 
     /// Call after channels are loaded. Extracts team names from sports channel names
     /// and builds a lookup table for matching ESPN events.
-    func matchChannels(_ channels: [Channel]) {
+    public func matchChannels(_ channels: [Channel]) {
         teamToChannelIDs = [:]
         gamesByChannel = [:]
 
@@ -88,7 +88,7 @@ final class ESPNScoreService: ObservableObject {
     /// Whether polling is disabled by the user (interval set to 0 / "Off").
     private var pollingDisabledByUser = false
 
-    func setLivePollInterval(_ interval: TimeInterval) {
+    public func setLivePollInterval(_ interval: TimeInterval) {
         pollingDisabledByUser = interval == 0
         if pollingDisabledByUser {
             log.log("ESPN score polling disabled by user", category: .espn)
@@ -104,7 +104,7 @@ final class ESPNScoreService: ObservableObject {
         }
     }
 
-    func setPollingEnabled(_ enabled: Bool) {
+    public func setPollingEnabled(_ enabled: Bool) {
         pollingWanted = enabled
         if pollingDisabledByUser { return }
         if enabled && hasChannels && pollTimer == nil {

@@ -2,88 +2,88 @@ import Foundation
 
 // MARK: - ESPN Scoreboard API Response
 
-struct ESPNScoreboardResponse: Decodable {
-    let events: [ESPNEvent]
+public struct ESPNScoreboardResponse: Decodable {
+    public let events: [ESPNEvent]
 }
 
-struct ESPNEvent: Decodable, Identifiable {
-    let id: String
-    let date: String                   // ISO-8601 UTC, e.g. "2024-03-30T17:05Z"
-    let shortName: String              // "MIN @ BOS"
-    let competitions: [ESPNCompetition]
+public struct ESPNEvent: Decodable, Identifiable {
+    public let id: String
+    public let date: String                   // ISO-8601 UTC, e.g. "2024-03-30T17:05Z"
+    public let shortName: String              // "MIN @ BOS"
+    public let competitions: [ESPNCompetition]
 
-    var competition: ESPNCompetition? { competitions.first }
+    public var competition: ESPNCompetition? { competitions.first }
 }
 
-struct ESPNCompetition: Decodable {
-    let competitors: [ESPNCompetitor]
-    let status: ESPNStatus
-    let situation: ESPNSituation?
+public struct ESPNCompetition: Decodable {
+    public let competitors: [ESPNCompetitor]
+    public let status: ESPNStatus
+    public let situation: ESPNSituation?
 
-    var homeTeam: ESPNCompetitor? { competitors.first(where: { $0.homeAway == "home" }) }
-    var awayTeam: ESPNCompetitor? { competitors.first(where: { $0.homeAway == "away" }) }
+    public var homeTeam: ESPNCompetitor? { competitors.first(where: { $0.homeAway == "home" }) }
+    public var awayTeam: ESPNCompetitor? { competitors.first(where: { $0.homeAway == "away" }) }
 }
 
-struct ESPNSituation: Decodable {
+public struct ESPNSituation: Decodable {
     // MLB
-    let outs: Int?
-    let balls: Int?
-    let strikes: Int?
-    let onFirst: Bool?
-    let onSecond: Bool?
-    let onThird: Bool?
+    public let outs: Int?
+    public let balls: Int?
+    public let strikes: Int?
+    public let onFirst: Bool?
+    public let onSecond: Bool?
+    public let onThird: Bool?
     // NFL
-    let possession: String?            // team ID with possession
-    let down: Int?
-    let distance: Int?
-    let yardLine: Int?
-    let downDistanceText: String?      // "1st & 10 at GB 25"
-    let shortDownDistanceText: String? // "1st & 10"
-    let possessionText: String?        // "Green Bay Packers"
+    public let possession: String?            // team ID with possession
+    public let down: Int?
+    public let distance: Int?
+    public let yardLine: Int?
+    public let downDistanceText: String?      // "1st & 10 at GB 25"
+    public let shortDownDistanceText: String? // "1st & 10"
+    public let possessionText: String?        // "Green Bay Packers"
 }
 
-struct ESPNCompetitor: Decodable {
-    let homeAway: String               // "home" or "away"
-    let score: String                  // "0", "3", etc.
-    let team: ESPNTeam
-    let records: [ESPNRecord]?
+public struct ESPNCompetitor: Decodable {
+    public let homeAway: String               // "home" or "away"
+    public let score: String                  // "0", "3", etc.
+    public let team: ESPNTeam
+    public let records: [ESPNRecord]?
 
-    var overallRecord: String? {
+    public var overallRecord: String? {
         records?.first(where: { $0.name == "overall" })?.summary
     }
 }
 
-struct ESPNTeam: Decodable {
-    let id: String
-    let displayName: String            // "Boston Red Sox"
-    let abbreviation: String           // "BOS"
+public struct ESPNTeam: Decodable {
+    public let id: String
+    public let displayName: String            // "Boston Red Sox"
+    public let abbreviation: String           // "BOS"
 }
 
-struct ESPNRecord: Decodable {
-    let name: String                   // "overall"
-    let summary: String                // "9-11"
+public struct ESPNRecord: Decodable {
+    public let name: String                   // "overall"
+    public let summary: String                // "9-11"
 }
 
-struct ESPNStatus: Decodable {
-    let displayClock: String?          // "8:35", "0:00"
-    let period: Int?                   // 1, 2, 3, 4
-    let type: ESPNStatusType
+public struct ESPNStatus: Decodable {
+    public let displayClock: String?          // "8:35", "0:00"
+    public let period: Int?                   // 1, 2, 3, 4
+    public let type: ESPNStatusType
 }
 
-struct ESPNStatusType: Decodable {
-    let state: String                  // "pre", "in", "post"
-    let shortDetail: String            // "3/15 - 1:05 PM EDT", "Bot 7th", "Final"
+public struct ESPNStatusType: Decodable {
+    public let state: String                  // "pre", "in", "post"
+    public let shortDetail: String            // "3/15 - 1:05 PM EDT", "Bot 7th", "Final"
 }
 
 // MARK: - League
 
-enum ESPNLeague: String, Equatable {
+public enum ESPNLeague: String, Equatable {
     case mlb
     case nba
     case nhl
     case nfl
 
-    var sportPath: String {
+    public var sportPath: String {
         switch self {
         case .mlb: return "baseball/mlb"
         case .nba: return "basketball/nba"
@@ -92,7 +92,7 @@ enum ESPNLeague: String, Equatable {
         }
     }
 
-    var periodName: String {
+    public var periodName: String {
         switch self {
         case .mlb: return ""         // MLB uses innings, handled by shortDetail
         case .nba: return "Quarter"
@@ -105,31 +105,75 @@ enum ESPNLeague: String, Equatable {
 // MARK: - Resolved Game Info for Display
 
 /// A matched ESPN game ready for display in a channel row.
-struct ESPNGameInfo: Equatable {
-    let league: ESPNLeague
-    let awayAbbr: String               // "MIN"
-    let homeAbbr: String               // "BOS"
-    let awayScore: String              // "3"
-    let homeScore: String              // "0"
-    let awayRecord: String?            // "7-13-1"
-    let homeRecord: String?            // "9-11"
-    let state: GameState               // .pre, .live, .post
-    let statusDetail: String           // "Bot 7th", "8:35 - 1st", "Final"
-    let displayClock: String?          // "8:35"
-    let period: Int?                   // 1-4
-    let gameDate: Date?                // Parsed UTC start time from ESPN
+public struct ESPNGameInfo: Equatable {
+    public let league: ESPNLeague
+    public let awayAbbr: String               // "MIN"
+    public let homeAbbr: String               // "BOS"
+    public let awayScore: String              // "3"
+    public let homeScore: String              // "0"
+    public let awayRecord: String?            // "7-13-1"
+    public let homeRecord: String?            // "9-11"
+    public let state: GameState               // .pre, .live, .post
+    public let statusDetail: String           // "Bot 7th", "8:35 - 1st", "Final"
+    public let displayClock: String?          // "8:35"
+    public let period: Int?                   // 1-4
+    public let gameDate: Date?                // Parsed UTC start time from ESPN
     // MLB
-    let outs: Int?                     // 0-3 during live game
-    let balls: Int?                    // 0-3 during live at-bat
-    let strikes: Int?                  // 0-2 during live at-bat
-    let onFirst: Bool?                 // Runner on 1B
-    let onSecond: Bool?                // Runner on 2B
-    let onThird: Bool?                 // Runner on 3B
+    public let outs: Int?                     // 0-3 during live game
+    public let balls: Int?                    // 0-3 during live at-bat
+    public let strikes: Int?                  // 0-2 during live at-bat
+    public let onFirst: Bool?                 // Runner on 1B
+    public let onSecond: Bool?                // Runner on 2B
+    public let onThird: Bool?                 // Runner on 3B
     // NFL
-    let possessionTeamAbbr: String?    // "GB" — team with the ball
-    let downDistanceText: String?      // "1st & 10"
+    public let possessionTeamAbbr: String?    // "GB" — team with the ball
+    public let downDistanceText: String?      // "1st & 10"
 
-    enum GameState: String, Equatable {
+    public init(
+        league: ESPNLeague,
+        awayAbbr: String,
+        homeAbbr: String,
+        awayScore: String,
+        homeScore: String,
+        awayRecord: String?,
+        homeRecord: String?,
+        state: GameState,
+        statusDetail: String,
+        displayClock: String?,
+        period: Int?,
+        gameDate: Date?,
+        outs: Int?,
+        balls: Int?,
+        strikes: Int?,
+        onFirst: Bool?,
+        onSecond: Bool?,
+        onThird: Bool?,
+        possessionTeamAbbr: String?,
+        downDistanceText: String?
+    ) {
+        self.league = league
+        self.awayAbbr = awayAbbr
+        self.homeAbbr = homeAbbr
+        self.awayScore = awayScore
+        self.homeScore = homeScore
+        self.awayRecord = awayRecord
+        self.homeRecord = homeRecord
+        self.state = state
+        self.statusDetail = statusDetail
+        self.displayClock = displayClock
+        self.period = period
+        self.gameDate = gameDate
+        self.outs = outs
+        self.balls = balls
+        self.strikes = strikes
+        self.onFirst = onFirst
+        self.onSecond = onSecond
+        self.onThird = onThird
+        self.possessionTeamAbbr = possessionTeamAbbr
+        self.downDistanceText = downDistanceText
+    }
+
+    public enum GameState: String, Equatable {
         case pre
         case live = "in"
         case post
@@ -137,7 +181,7 @@ struct ESPNGameInfo: Equatable {
 
     // MARK: - One-liner (channel row, mini player)
 
-    var displayText: String {
+    public var displayText: String {
         switch state {
         case .pre:
             return "\(awayAbbr)\(recordText(awayRecord)) @ \(homeAbbr)\(recordText(homeRecord)) · \(localStartTime)"
@@ -151,7 +195,7 @@ struct ESPNGameInfo: Equatable {
     // MARK: - Two-line (Now Playing, CarPlay)
 
     /// Line 1: score line
-    var nowPlayingTitle: String {
+    public var nowPlayingTitle: String {
         switch state {
         case .pre:
             return "\(awayAbbr)\(recordText(awayRecord)) @ \(homeAbbr)\(recordText(homeRecord))"
@@ -161,7 +205,7 @@ struct ESPNGameInfo: Equatable {
     }
 
     /// Line 2: game status
-    var nowPlayingSubtitle: String {
+    public var nowPlayingSubtitle: String {
         switch state {
         case .live:
             return liveDetail

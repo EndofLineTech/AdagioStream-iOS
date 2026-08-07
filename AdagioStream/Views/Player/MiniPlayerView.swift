@@ -6,6 +6,7 @@ struct MiniPlayerView: View {
     @EnvironmentObject var settingsViewModel: SettingsViewModel
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var showNowPlaying = false
+    @AppStorage(SXMSportsPriority.defaultsKey) private var preferScores = true
 
     private var logoSize: CGFloat { sizeClass == .regular ? 44 : 36 }
     private var logoRadius: CGFloat { sizeClass == .regular ? 8 : 6 }
@@ -13,19 +14,32 @@ struct MiniPlayerView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Channel logo + info — tapping opens full player
+            // Item artwork + info — tapping opens full player
             Button {
                 showNowPlaying = true
             } label: {
                 HStack(spacing: 12) {
                     ZStack {
-                        if settingsViewModel.settings.artworkDisplayMode == .coverArt,
+                        // d6q.2: for library tracks, render artwork from nowPlaying.artworkURL
+                        // (populated by the track's cover-art fetch in play(track:via:)).
+                        // For radio, keep existing SXM cover-art → channel logo priority.
+                        if audioPlayer.currentAudiobook != nil, let artworkURL = audioPlayer.nowPlayingArtworkURL {
+                            // yu8.4: audiobook cover.
+                            RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: true)
+                        } else if audioPlayer.currentAudiobook != nil {
+                            Image(systemName: "book.closed")
+                                .frame(width: logoSize, height: logoSize)
+                                .foregroundStyle(.secondary)
+                        } else if let item = audioPlayer.nowPlaying, !item.isLiveStream,
+                           let artworkURL = audioPlayer.nowPlayingArtworkURL {
+                            RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
+                        } else if settingsViewModel.settings.artworkDisplayMode == .coverArt,
                            let track = sxmService.currentTrack, let artworkURL = track.artworkURL {
                             RetryableAsyncImage(url: artworkURL, width: logoSize, height: logoSize, cornerRadius: logoRadius, persistent: false)
                         } else if let logoURL = audioPlayer.currentChannel?.logoURL {
                             RetryableAsyncImage(url: logoURL, width: logoSize, height: logoSize, cornerRadius: logoRadius)
                         } else {
-                            Image(systemName: "radio")
+                            Image(systemName: audioPlayer.nowPlaying?.isLiveStream == false ? "music.note" : "radio")
                                 .frame(width: logoSize, height: logoSize)
                                 .foregroundStyle(.secondary)
                         }
@@ -40,11 +54,33 @@ struct MiniPlayerView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(audioPlayer.currentChannel?.name ?? "")
+                        // yu8.4: audiobook — chapter title primary, book title secondary.
+                        if let book = audioPlayer.currentAudiobook {
+                            Text(audioPlayer.currentChapter?.title ?? book.title)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                            Text(book.title)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } else {
+                        // d6q.2: use nowPlaying.displayTitle for both radio and library.
+                        Text(audioPlayer.nowPlaying?.displayTitle ?? "")
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        if let track = sxmService.currentTrack {
+                        // Library track: show the threaded artist name (bug hzl).
+                        if let item = audioPlayer.nowPlaying, !item.isLiveStream {
+                            if let subtitle = audioPlayer.nowPlayingSubtitle, !subtitle.isEmpty {
+                                Text(subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        } else if let track = sxmService.currentTrack,
+                                  !(preferScores && audioPlayer.currentChannel.flatMap({ ESPNScoreService.shared.gamesByChannel[$0.id] }) != nil) {
+                            // Radio: SXM now-playing metadata (yields to a live game when preferScores)
                             Text("\(track.artistDisplay) — \(track.title)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -65,6 +101,10 @@ struct MiniPlayerView: View {
                                 .foregroundStyle(.red)
                                 .lineLimit(1)
                         } else if audioPlayer.timeShiftBuffer.isTimeShifted {
+                            // uxd.2: the LIVE button used to live here, nested
+                            // inside the outer info-column Button's label — an
+                            // unreliable tap-routing pattern. It's now a sibling
+                            // control in the top-level HStack (see below).
                             HStack(spacing: 4) {
                                 Circle()
                                     .fill(.orange)
@@ -73,17 +113,6 @@ struct MiniPlayerView: View {
                                     .font(.caption)
                                     .foregroundStyle(.orange)
                                     .lineLimit(1)
-                                Button {
-                                    audioPlayer.skipToLive()
-                                } label: {
-                                    Text("LIVE")
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
-                                        .background(Capsule().fill(.red))
-                                }
-                                .buttonStyle(.plain)
                             }
                         } else if !audioPlayer.statusText.isEmpty {
                             HStack(spacing: 4) {
@@ -103,6 +132,7 @@ struct MiniPlayerView: View {
                                 }
                             }
                         }
+                        } // end non-audiobook branch
                     }
 
                     Spacer()
@@ -110,6 +140,25 @@ struct MiniPlayerView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            // uxd.2: LIVE button — sibling of the info-column Button (was
+            // nested inside its label, which made tap routing unreliable).
+            // 44pt min hit area; the visual pill itself stays small.
+            if audioPlayer.timeShiftBuffer.isTimeShifted {
+                Button {
+                    audioPlayer.skipToLive()
+                } label: {
+                    Text("LIVE")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.red))
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel("Skip to live")
+            }
 
             // Play/Pause button
             Button {
@@ -120,6 +169,7 @@ struct MiniPlayerView: View {
                     .frame(width: buttonSize, height: buttonSize)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(audioPlayer.isPlaying ? "Pause" : "Play")
 
             // Stop button
             Button {
@@ -131,6 +181,7 @@ struct MiniPlayerView: View {
                     .frame(width: buttonSize, height: buttonSize)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Stop")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -138,6 +189,22 @@ struct MiniPlayerView: View {
         .hoverEffect(.highlight)
         .glassBackground()
         .glassContainer()
+        // d6q.6: 2pt determinate progress hairline for library tracks only.
+        // Radio mini-player is unchanged (isLiveStream == true, so no hairline).
+        .overlay(alignment: .bottom) {
+            if let item = audioPlayer.nowPlaying, !item.isLiveStream,
+               let duration = audioPlayer.trackDuration, duration > 0 {
+                GeometryReader { geo in
+                    let fraction = min(1.0, max(0.0, audioPlayer.trackElapsed / duration))
+                    Rectangle()
+                        .fill(.tint.opacity(0.7))
+                        .frame(width: geo.size.width * fraction, height: 2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: 2)
+                .accessibilityHidden(true)
+            }
+        }
         .sheet(isPresented: $showNowPlaying) {
             NowPlayingView()
                 .presentationDetents([.large])

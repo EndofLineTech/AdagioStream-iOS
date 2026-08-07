@@ -40,3 +40,5 @@ issue-prefix: "mobilemusic"
 # - linear.api-key
 # - github.org
 # - github.repo
+
+sync.remote: "git+https://github.com/EndofLineTech/AdagioStream-iOS.git"

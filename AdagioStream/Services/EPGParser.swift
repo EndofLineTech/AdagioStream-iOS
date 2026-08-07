@@ -1,6 +1,6 @@
 import Foundation
 
-final class EPGParser: NSObject, XMLParserDelegate {
+public final class EPGParser: NSObject, XMLParserDelegate {
     private var entries: [String: [EPGEntry]] = [:]
     private var currentElement = ""
     private var currentChannelID = ""
@@ -17,7 +17,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
         return f
     }()
 
-    static func parse(from url: URL) async throws -> [String: [EPGEntry]] {
+    public static func parse(from url: URL) async throws -> [String: [EPGEntry]] {
         let data: Data
         if url.isFileURL {
             data = try Data(contentsOf: url)
@@ -30,7 +30,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
         return try parser.parse(data: data)
     }
 
-    func parse(data: Data) throws -> [String: [EPGEntry]] {
+    public func parse(data: Data) throws -> [String: [EPGEntry]] {
         let xmlParser = XMLParser(data: data)
         xmlParser.shouldResolveExternalEntities = false
         xmlParser.delegate = self
@@ -42,7 +42,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
 
     // MARK: - XMLParserDelegate
 
-    func parser(_ parser: XMLParser, didStartElement elementName: String,
+    public func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName: String?,
                 attributes attributeDict: [String: String] = [:]) {
         currentElement = elementName
@@ -57,7 +57,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
         }
     }
 
-    func parser(_ parser: XMLParser, foundCharacters string: String) {
+    public func parser(_ parser: XMLParser, foundCharacters string: String) {
         guard isParsing else { return }
         switch currentElement {
         case "title":
@@ -69,7 +69,7 @@ final class EPGParser: NSObject, XMLParserDelegate {
         }
     }
 
-    func parser(_ parser: XMLParser, didEndElement elementName: String,
+    public func parser(_ parser: XMLParser, didEndElement elementName: String,
                 namespaceURI: String?, qualifiedName: String?) {
         if elementName == "programme", isParsing {
             if let start = currentStart, let end = currentEnd {

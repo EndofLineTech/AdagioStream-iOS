@@ -2,17 +2,17 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class ProviderListViewModel: ObservableObject {
-    @Published var showAddProvider = false
-    @Published var editingProvider: Provider?
+public final class ProviderListViewModel: ObservableObject {
+    @Published public var showAddProvider = false
+    @Published public var editingProvider: Provider?
 
-    let providerManager: ProviderManager
+    public let providerManager: ProviderManager
 
-    init(providerManager: ProviderManager) {
+    public init(providerManager: ProviderManager) {
         self.providerManager = providerManager
     }
 
-    func deleteProvider(_ provider: Provider) async {
+    public func deleteProvider(_ provider: Provider) async {
         await providerManager.deleteProvider(provider)
     }
 }

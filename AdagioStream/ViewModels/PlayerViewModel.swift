@@ -2,25 +2,25 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class PlayerViewModel: ObservableObject {
-    let audioPlayer: AudioPlayerService
-    let providerManager: ProviderManager
+public final class PlayerViewModel: ObservableObject {
+    public let audioPlayer: AudioPlayerService
+    public let providerManager: ProviderManager
 
-    init(audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
+    public init(audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.audioPlayer = audioPlayer
         self.providerManager = providerManager
     }
 
-    var currentEPG: [EPGEntry] {
+    public var currentEPG: [EPGEntry] {
         guard let channelID = audioPlayer.currentChannel?.epgChannelID else { return [] }
         return providerManager.epgData[channelID]?.sorted(by: { $0.start < $1.start }) ?? []
     }
 
-    var nowPlaying: EPGEntry? {
+    public var nowPlaying: EPGEntry? {
         currentEPG.first(where: \.isCurrentlyAiring)
     }
 
-    var upNext: EPGEntry? {
+    public var upNext: EPGEntry? {
         currentEPG.first(where: \.isUpcoming)
     }
 }

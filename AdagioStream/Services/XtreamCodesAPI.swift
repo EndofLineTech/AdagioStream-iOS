@@ -1,21 +1,42 @@
 import Foundation
 
-struct XtreamCodesAPI {
-    let host: URL
-    let username: String
-    let password: String
+public struct XtreamCodesAPI {
+    public let host: URL
+    public let username: String
+    public let password: String
 
-    enum APIError: Error, LocalizedError {
+    /// Injected session — callers pass a stub in tests (mirrors `NavidromeAPI`).
+    public let session: URLSession
+    /// Delay before the single retry (5xx or decode error). Tests pass `.zero`.
+    private let retryDelay: Duration
+
+    public init(
+        host: URL,
+        username: String,
+        password: String,
+        session: URLSession? = nil,
+        retryDelay: Duration = .seconds(2)
+    ) {
+        self.host = host
+        self.username = username
+        self.password = password
+        self.session = session ?? URLSession.shared
+        self.retryDelay = retryDelay
+    }
+
+    public enum APIError: Error, LocalizedError {
         case invalidURL
         case authenticationFailed
         case networkError(Error)
         case decodingError(Error)
         case serverError(statusCode: Int)
 
-        var errorDescription: String? {
+        public var errorDescription: String? {
             switch self {
             case .invalidURL: return "Invalid server URL"
-            case .authenticationFailed: return "Authentication failed"
+            // beads_mobilemusic-uxb.5: match NavidromeAPI / AudiobookshelfAuth's
+            // actionable copy instead of a bare "Authentication failed".
+            case .authenticationFailed: return "Authentication failed. Check your username and password."
             case .networkError(let e): return "Network error: \(e.localizedDescription)"
             case .decodingError(let e): return "Data error: \(e.localizedDescription)"
             case .serverError(let code): return "Server error (HTTP \(code))"
@@ -25,7 +46,7 @@ struct XtreamCodesAPI {
 
     // MARK: - API Responses
 
-    struct AuthResponse: Codable {
+    public struct AuthResponse: Codable {
         let userInfo: UserInfo?
         let serverInfo: ServerInfo?
 
@@ -34,7 +55,7 @@ struct XtreamCodesAPI {
             case serverInfo = "server_info"
         }
 
-        struct UserInfo: Codable {
+        public struct UserInfo: Codable {
             let username: String?
             let status: String?
             let auth: Int?
@@ -46,17 +67,22 @@ struct XtreamCodesAPI {
             }
         }
 
-        struct ServerInfo: Codable {
+        public struct ServerInfo: Codable {
             let url: String?
             let port: String?
         }
     }
 
-    struct Category: Codable, Identifiable {
-        let categoryID: String
-        let categoryName: String
+    public struct Category: Codable, Identifiable {
+        public let categoryID: String
+        public let categoryName: String
 
-        var id: String { categoryID }
+        public var id: String { categoryID }
+
+        public init(categoryID: String, categoryName: String) {
+            self.categoryID = categoryID
+            self.categoryName = categoryName
+        }
 
         enum CodingKeys: String, CodingKey {
             case categoryID = "category_id"
@@ -64,12 +90,26 @@ struct XtreamCodesAPI {
         }
     }
 
-    struct LiveStream: Codable {
-        let streamID: Int
-        let name: String?
-        let streamIcon: String?
-        let epgChannelID: String?
-        let categoryID: String?
+    public struct LiveStream: Codable {
+        public let streamID: Int
+        public let name: String?
+        public let streamIcon: String?
+        public let epgChannelID: String?
+        public let categoryID: String?
+
+        public init(
+            streamID: Int,
+            name: String?,
+            streamIcon: String?,
+            epgChannelID: String?,
+            categoryID: String?
+        ) {
+            self.streamID = streamID
+            self.name = name
+            self.streamIcon = streamIcon
+            self.epgChannelID = epgChannelID
+            self.categoryID = categoryID
+        }
 
         enum CodingKeys: String, CodingKey {
             case streamID = "stream_id"
@@ -82,7 +122,7 @@ struct XtreamCodesAPI {
 
     // MARK: - API Calls
 
-    func authenticate() async throws -> AuthResponse {
+    public func authenticate() async throws -> AuthResponse {
         guard let url = host.xtreamCodesURL(username: username, password: password, action: "") else {
             throw APIError.invalidURL
         }
@@ -93,14 +133,14 @@ struct XtreamCodesAPI {
         return response
     }
 
-    func getLiveCategories() async throws -> [Category] {
+    public func getLiveCategories() async throws -> [Category] {
         guard let url = host.xtreamCodesURL(username: username, password: password, action: "get_live_categories") else {
             throw APIError.invalidURL
         }
         return try await fetch(url)
     }
 
-    func getLiveStreams(categoryID: String? = nil) async throws -> [LiveStream] {
+    public func getLiveStreams(categoryID: String? = nil) async throws -> [LiveStream] {
         var params: [String: String] = [:]
         if let categoryID {
             params["category_id"] = categoryID
@@ -112,7 +152,7 @@ struct XtreamCodesAPI {
     }
 
     /// Full XMLTV EPG URL exposed by most Xtream Codes panels.
-    var xmltvURL: URL? {
+    public var xmltvURL: URL? {
         var components = URLComponents(url: host, resolvingAgainstBaseURL: false)
         components?.path = "/xmltv.php"
         components?.queryItems = [
@@ -122,15 +162,15 @@ struct XtreamCodesAPI {
         return components?.url
     }
 
-    var streamExtension: String = Constants.XtreamCodes.defaultStreamExtension
+    public var streamExtension: String = Constants.XtreamCodes.defaultStreamExtension
 
-    mutating func applyAuthFormats(_ response: AuthResponse) {
+    public mutating func applyAuthFormats(_ response: AuthResponse) {
         if let formats = response.userInfo?.allowedOutputFormats, let first = formats.first {
             streamExtension = first
         }
     }
 
-    func streamURL(for streamID: Int, extension ext: String? = nil) -> URL? {
+    public func streamURL(for streamID: Int, extension ext: String? = nil) -> URL? {
         let ext = ext ?? streamExtension
         var components = URLComponents(url: host, resolvingAgainstBaseURL: false)
         components?.path = "\(Constants.XtreamCodes.livePath)/\(username)/\(password)/\(streamID).\(ext)"
@@ -139,7 +179,7 @@ struct XtreamCodesAPI {
 
     // MARK: - Conversion
 
-    func convertToChannels(streams: [LiveStream], categories: [Category]) -> [Channel] {
+    public func convertToChannels(streams: [LiveStream], categories: [Category]) -> [Channel] {
         let categoryMap = Dictionary(uniqueKeysWithValues: categories.map { ($0.categoryID, $0.categoryName) })
 
         return streams.compactMap { stream in
@@ -159,13 +199,12 @@ struct XtreamCodesAPI {
 
     private func fetch<T: Codable>(_ url: URL, attempt: Int = 1) async throws -> T {
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await session.data(from: url)
 
             if let httpResponse = response as? HTTPURLResponse,
                !(200...299).contains(httpResponse.statusCode) {
-                // Retry once on server errors (5xx)
-                if attempt == 1, (500...599).contains(httpResponse.statusCode) {
-                    try? await Task.sleep(for: .seconds(2))
+                if RetryOnServerError.shouldRetry(attempt: attempt, statusCode: httpResponse.statusCode) {
+                    await RetryOnServerError.wait(retryDelay)
                     return try await fetch(url, attempt: 2)
                 }
                 throw APIError.serverError(statusCode: httpResponse.statusCode)
@@ -176,9 +215,10 @@ struct XtreamCodesAPI {
         } catch let error as APIError {
             throw error
         } catch let error as DecodingError {
-            // Retry once on decoding errors (server may have returned transient garbage)
+            // Retry once on decoding errors (server may have returned transient garbage).
+            // Xtream-specific: Navidrome's fetch does not retry decode errors.
             if attempt == 1 {
-                try? await Task.sleep(for: .seconds(2))
+                await RetryOnServerError.wait(retryDelay)
                 return try await fetch(url, attempt: 2)
             }
             throw APIError.decodingError(error)

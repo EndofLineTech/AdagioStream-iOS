@@ -2,11 +2,11 @@ import Foundation
 
 /// Persistent file-based logger for debugging CarPlay and player issues.
 /// Logs are written to the app's documents directory and can be exported via the share sheet.
-final class DebugLogger: @unchecked Sendable {
-    static let shared = DebugLogger()
+public final class DebugLogger: @unchecked Sendable {
+    public static let shared = DebugLogger()
 
     /// Controls whether log messages are written. Toggled via Settings.
-    var isEnabled: Bool {
+    public var isEnabled: Bool {
         get { queue.sync { _isEnabled } }
         set { queue.sync { _isEnabled = newValue } }
     }
@@ -21,7 +21,7 @@ final class DebugLogger: @unchecked Sendable {
         return f
     }()
 
-    var logFileURL: URL {
+    public var logFileURL: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         return docs.appendingPathComponent("adagiostream-debug.log")
     }
@@ -31,15 +31,22 @@ final class DebugLogger: @unchecked Sendable {
         return docs.appendingPathComponent("adagiostream-debug-prev.log")
     }
 
+    /// Kept open for the process lifetime; reopened only after rotation or a
+    /// write failure (e.g. the file was deleted out from under us).
+    private var openHandle: FileHandle?
+    /// Bytes written via `openHandle` since it was (re)opened, so `rotateIfNeeded`
+    /// doesn't need to `stat` the file on every call.
+    private var bytesWrittenSinceOpen: UInt64 = 0
+
     private init() {}
 
     // MARK: - Public API
 
-    func log(_ message: @autoclosure () -> String, category: Category = .general, file: String = #fileID, line: Int = #line) {
+    public func log(_ message: @autoclosure () -> String, category: Category = .general, file: String = #fileID, line: Int = #line) {
         guard isEnabled else { return }
         let timestamp = dateFormatter.string(from: Date())
         let fileName = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
-        let redacted = Self.redactXtreamCodesCredentials(message())
+        let redacted = Self.redactCredentials(message())
         let entry = "[\(timestamp)] [\(category.rawValue)] [\(fileName):\(line)] \(redacted)\n"
 
         queue.async { [self] in
@@ -48,7 +55,19 @@ final class DebugLogger: @unchecked Sendable {
         }
     }
 
-    func logFileSize() -> String {
+    /// Synchronous append for fatal events (uncaught exceptions). Blocks until
+    /// the line is on disk so it survives the imminent termination, and ignores
+    /// the isEnabled gate — a crash is always worth recording (bd a14).
+    public func logCritical(_ message: String) {
+        let timestamp = dateFormatter.string(from: Date())
+        let entry = "[\(timestamp)] [FATAL] \(message)\n"
+        queue.sync { [self] in
+            rotateIfNeeded()
+            appendToFile(entry)
+        }
+    }
+
+    public func logFileSize() -> String {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
               let size = attrs[.size] as? UInt64 else { return "0 KB" }
         if size < 1024 { return "\(size) B" }
@@ -56,8 +75,11 @@ final class DebugLogger: @unchecked Sendable {
         return String(format: "%.1f MB", Double(size) / (1024 * 1024))
     }
 
-    func clearLogs() {
+    public func clearLogs() {
         queue.async { [self] in
+            try? openHandle?.close()
+            openHandle = nil
+            bytesWrittenSinceOpen = 0
             try? FileManager.default.removeItem(at: logFileURL)
             try? FileManager.default.removeItem(at: previousLogFileURL)
         }
@@ -65,7 +87,7 @@ final class DebugLogger: @unchecked Sendable {
 
     // MARK: - Categories
 
-    enum Category: String {
+    public enum Category: String {
         case general = "GENERAL"
         case player = "PLAYER"
         case audioSession = "AUDIO"
@@ -79,14 +101,23 @@ final class DebugLogger: @unchecked Sendable {
         case sxm = "SXM"
         case imageCache = "IMGCACHE"
         case espn = "ESPN"
+        case providers = "PROVIDERS"
     }
 
     // MARK: - Redaction
 
-    /// Redacts Xtream Codes credentials from log messages.
-    /// Handles stream URLs (`/live/user/pass/id.ext`) and API URLs (`?username=...&password=...`).
-    static func redactXtreamCodesCredentials(_ message: String) -> String {
+    /// Redacts provider credentials from log messages.
+    /// Handles Xtream Codes stream URLs (`/live/user/pass/id.ext`), API URLs
+    /// (`?username=...&password=...`), and Subsonic query params (`u=`, `t=`,
+    /// `s=`, `p=`).
+    public static func redactCredentials(_ message: String) -> String {
         var result = message
+        // URL userinfo: https://user:pass@host → https://***@host
+        result = result.replacingOccurrences(
+            of: #"(https?://)[^/@\s]+@"#,
+            with: "$1***@",
+            options: .regularExpression
+        )
         // Stream URLs: https://host:port/live/user/pass/id.ext → https://***/live/***/***/id.ext
         result = result.replacingOccurrences(
             of: #"(https?://)([^/\s]+)(/live/)([^/]+)/([^/]+)/"#,
@@ -110,12 +141,67 @@ final class DebugLogger: @unchecked Sendable {
             with: "password=***",
             options: .regularExpression
         )
+        // Subsonic query params: u= (username), t= (token), s= (salt), p= (legacy password)
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])u=[^&\s]+"#,
+            with: "u=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])t=[^&\s]+"#,
+            with: "t=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])s=[^&\s]+"#,
+            with: "s=***",
+            options: .regularExpression
+        )
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])p=[^&\s]+"#,
+            with: "p=***",
+            options: .regularExpression
+        )
+        // Audiobookshelf query param: token= (JWT access token on stream/cover URLs)
+        result = result.replacingOccurrences(
+            of: #"(?<=[?&])token=[^&\s]+"#,
+            with: "token=***",
+            options: .regularExpression
+        )
         return result
+    }
+
+    /// Deprecated alias for `redactCredentials(_:)`. Kept for backward
+    /// compatibility; new callers should use `redactCredentials`.
+    @available(*, deprecated, renamed: "redactCredentials")
+    public static func redactXtreamCodesCredentials(_ message: String) -> String {
+        redactCredentials(message)
     }
 
     // MARK: - Private
 
     private func appendToFile(_ entry: String) {
+        guard let data = entry.data(using: .utf8) else { return }
+        if openHandle == nil {
+            openHandle = openHandleForAppending()
+        }
+        guard let handle = openHandle else { return }
+        do {
+            try handle.write(contentsOf: data)
+            bytesWrittenSinceOpen += UInt64(data.count)
+        } catch {
+            // File likely deleted/moved out from under us (e.g. clearLogs from
+            // another process, or manual deletion) — reopen once and retry.
+            try? handle.close()
+            openHandle = openHandleForAppending()
+            try? openHandle?.write(contentsOf: data)
+            bytesWrittenSinceOpen += UInt64(data.count)
+        }
+    }
+
+    /// Creates the log file with header/backup-exclusion if needed, then opens
+    /// it for appending at end-of-file.
+    private func openHandleForAppending() -> FileHandle? {
         let url = logFileURL
         if !FileManager.default.fileExists(atPath: url.path) {
             FileManager.default.createFile(atPath: url.path, contents: nil)
@@ -130,17 +216,17 @@ final class DebugLogger: @unchecked Sendable {
             let header = "=== AdagioStream Debug Log === v\(version) (build \(build))\n\n"
             try? header.write(to: url, atomically: false, encoding: .utf8)
         }
-        guard let handle = try? FileHandle(forWritingTo: url) else { return }
-        defer { try? handle.close() }
-        handle.seekToEndOfFile()
-        if let data = entry.data(using: .utf8) {
-            handle.write(data)
-        }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return nil }
+        bytesWrittenSinceOpen = handle.seekToEndOfFile()
+        return handle
     }
 
     private func rotateIfNeeded() {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
-              let size = attrs[.size] as? UInt64, size > maxFileSize else { return }
+        guard bytesWrittenSinceOpen > maxFileSize else { return }
+
+        try? openHandle?.close()
+        openHandle = nil
+        bytesWrittenSinceOpen = 0
 
         // Keep one previous log for context
         try? FileManager.default.removeItem(at: previousLogFileURL)

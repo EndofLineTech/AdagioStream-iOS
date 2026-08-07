@@ -2,14 +2,14 @@ import Foundation
 import SwiftUI
 
 @MainActor
-final class FavoritesViewModel: ObservableObject {
-    let providerManager: ProviderManager
+public final class FavoritesViewModel: ObservableObject {
+    public let providerManager: ProviderManager
 
-    init(providerManager: ProviderManager) {
+    public init(providerManager: ProviderManager) {
         self.providerManager = providerManager
     }
 
-    var favorites: [Channel] {
+    public var favorites: [Channel] {
         providerManager.favoriteChannels
     }
 }

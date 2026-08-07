@@ -58,9 +58,11 @@ struct SharedURLSheet: View {
                                 if selectedPlaylistID == playlist.id {
                                     Image(systemName: "checkmark")
                                         .foregroundStyle(.accent)
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
+                        .accessibilityAddTraits(selectedPlaylistID == playlist.id ? .isSelected : [])
                     }
 
                     Button {
@@ -84,9 +86,11 @@ struct SharedURLSheet: View {
                                     if selectedGroupID == group.id {
                                         Image(systemName: "checkmark")
                                             .foregroundStyle(.accent)
+                                            .accessibilityHidden(true)
                                     }
                                 }
                             }
+                            .accessibilityAddTraits(selectedGroupID == group.id ? .isSelected : [])
                         }
 
                         Button {

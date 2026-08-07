@@ -9,6 +9,7 @@ struct AdvancedSettingsView: View {
     @State private var showExportSheet = false
     @State private var exportFileURL: URL?
     @State private var isExporting = false
+    @State private var showClearImageCacheAlert = false
     @State private var showDeleteWarning = false
     @State private var showDeleteConfirmation = false
     @State private var logSize = DebugLogger.shared.logFileSize()
@@ -74,6 +75,16 @@ struct AdvancedSettingsView: View {
 
             Section {
                 Button(role: .destructive) {
+                    showClearImageCacheAlert = true
+                } label: {
+                    Label("Clear Image Cache", systemImage: "photo.on.rectangle.angled")
+                }
+            } footer: {
+                Text("Fixes outdated channel logos and artwork by clearing cached images. Your accounts, favorites, and settings are not affected.")
+            }
+
+            Section {
+                Button(role: .destructive) {
                     showDeleteWarning = true
                 } label: {
                     Label("Delete All My Data", systemImage: "trash")
@@ -104,6 +115,14 @@ struct AdvancedSettingsView: View {
         } content: {
             ShareSheet(activityItems: [DebugLogger.shared.logFileURL])
                 .presentationDetents([.medium, .large])
+        }
+        .alert("Clear Image Cache?", isPresented: $showClearImageCacheAlert) {
+            Button("Clear", role: .destructive) {
+                Task { await ImageCacheService.shared.clearAll() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes all cached channel logos and artwork. They will be re-downloaded as needed.")
         }
         .alert("Delete All Data?", isPresented: $showDeleteWarning) {
             Button("Continue", role: .destructive) {

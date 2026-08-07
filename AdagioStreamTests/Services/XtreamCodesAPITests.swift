@@ -94,4 +94,86 @@ final class XtreamCodesAPITests: XCTestCase {
 
         XCTAssertEqual(channels[0].name, "Unknown")
     }
+
+    // MARK: - Network retry (beads_mobilemusic-t96.5)
+    //
+    // Uses the same `MockURLProtocolHandler` harness as `NavidromeAPITests`.
+
+    private func makeNetworkAPI(session: URLSession) -> XtreamCodesAPI {
+        XtreamCodesAPI(
+            host: URL(string: "http://example.com")!,
+            username: "user1",
+            password: "pass1",
+            session: session,
+            retryDelay: .zero
+        )
+    }
+
+    override func setUp() {
+        super.setUp()
+        MockURLProtocolHandler.reset()
+    }
+
+    override func tearDown() {
+        MockURLProtocolHandler.reset()
+        super.tearDown()
+    }
+
+    func testHTTP500RetriesOnceThenThrowsServerError() async {
+        let session = MockURLProtocolHandler.makeSession()
+        let api = makeNetworkAPI(session: session)
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: "{}", statusCode: 500),
+            .init(json: "{}", statusCode: 500),
+        ]
+
+        do {
+            _ = try await api.authenticate()
+            XCTFail("Expected .serverError but authenticate() returned normally")
+        } catch XtreamCodesAPI.APIError.serverError(let code) {
+            XCTAssertEqual(code, 500)
+            XCTAssertEqual(MockURLProtocolHandler.capturedRequests.count, 2,
+                           "Expected exactly 2 requests (original + 1 retry)")
+        } catch {
+            XCTFail("Expected .serverError(500) but got: \(error)")
+        }
+    }
+
+    func testHTTP500ThenSucceeds() async throws {
+        let session = MockURLProtocolHandler.makeSession()
+        let api = makeNetworkAPI(session: session)
+        let authOK = """
+            {"user_info":{"username":"user1","status":"Active","auth":1,"allowed_output_formats":["ts"]}}
+            """
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: "{}", statusCode: 500),
+            .init(json: authOK, statusCode: 200),
+        ]
+
+        let response = try await api.authenticate()
+
+        XCTAssertEqual(response.userInfo?.status, "Active")
+        XCTAssertEqual(MockURLProtocolHandler.capturedRequests.count, 2,
+                       "Expected original request + 1 retry")
+    }
+
+    func testAuthenticationFailedWhenNotActive() async {
+        let session = MockURLProtocolHandler.makeSession()
+        let api = makeNetworkAPI(session: session)
+        let authFailed = """
+            {"user_info":{"username":"user1","status":"Disabled","auth":0}}
+            """
+        MockURLProtocolHandler.responseQueue = [
+            .init(json: authFailed, statusCode: 200),
+        ]
+
+        do {
+            _ = try await api.authenticate()
+            XCTFail("Expected .authenticationFailed but authenticate() returned normally")
+        } catch XtreamCodesAPI.APIError.authenticationFailed {
+            // Expected
+        } catch {
+            XCTFail("Expected .authenticationFailed but got: \(error)")
+        }
+    }
 }

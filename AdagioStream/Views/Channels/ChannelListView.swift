@@ -7,6 +7,11 @@ struct ChannelListView: View {
     @ObservedObject var espnService = ESPNScoreService.shared
     @State private var searchText = ""
     @State private var channelToAdd: Channel?
+    @State private var epgChannel: Channel?
+
+    /// Sentinel expand-key for the Favorites section; the leading NUL can't
+    /// appear in an M3U group-title, so a real group named "Favorites" can't collide.
+    private static let favoritesKey = "\u{0}favorites"
 
     var body: some View {
         NavigationStack {
@@ -63,8 +68,31 @@ struct ChannelListView: View {
                     channelList
                 }
             }
-            .navigationTitle("Channels")
+            .navigationTitle("Live")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            withAnimation {
+                                providerManager.expandedGroups.formUnion(groups.map(\.name) + [Self.favoritesKey])
+                            }
+                        } label: {
+                            Label("Expand All", systemImage: "chevron.down")
+                        }
+                        Button {
+                            withAnimation {
+                                providerManager.expandedGroups.removeAll()
+                            }
+                        } label: {
+                            Label("Collapse All", systemImage: "chevron.right")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .accessibilityLabel("Group options")
+                }
+            }
             .searchable(text: $searchText, prompt: "Search channels")
             .refreshable {
                 await providerManager.loadChannels()
@@ -78,11 +106,51 @@ struct ChannelListView: View {
                 AddToPlaylistSheet(channel: channel)
                     .presentationDetents([.medium])
             }
+            .sheet(item: $epgChannel) { channel in
+                NavigationStack {
+                    EPGView(channelID: channel.epgChannelID ?? channel.id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") { epgChannel = nil }
+                            }
+                        }
+                }
+            }
         }
     }
 
     private var channelList: some View {
         List {
+            if !providerManager.favoriteChannels.isEmpty && searchText.isEmpty {
+                Section {
+                    if isExpanded(Self.favoritesKey) {
+                        ForEach(providerManager.favoriteChannels) { channel in
+                            ChannelRowView(
+                                channel: channel,
+                                nowPlayingTrack: sxmService.feedTracks[channel.id],
+                                espnGame: espnService.gamesByChannel[channel.id]
+                            ) {
+                                audioPlayer.channels = providerManager.favoriteChannels
+                                audioPlayer.play(channel: channel)
+                            } onToggleFavorite: {
+                                Task { await providerManager.toggleFavorite(channel) }
+                            } onAddToPlaylist: {
+                                channelToAdd = channel
+                            } onShowEPG: {
+                                epgChannel = channel
+                            }
+                        }
+                    }
+                } header: {
+                    sectionHeader(
+                        title: "Favorites",
+                        key: Self.favoritesKey,
+                        count: providerManager.favoriteChannels.count,
+                        showStar: false
+                    )
+                }
+            }
+
             if let error = providerManager.error {
                 Section {
                     HStack(spacing: 8) {
@@ -97,13 +165,16 @@ struct ChannelListView: View {
                         .font(.caption)
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
+                        // uxd.2: .mini keeps the chip visually compact; the frame
+                        // enlarges the tappable region to the 44pt minimum.
+                        .frame(minWidth: 44, minHeight: 44)
                     }
                 }
             }
 
             ForEach(groups) { group in
                 Section {
-                    if !providerManager.collapsedGroups.contains(group.name) {
+                    if isExpanded(group.name) {
                         ForEach(group.channels) { channel in
                             ChannelRowView(
                                 channel: channel,
@@ -117,40 +188,18 @@ struct ChannelListView: View {
                                 Task { await providerManager.toggleFavorite(channel) }
                             } onAddToPlaylist: {
                                 channelToAdd = channel
+                            } onShowEPG: {
+                                epgChannel = channel
                             }
                         }
                     }
                 } header: {
-                    Button {
-                        withAnimation {
-                            if providerManager.collapsedGroups.contains(group.name) {
-                                providerManager.collapsedGroups.remove(group.name)
-                            } else {
-                                providerManager.collapsedGroups.insert(group.name)
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            if group.isFavorite {
-                                Image(systemName: "star.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(.yellow)
-                            }
-                            Text(group.name)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .textCase(.none)
-                            Spacer()
-                            Text("\(group.count)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Image(systemName: providerManager.collapsedGroups.contains(group.name) ? "chevron.right" : "chevron.down")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                    sectionHeader(
+                        title: group.name,
+                        key: group.name,
+                        count: group.count,
+                        showStar: group.isFavorite
+                    )
                     .contextMenu {
                         Button {
                             Task { await providerManager.toggleGroupFavorite(group.name) }
@@ -170,6 +219,52 @@ struct ChannelListView: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    /// While searching, all sections act expanded so matches stay visible.
+    private func isExpanded(_ key: String) -> Bool {
+        !searchText.isEmpty || providerManager.expandedGroups.contains(key)
+    }
+
+    private func sectionHeader(title: String, key: String, count: Int, showStar: Bool) -> some View {
+        Button {
+            withAnimation {
+                if providerManager.expandedGroups.contains(key) {
+                    providerManager.expandedGroups.remove(key)
+                } else {
+                    providerManager.expandedGroups.insert(key)
+                }
+            }
+        } label: {
+            HStack {
+                if showStar {
+                    Image(systemName: "star.fill")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
+                }
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .textCase(.none)
+                Spacer()
+                Text("\(count)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Image(systemName: isExpanded(key) ? "chevron.down" : "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // While searching, all sections render expanded, so toggling would have no visible effect.
+        .disabled(!searchText.isEmpty)
+        .accessibilityLabel(title)
+        .accessibilityValue(isExpanded(key) ? "Expanded" : "Collapsed")
+        .accessibilityHint(searchText.isEmpty ? "Double tap to \(isExpanded(key) ? "collapse" : "expand")" : "")
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func currentEPG(for channel: Channel) -> EPGEntry? {

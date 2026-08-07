@@ -1,15 +1,40 @@
 import CarPlay
 import Combine
 import Foundation
+import MediaPlayer
 import UIKit
 
 @MainActor
-class CarPlayTemplateManager {
+class CarPlayTemplateManager: NSObject {
     let interfaceController: CPInterfaceController
     let audioPlayer: AudioPlayerService
     let providerManager: ProviderManager
+    // beads_mobilemusic-zgi: owns the Navidrome music-browse push-navigation
+    // stack (Artists/Albums/Songs/Playlists lists, drill-down, cover art, Up
+    // Next). Same lifecycle as this manager — created here, released when
+    // CarPlaySceneDelegate drops templateManager on disconnect. Registered
+    // directly as the CPNowPlayingTemplateObserver for the Up Next button
+    // (see configure()) since nowPlayingTemplateUpNextButtonTapped(_:) moved
+    // with it.
+    // `lazy` (not `let`): its dependency closures capture `self`, and Swift
+    // requires every `let` stored property introduced by this class to be
+    // set before `super.init()` runs — not just before init() returns —
+    // which is too early to reference self. `lazy` defers construction to
+    // first access (in practice, `configure()`'s
+    // `CPNowPlayingTemplate.shared.add(musicBrowser)` below), which is still
+    // effectively "per CarPlay connection" since configure() runs once right
+    // after this initializer.
+    private(set) lazy var musicBrowser: CarPlayMusicBrowser = {
+        CarPlayMusicBrowser(
+            interfaceController: interfaceController,
+            audioPlayer: audioPlayer,
+            providerManager: providerManager,
+            pushNowPlaying: { [weak self] in self?.pushNowPlaying() },
+            sortPrefixesProvider: { [weak self] in self?.sortPrefixes ?? AppSettings.default.sortPrefixes }
+        )
+    }()
     let customPlaylistManager = CustomPlaylistManager.shared
-    private let log = DebugLogger.shared
+    let log = DebugLogger.shared
     let savedSongsManager = SavedSongsManager.shared
     private var cancellable: AnyCancellable?
     private var playlistCancellable: AnyCancellable?
@@ -19,6 +44,12 @@ class CarPlayTemplateManager {
     private var feedTracksCancellable: AnyCancellable?
     private var espnCancellable: AnyCancellable?
     private var epgCancellable: AnyCancellable?
+    private var shuffleCancellable: AnyCancellable?
+    private var repeatCancellable: AnyCancellable?
+    private var playbackSourceCancellable: AnyCancellable?
+    private var isLoadingCancellable: AnyCancellable?
+    private var hydrationCancellable: AnyCancellable?
+    private var groupSortCancellables = Set<AnyCancellable>()
     private var rootTemplate: CPListTemplate?
     private var favoritesItem: CPListItem?
     private var hadFavorites = false
@@ -28,22 +59,50 @@ class CarPlayTemplateManager {
     private var sortPrefixes: [String] = AppSettings.default.sortPrefixes
     private var startupStreamID: String?
     private var hasAttemptedStartupStream = false
+    /// Reentrancy guard: a rapid double-tap on the Music setup hint row would
+    /// call presentTemplate a second time while the alert is already up.
+    private var isPresentingMusicSetupHintAlert = false
+    // beads_mobilemusic-cpr: CarPlay-reconnect resume. Mirrors the
+    // startupStreamID/hasAttemptedStartupStream shape above exactly — same
+    // settings-load Task, same one-shot-on-first-non-empty-snapshot gate,
+    // same silent-no-op-if-never-found behavior. See
+    // `attemptCarPlayReconnectResume()` for why this reuses that shape
+    // instead of inventing a new bounded-wait mechanism.
+    private var carPlayReconnectResume: CarPlayReconnectResume = .off
+    private var carPlayReconnectSpecificChannel: CarPlayResumeChannel?
+    private var hasAttemptedCarPlayReconnectResume = false
+    private var providerRecoveryAttempts = 0
+    private let maxProviderRecoveryAttempts = 2
+    /// Separate counter for the "providers list still empty" reschedule path
+    /// so a slow keychain/disk read doesn't burn through the load-retry budget
+    /// before we've even seen the provider list materialize.
+    private var emptyProviderListChecks = 0
+    private let maxEmptyProviderListChecks = 1
 
     init(interfaceController: CPInterfaceController, audioPlayer: AudioPlayerService, providerManager: ProviderManager) {
         self.interfaceController = interfaceController
         self.audioPlayer = audioPlayer
         self.providerManager = providerManager
+        super.init()
     }
 
     func configure() {
         log.log("configure() starting", category: .carplay)
+        // j7d.3: register musicBrowser as the CPNowPlayingTemplateObserver so the
+        // up-next button tap is delivered via its
+        // nowPlayingTemplateUpNextButtonTapped(_:) (beads_mobilemusic-zgi: moved
+        // there along with the rest of the music-browse push stack).
+        // Only one observer can be active at a time; adding again is a no-op.
+        CPNowPlayingTemplate.shared.add(musicBrowser)
         Task {
             let settings: AppSettings = await PersistenceService.shared.loadOrDefault(
                 from: Constants.StorageKeys.settings, default: .default
             )
             sortPrefixes = settings.sortPrefixes
             startupStreamID = settings.startupStreamID
-            log.log("Settings loaded: startupStream=\(settings.startupStreamID ?? "none")", category: .carplay)
+            carPlayReconnectResume = settings.carPlayReconnectResume
+            carPlayReconnectSpecificChannel = settings.carPlayReconnectSpecificChannel
+            log.log("Settings loaded: startupStream=\(settings.startupStreamID ?? "none"), carPlayReconnectResume=\(settings.carPlayReconnectResume.rawValue)", category: .carplay)
         }
         updateNowPlayingButtons()
         setRootTemplate()
@@ -63,8 +122,33 @@ class CarPlayTemplateManager {
                     item.setDetailText("\(count) channels")
                 }
                 self.updateNowPlayingButtons()
+                // Precedence: startup wins. attemptStartupStream() sets
+                // hasAttemptedStartupStream and — if it finds a target —
+                // audioPlayer.currentChannel, which makes
+                // attemptCarPlayReconnectResume()'s somethingAlreadyPlaying
+                // gate skip right after. Both are one-shot per connection,
+                // so at most one of the two ever actually plays something.
                 self.attemptStartupStream()
+                self.attemptCarPlayReconnectResume()
             }
+
+        providerManager.$groupSortOrder
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+            .store(in: &groupSortCancellables)
+
+        providerManager.$carPlaySourceOrder
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+            .store(in: &groupSortCancellables)
 
         channelCancellable = audioPlayer.$currentChannel
             .receive(on: DispatchQueue.main)
@@ -79,6 +163,53 @@ class CarPlayTemplateManager {
             }
 
         trackCancellable = SXMMetadataService.shared.$currentTrack
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
+
+        // 8rg.2: observe playbackSource so the button set switches between
+        // library (shuffle/repeat) and radio (favorite/heart/live) when the
+        // source type changes.  currentChannel fires for radio→nil transitions
+        // but not for nil→library; this covers that gap.
+        playbackSourceCancellable = audioPlayer.$playbackSource
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
+
+        // uxa.2: the $channels sink above only calls updateRootSections() when
+        // hasChannels/hasFavorites flips — a load that stays at zero channels
+        // (unconfigured → loading → failed) never flips either, so the root
+        // placeholder would get stuck on "Loading…" forever. Observe isLoading
+        // directly so the placeholder always reaches its terminal state.
+        isLoadingCancellable = providerManager.$isLoading
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+
+        // uxa kickback (finding 4): re-evaluate once provider hydration
+        // completes so a root list built during the pre-hydration window
+        // (providersEmpty forced false, see rootPlaceholderState call site)
+        // refreshes to the real state instead of sitting on "Loading…".
+        hydrationCancellable = providerManager.$didHydrateProviders
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateRootSections()
+            }
+
+        // 8rg.2: observe shuffle + repeat so the CarPlay now-playing buttons
+        // stay in sync with the player state for library playback.
+        shuffleCancellable = audioPlayer.$shuffleEnabled
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateNowPlayingButtons()
+            }
+
+        repeatCancellable = audioPlayer.$repeatMode
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateNowPlayingButtons()
@@ -107,6 +238,76 @@ class CarPlayTemplateManager {
             .sink { [weak self] _ in
                 self?.updateRootSections()
             }
+
+        scheduleProviderRecoveryCheck(after: 15)
+    }
+
+    /// Detect cold-launch provider load failures (XC's three sequential
+    /// network calls are most prone to this). After a short delay, if any
+    /// enabled provider has zero channels in `channelCountByProvider`,
+    /// trigger another `loadChannels()` attempt. Bounded to
+    /// `maxProviderRecoveryAttempts` so a genuinely-broken provider
+    /// doesn't loop forever.
+    private func scheduleProviderRecoveryCheck(after delay: TimeInterval) {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self else { return }
+
+            let allProviders = self.providerManager.providers
+            let enabled = allProviders.filter(\.isEnabled)
+
+            // Distinguish "no providers in memory yet" from "all loaded, all
+            // happy".  Before pid.3, both states took the early-success
+            // branch — an empty `enabled` produces an empty `missing`,
+            // which means "no missing" — and we silently declared success
+            // while a slow keychain/disk read was still hydrating the
+            // provider list.  Reschedule once at +30s so the recovery
+            // doesn't fire its 'no retry needed' log against a list that
+            // hasn't materialized.
+            if allProviders.isEmpty {
+                if self.emptyProviderListChecks < self.maxEmptyProviderListChecks {
+                    self.emptyProviderListChecks += 1
+                    log.log(
+                        "Provider recovery: provider list still empty (check \(self.emptyProviderListChecks)/\(self.maxEmptyProviderListChecks)) — rescheduling at +30s",
+                        category: .carplay
+                    )
+                    self.scheduleProviderRecoveryCheck(after: 30)
+                } else {
+                    log.log(
+                        "Provider recovery: provider list still empty after \(self.emptyProviderListChecks) checks — giving up (no persisted providers?)",
+                        category: .carplay
+                    )
+                }
+                return
+            }
+
+            let counts = self.providerManager.channelCountByProvider
+            let missing = enabled.filter { (counts[$0.id] ?? 0) == 0 }
+            guard !missing.isEmpty else {
+                log.log(
+                    "Provider recovery: all \(enabled.count) enabled providers loaded — no retry needed",
+                    category: .carplay
+                )
+                return
+            }
+
+            guard self.providerRecoveryAttempts < self.maxProviderRecoveryAttempts else {
+                log.log(
+                    "Provider recovery: \(missing.count) provider(s) still empty after \(self.providerRecoveryAttempts) attempts — giving up",
+                    category: .carplay
+                )
+                return
+            }
+
+            self.providerRecoveryAttempts += 1
+            let names = missing.map(\.name).joined(separator: ", ")
+            log.log(
+                "Provider recovery (attempt \(self.providerRecoveryAttempts)/\(self.maxProviderRecoveryAttempts)): \(missing.count) empty — [\(names)] — refreshing",
+                category: .carplay
+            )
+            await self.providerManager.loadChannels()
+            self.scheduleProviderRecoveryCheck(after: 30)
+        }
     }
 
     private func attemptStartupStream() {
@@ -131,13 +332,361 @@ class CarPlayTemplateManager {
         }
     }
 
+    // MARK: - CarPlay-reconnect resume (beads_mobilemusic-cpr)
+    //
+    // Reconnect signal: this runs from the SAME `$channels` sink that drives
+    // `attemptStartupStream()` above, which fires once per CarPlay scene
+    // connection because `configure()` (which subscribes it) is only ever
+    // called from `CarPlaySceneDelegate.didConnect`. Deliberately NOT hooked
+    // to `AVAudioSession.routeChangeNotification` (`.newDeviceAvailable`):
+    // that notification fires for ANY new audio route (AirPods, a Bluetooth
+    // speaker, etc.), is not CarPlay-specific, and
+    // `AudioPlayerService+Interruption.handleRouteChange` is documented as
+    // deliberately resume-free — a standing product decision this feature
+    // must not disturb when the setting is off (the default).
+
+    /// Gated ENTIRELY behind `carPlayReconnectResume` (default `.off`), so
+    /// with the setting off this is a same-line no-op every time — the
+    /// pre-existing "CarPlay reconnect does not auto-resume" behavior is
+    /// unchanged unless the user opts in.
+    ///
+    /// One-shot: `hasAttemptedCarPlayReconnectResume` is set the first time
+    /// this proceeds past the loading gate below (found or not), so a later
+    /// channel-list reload in the same connection can't fire a second
+    /// attempt. It is deliberately left `false` while `carPlayReconnectResume`
+    /// is still its `.off` default from `AppSettings.default` — the settings
+    /// load in `configure()` is async and can complete after the first
+    /// `$channels` publish, so this self-heals into the real value on the
+    /// next publish instead of latching a false negative.
+    ///
+    /// Loading race: like `attemptStartupStream()`, this only proceeds once
+    /// `providerManager.visibleChannels` is non-empty — if the target
+    /// channel isn't in that first non-empty snapshot (or the account never
+    /// loads), it silently never resumes. No error, no retry loop —
+    /// satisfies acceptance criterion 4 by construction.
+    private func attemptCarPlayReconnectResume() {
+        guard carPlayReconnectResume != .off else { return }
+        guard !hasAttemptedCarPlayReconnectResume else { return }
+        guard !providerManager.visibleChannels.isEmpty else { return }
+        hasAttemptedCarPlayReconnectResume = true
+
+        let target = resolveCarPlayResumeTarget()
+        // Block 1 (cpr kickback): a nil currentChannel does NOT mean nothing
+        // is playing — it's also nil for audiobook and library-track
+        // playback (AudioPlayerService+Audiobook.swift, +Queue.swift).
+        // hasActivePlayback covers all three (AudioPlayerService.swift) so a
+        // user listening on the phone speaker who plugs into CarPlay is
+        // never stomped.
+        //
+        // Block 2 (cpr kickback, 46u): gate on AudioOutput's own
+        // `isInterrupted` rather than `interruptionBeganCount !=
+        // interruptionEndedCount`. The counters are never reset and a
+        // dropped `.ended` — documented as common on CarPlay disconnect
+        // (CarPlaySceneDelegate.swift) — would permanently wedge resume for
+        // the process. `isInterrupted` self-heals the same way 46u already
+        // relies on: cleared by `noteInterruptionEnded()` AND by
+        // `clearInterruptionGateForDeliberatePlay()` on every deliberate-play
+        // path, so a stale unmatched `.began` can't latch this gate shut.
+        let outcome = Self.carPlayResumeDecision(
+            preference: carPlayReconnectResume,
+            targetExists: target != nil,
+            somethingAlreadyPlaying: audioPlayer.hasActivePlayback,
+            interruptionInFlight: AudioOutput.shared.isInterrupted,
+            alreadyAttemptedThisConnection: false // this call site IS the one shot; see guard above
+        )
+
+        guard outcome == .play, let target else {
+            log.log(
+                "CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): no-op — targetFound=\(target != nil), somethingPlaying=\(audioPlayer.hasActivePlayback)",
+                category: .carplay
+            )
+            return
+        }
+
+        playCarPlayResumeTarget(target)
+    }
+
+    /// What `resolveCarPlayResumeTarget()` found to resume. Channel
+    /// resolution is synchronous — the channel list is already loaded by the
+    /// time this fires. Audiobook and library-track resolution need a
+    /// network fetch (book/album detail), so those cases carry just the
+    /// id(s) needed to fetch; the fetch happens in
+    /// `playCarPlayResumeTarget(_:)`, AFTER the pure decision gate above has
+    /// already said to proceed.
+    private enum CarPlayResumeTarget {
+        case channel(Channel)
+        case audiobook(id: String)
+        case libraryTrack(id: String, albumId: String)
+        case podcastEpisode(showId: String, episodeId: String)
+    }
+
+    /// Resolves what `carPlayReconnectResume` currently points at, against
+    /// the live (loaded) channel list / persisted last-played reference.
+    /// Returns `nil` when there's no configured target, or the target no
+    /// longer exists — both are silent no-ops to the caller, matching
+    /// acceptance criterion 4.
+    private func resolveCarPlayResumeTarget() -> CarPlayResumeTarget? {
+        switch carPlayReconnectResume {
+        case .off:
+            return nil
+        case .lastPlayed:
+            // Warn (cpr kickback): acceptance criterion 3 says "resumes the
+            // previously playing item" — not just channels. LastPlayedItem
+            // is the typed record written at all three play funnels
+            // (play(channel:), playAudiobook, startLibraryTrack); it
+            // supersedes the old channel-only lastPlayedChannelID key, which
+            // is kept as a fallback below for a user who reconnects before
+            // any new-format write has happened after upgrading.
+            switch LastPlayedItem.load() {
+            case .channel(let id, let providerName):
+                guard let channel = providerManager.visibleChannels.first(where: {
+                    $0.id == id && $0.providerName == providerName
+                }) else { return nil }
+                return .channel(channel)
+            case .audiobook(let id):
+                return .audiobook(id: id)
+            case .libraryTrack(let id, let albumId):
+                return .libraryTrack(id: id, albumId: albumId)
+            case .podcastEpisode(let showId, let episodeId):
+                return .podcastEpisode(showId: showId, episodeId: episodeId)
+            case nil:
+                guard let id = UserDefaults.standard.string(forKey: "lastPlayedChannelID") else { return nil }
+                guard let channel = providerManager.visibleChannels.first(where: { $0.id == id }) else { return nil }
+                return .channel(channel)
+            }
+        case .specific:
+            guard let ref = carPlayReconnectSpecificChannel else { return nil }
+            guard let channel = providerManager.visibleChannels.first(where: {
+                $0.id == ref.channelID && $0.providerName == ref.providerName
+            }) else { return nil }
+            return .channel(channel)
+        }
+    }
+
+    /// Plays a resolved resume target. Channel playback is synchronous and
+    /// mirrors the pre-existing behavior exactly. Audiobook/library-track
+    /// playback needs a network fetch first, so `hasActivePlayback` is
+    /// re-checked right before actually starting playback — the fetch is a
+    /// real time window in which the user could have started something else.
+    private func playCarPlayResumeTarget(_ target: CarPlayResumeTarget) {
+        switch target {
+        case .channel(let channel):
+            log.log("CarPlay reconnect resume (\(carPlayReconnectResume.rawValue)): auto-playing channel \"\(channel.name)\"", category: .carplay)
+            // Route through play(channel:) — the same deliberate-play path a
+            // user tap uses. It clears AudioOutput's interruption gate itself
+            // (see the "Stuck-flag safety" note on AudioOutput.isInterrupted),
+            // exactly like the other automatic-resume call sites in
+            // AudioPlayerService+Interruption.swift and +Reconnect.swift, which
+            // also pass userInitiated: false rather than poking the engine
+            // directly.
+            audioPlayer.channels = providerManager.visibleChannels
+            audioPlayer.play(channel: channel, userInitiated: false)
+            updateRootSections()
+
+        case .audiobook(let id):
+            guard let api = providerManager.audiobookshelfAPI else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Round-2 kickback (BLOCK): a network-only fetch here made
+                // offline resume dead in the exact scenario the feature exists
+                // for (no network at car start, or offlineMode on) — the guard
+                // returned before playAudiobook was ever called, so its own
+                // offline fallback never got a chance to run. Skip the network
+                // fetch entirely when offline mode is on (mirrors playAudiobook's
+                // own top-of-function branch); otherwise attempt it and fall
+                // back to the downloaded record on failure, exactly like
+                // `MusicLibraryView.playOfflineBook`'s minimal reconstruction.
+                let offlineMode = self.audioPlayer.settingsViewModel?.settings.offlineMode ?? false
+                let dto = offlineMode ? nil : try? await api.item(id: id)
+                let book: Audiobook?
+                if let dto {
+                    book = dto.toRecord(libraryIdFallback: "", updatedAt: Int(Date().timeIntervalSince1970))
+                } else if let downloaded = DownloadManager.shared.downloadedBook(itemID: id) {
+                    book = Audiobook(
+                        id: downloaded.id,
+                        libraryItemId: downloaded.id,
+                        libraryId: "",
+                        title: downloaded.title,
+                        author: downloaded.author,
+                        duration: downloaded.duration,
+                        updatedAt: downloaded.updatedAt
+                    )
+                } else {
+                    book = nil
+                }
+                guard let book else { return }
+                guard !self.audioPlayer.hasActivePlayback else { return }
+                self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing audiobook \"\(book.title)\"", category: .carplay)
+                // playAudiobook owns resume-position math (server currentTime /
+                // offline pending / book record) — not reimplemented here.
+                self.audioPlayer.playAudiobook(book, via: api)
+            }
+
+        case .podcastEpisode(let showId, let episodeId):
+            guard let api = providerManager.audiobookshelfAPI else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Same offline-first shape as the .audiobook case above: skip
+                // the network fetch when offline mode is on, otherwise attempt
+                // it and fall back to the downloaded episode record on failure.
+                let offlineMode = self.audioPlayer.settingsViewModel?.settings.offlineMode ?? false
+                let item = offlineMode ? nil : try? await api.item(id: showId)
+                let resolved: (episode: ABSEpisodeDTO, context: PodcastPlaybackContext)?
+                if let item, let episode = item.episodes().first(where: { $0.id == episodeId }) {
+                    let episodes = PodcastPlaybackContext.sortedEpisodes(item.episodes(), order: .newestFirst)
+                    let context = PodcastPlaybackContext(libraryItemId: showId, showTitle: item.showTitle, episodes: episodes, order: .newestFirst)
+                    resolved = (episode, context)
+                } else {
+                    // Offline fallback — reuses the same manifest reconstruction
+                    // MusicLibraryView.playOfflineEpisode uses, not duplicated here.
+                    resolved = DownloadManager.shared.downloadedEpisode(showID: showId, episodeID: episodeId)?.reconstructedEpisode()
+                }
+                guard let (episode, context) = resolved else { return }
+                guard !self.audioPlayer.hasActivePlayback else { return }
+                self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing podcast episode \"\(episode.title ?? episode.id)\"", category: .carplay)
+                self.audioPlayer.playPodcastEpisode(episode, via: api, context: context, startGlobalTime: episode.userMediaProgress?.currentTime)
+            }
+
+        case .libraryTrack(let id, let albumId):
+            guard let api = providerManager.subsonicAPI else { return }
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let (_, tracks) = try? await api.getAlbum(id: albumId),
+                      let track = tracks.first(where: { $0.id == id }) else { return }
+                guard !self.audioPlayer.hasActivePlayback else { return }
+                self.log.log("CarPlay reconnect resume (\(self.carPlayReconnectResume.rawValue)): auto-playing track \"\(track.title)\"", category: .carplay)
+                // Single-track play, not full queue restoration — no clean
+                // way to recover "the rest of the queue" from a persisted id
+                // alone, and play(track:via:) is the existing single-track
+                // entry point (setQueue with a one-track queue) so this is
+                // not a new code path.
+                self.audioPlayer.play(track: track, via: api)
+            }
+        }
+    }
+
+    /// Possible outcomes of `carPlayResumeDecision`. `.play` means the
+    /// resolved target should be handed to
+    /// `audioPlayer.play(channel:userInitiated:)`; everything else is a
+    /// silent no-op.
+    enum CarPlayResumeOutcome: Equatable { case skip, play }
+
+    /// Pure decision for the CarPlay-reconnect resume feature
+    /// (beads_mobilemusic-cpr). Takes every input that varies — preference,
+    /// whether a target resolved, whether something is already playing,
+    /// whether an interruption is in flight, and the one-shot guard — and
+    /// returns whether to play. No CarPlay/AVFoundation/ProviderManager
+    /// types involved, so the full truth table (off/lastPlayed/specific ×
+    /// exists/missing × already-playing × interrupted × one-shot) is
+    /// testable without a live CarPlay connection.
+    nonisolated static func carPlayResumeDecision(
+        preference: CarPlayReconnectResume,
+        targetExists: Bool,
+        somethingAlreadyPlaying: Bool,
+        interruptionInFlight: Bool,
+        alreadyAttemptedThisConnection: Bool
+    ) -> CarPlayResumeOutcome {
+        guard preference != .off else { return .skip }
+        guard !alreadyAttemptedThisConnection else { return .skip }
+        guard !somethingAlreadyPlaying else { return .skip }
+        guard !interruptionInFlight else { return .skip }
+        guard targetExists else { return .skip }
+        return .play
+    }
+
     private func updateNowPlayingButtons() {
         let nowPlaying = CPNowPlayingTemplate.shared
+
+        // 8rg.2: branch on playback source so music vs radio each get the
+        // right now-playing buttons.  The CPNowPlayingTemplate singleton is
+        // shared; we reconfigure it every time the source or relevant state
+        // changes (shuffle, repeat, favorite, heart, time-shift).
+        switch Self.nowPlayingButtonKind(for: audioPlayer.playbackSource) {
+        case .library:
+            updateNowPlayingButtonsForLibrary(nowPlaying)
+        case .radio:
+            updateNowPlayingButtonsForRadio(nowPlaying)
+        case .audiobook:
+            updateNowPlayingButtonsForAudiobook(nowPlaying)
+        }
+    }
+
+    /// Which now-playing button set a `PlaybackSource` maps to (uxa.1).
+    /// Extracted as a pure function so the routing decision itself — the
+    /// root cause of the dead favorite-star button (audiobooks/podcasts
+    /// silently fell into the radio branch with no third case to route to)
+    /// — is unit-testable without a live CarPlay connection.
+    enum NowPlayingButtonKind: Equatable { case library, radio, audiobook }
+
+    nonisolated static func nowPlayingButtonKind(for source: PlaybackSource?) -> NowPlayingButtonKind {
+        switch source {
+        case .library: return .library
+        case .radio, .none: return .radio
+        case .audiobook: return .audiobook
+        }
+    }
+
+    /// Configures the CPNowPlayingTemplate buttons for library (music) playback.
+    ///
+    /// Buttons (in order):
+    ///   1. `CPNowPlayingShuffleButton` — wired to `toggleShuffle()`.
+    ///      `isSelected = shuffleEnabled` so CarPlay renders the highlighted state
+    ///      when shuffle is active.
+    ///   2. `CPNowPlayingRepeatButton`  — wired to `cycleRepeatMode()`.
+    ///      `isSelected = repeatMode != .off` so the button appears highlighted
+    ///      whenever any repeat mode is active.  The cycle order is
+    ///      `.off → .all → .one → .off`; CarPlay does not distinguish `.all`
+    ///      from `.one` visually (it just shows a highlighted repeat icon), which
+    ///      matches the single-button paradigm.
+    ///
+    /// Up Next (j7d.3): `isUpNextButtonEnabled` is set to `true` for library
+    /// playback.  Taps are delivered to this manager via
+    /// `nowPlayingTemplateUpNextButtonTapped(_:)` (CPNowPlayingTemplateObserver),
+    /// which pushes a `CPListTemplate` showing the queue.
+    private func updateNowPlayingButtonsForLibrary(_ nowPlaying: CPNowPlayingTemplate) {
+        let shuffleButton = CPNowPlayingShuffleButton { [weak self] _ in
+            Task { @MainActor in
+                self?.audioPlayer.toggleShuffle()
+                // updateNowPlayingButtons is driven by the $shuffleEnabled
+                // publisher so no explicit call is needed here.
+            }
+        }
+        shuffleButton.isSelected = audioPlayer.shuffleEnabled
+
+        let repeatButton = CPNowPlayingRepeatButton { [weak self] _ in
+            Task { @MainActor in
+                self?.audioPlayer.cycleRepeatMode()
+                // updateNowPlayingButtons is driven by the $repeatMode
+                // publisher so no explicit call is needed here.
+            }
+        }
+        // Highlight whenever any repeat mode is active (.all or .one).
+        repeatButton.isSelected = audioPlayer.repeatMode != .off
+
+        nowPlaying.updateNowPlayingButtons([shuffleButton, repeatButton])
+
+        // j7d.3: enable the Up Next affordance for library playback.
+        nowPlaying.upNextTitle = "Up Next"
+        nowPlaying.isUpNextButtonEnabled = true
+
+        log.log("CarPlay NowPlaying (library): shuffle=\(audioPlayer.shuffleEnabled), repeat=\(audioPlayer.repeatMode)", category: .carplay)
+    }
+
+    /// Configures the CPNowPlayingTemplate buttons for radio playback.
+    ///
+    /// This is the existing behavior, extracted verbatim so radio now-playing
+    /// is never regressed by the library branch above.
+    ///
+    /// j7d.3: Up Next is explicitly disabled for radio — radio has no seekable
+    /// queue, so the affordance does not apply.
+    private func updateNowPlayingButtonsForRadio(_ nowPlaying: CPNowPlayingTemplate) {
+        // j7d.3: disable Up Next for radio (no queue to browse).
+        nowPlaying.isUpNextButtonEnabled = false
         let buttonSize = CGSize(width: 44, height: 44)
 
         let isFavorite = providerManager.channels
             .first(where: { $0.id == audioPlayer.currentChannel?.id })?.isFavorite ?? false
-        let favImage = renderSFSymbol(isFavorite ? "star.fill" : "star", size: buttonSize)
+        let favImage = Self.renderSFSymbol(isFavorite ? "star.fill" : "star", size: buttonSize)
         let favButton = CPNowPlayingImageButton(image: favImage) { [weak self] _ in
             Task { @MainActor in
                 guard let self, let channel = self.audioPlayer.currentChannel else { return }
@@ -150,7 +699,7 @@ class CarPlayTemplateManager {
 
         if let currentTrack = SXMMetadataService.shared.currentTrack {
             let isLoved = savedSongsManager.isSaved(trackID: currentTrack.id)
-            let heartImage = renderSFSymbol(isLoved ? "heart.fill" : "heart", size: buttonSize)
+            let heartImage = Self.renderSFSymbol(isLoved ? "heart.fill" : "heart", size: buttonSize)
             let heartButton = CPNowPlayingImageButton(image: heartImage) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
@@ -162,7 +711,7 @@ class CarPlayTemplateManager {
         }
 
         if audioPlayer.timeShiftBuffer.isTimeShifted {
-            let liveImage = renderSFSymbol("forward.end.fill", size: buttonSize)
+            let liveImage = Self.renderSFSymbol("forward.end.fill", size: buttonSize)
             let liveButton = CPNowPlayingImageButton(image: liveImage) { [weak self] _ in
                 Task { @MainActor in
                     self?.audioPlayer.skipToLive()
@@ -174,7 +723,19 @@ class CarPlayTemplateManager {
         nowPlaying.updateNowPlayingButtons(buttons)
     }
 
-    private func renderSFSymbol(_ name: String, size: CGSize) -> UIImage {
+    /// Configures the CPNowPlayingTemplate buttons for audiobook/podcast
+    /// playback (uxa.1). No favorite-star — there's no channel to favorite,
+    /// and the old radio branch's button silently no-op'd every tap since its
+    /// handler guards on `currentChannel` (nil for books). No Up Next either:
+    /// chapter/episode skip already works via the standard next/prev track
+    /// remote commands (MPRemoteCommandCenter), so no extra CarPlay button is
+    /// needed beyond the built-in play/pause/skip transport.
+    private func updateNowPlayingButtonsForAudiobook(_ nowPlaying: CPNowPlayingTemplate) {
+        nowPlaying.isUpNextButtonEnabled = false
+        nowPlaying.updateNowPlayingButtons([])
+    }
+
+    private static func renderSFSymbol(_ name: String, size: CGSize) -> UIImage {
         let config = UIImage.SymbolConfiguration(pointSize: size.height * 0.8, weight: .medium)
         let symbol = UIImage(systemName: name, withConfiguration: config) ?? UIImage()
         let renderer = UIGraphicsImageRenderer(size: size)
@@ -185,16 +746,22 @@ class CarPlayTemplateManager {
 
     private func buildRootSections() -> [CPListSection] {
         var items: [CPListItem] = []
+        var nowPlayingItem: CPListItem?
 
-        // Now Playing row at top if something is playing
-        if audioPlayer.currentChannel != nil {
-            let nowPlayingItem = CPListItem(text: "Now Playing", detailText: audioPlayer.currentChannel?.name)
-            nowPlayingItem.accessoryType = .disclosureIndicator
-            nowPlayingItem.handler = { [weak self] _, completion in
+        // Now Playing row at top if something is playing. uxa.1: gated on
+        // hasActivePlayback (radio, library, OR audiobook/podcast) instead of
+        // currentChannel — the old gate hid this shortcut for every
+        // audiobook/podcast session (currentChannel is nil for those).
+        if audioPlayer.hasActivePlayback {
+            let detail = audioPlayer.nowPlaying?.displayTitle ?? audioPlayer.currentAudiobook?.title
+            let item = CPListItem(text: "Now Playing", detailText: detail)
+            item.accessoryType = .disclosureIndicator
+            item.handler = { [weak self] _, completion in
                 self?.pushNowPlaying()
                 completion()
             }
-            items.append(nowPlayingItem)
+            items.append(item)
+            nowPlayingItem = item
         }
 
         let favorites = providerManager.favoriteChannels
@@ -212,8 +779,14 @@ class CarPlayTemplateManager {
             favoritesItem = nil
         }
 
-        let groups = Dictionary(grouping: providerManager.visibleChannels, by: \.group)
+        let visibleChannels = providerManager.visibleChannels
+        let groups = Dictionary(grouping: visibleChannels, by: \.group)
         let favOrder = providerManager.favoriteGroupOrder
+        let grpSort = providerManager.groupSortOrder
+        var groupFirstIndex: [String: Int] = [:]
+        for (index, channel) in visibleChannels.enumerated() where groupFirstIndex[channel.group] == nil {
+            groupFirstIndex[channel.group] = index
+        }
         let sortedGroupKeys = groups.keys.sorted { a, b in
             let aFav = favOrder.firstIndex(of: a)
             let bFav = favOrder.firstIndex(of: b)
@@ -221,7 +794,15 @@ class CarPlayTemplateManager {
             case let (.some(ai), .some(bi)): return ai < bi
             case (.some, .none): return true
             case (.none, .some): return false
-            case (.none, .none): return a < b
+            case (.none, .none):
+                switch grpSort {
+                case .providerOrder:
+                    return (groupFirstIndex[a] ?? Int.max) < (groupFirstIndex[b] ?? Int.max)
+                case .natural:
+                    return a.localizedStandardCompare(b) == .orderedAscending
+                case .alphabetical:
+                    return a.localizedCaseInsensitiveCompare(b) == .orderedAscending
+                }
             }
         }
         for group in sortedGroupKeys {
@@ -250,13 +831,113 @@ class CarPlayTemplateManager {
             items.append(item)
         }
 
-        if items.isEmpty {
-            let placeholder = CPListItem(text: "No Channels", detailText: "Add an account on your phone")
-            placeholder.handler = { _, completion in completion() }
-            items.append(placeholder)
+        // ciu.1: Audiobooks category — one root entry gated on an ABS provider,
+        // mirroring the Navidrome-music gating. Pushes the book list on tap.
+        let audiobookItems = providerManager.audiobookshelfAPI != nil ? [makeAudiobooksCategoryItem()] : []
+
+        // hky.1: Podcasts category — same ABS-provider gate as Audiobooks (there's
+        // no synchronous "has a podcast library" signal at root-menu-build time,
+        // same constraint Audiobooks has); an empty/no-podcast-library server just
+        // shows "No podcasts" on tap rather than hiding the category.
+        let podcastItems = providerManager.audiobookshelfAPI != nil ? [makePodcastsCategoryItem()] : []
+
+        // Navidrome music categories (Artists/Albums/Songs/Playlists) — only
+        // when a Subsonic provider is configured. Hoisted to the root (fnv.12)
+        // so the deepest browse path (Artists → albums → tracks → NowPlaying)
+        // stays within CarPlay's 5-template push limit. Each category is a
+        // static item that fetches lazily on tap, so a transient fetch failure
+        // can never hide a category the way the old eager-section build could.
+        //
+        // beads_mobilemusic-iqt: when no Subsonic provider is configured, show
+        // a tappable "Music — Set Up on iPhone" discoverability row instead of
+        // hiding Music entirely — but only when the root otherwise has real
+        // content (channels or ABS sections). If nothing at all is configured,
+        // the uxa.2 placeholder below already prompts setup; showing both
+        // would be two setup prompts for one blank state.
+        let musicItems: [CPListItem]
+        if providerManager.subsonicAPI != nil {
+            musicItems = makeMusicCategoryItems()
+        } else if Self.shouldShowMusicSetupHint(
+            hasChannels: !items.isEmpty,
+            hasAudiobooks: !audiobookItems.isEmpty,
+            hasPodcasts: !podcastItems.isEmpty
+        ) {
+            musicItems = [makeMusicSetupHintItem()]
+        } else {
+            musicItems = []
         }
 
-        return [CPListSection(items: items)]
+        // No secondary source (no Navidrome, no ABS): preserve the historical
+        // single, header-less section so channel-only users see no change.
+        if musicItems.isEmpty && audiobookItems.isEmpty && podcastItems.isEmpty {
+            if items.isEmpty {
+                // uxa.2: distinguish unconfigured / loading / failed instead of
+                // always showing "Add an account on your phone" — that message
+                // was wrong both mid-load (cold-launch race) and after a
+                // configured provider genuinely failed to load.
+                //
+                // uxa kickback (finding 4): providers hydrate asynchronously
+                // from Keychain at launch (see `ProviderManager.didHydrateProviders`).
+                // Before that finishes, `providers` is still its initial empty
+                // array even for a configured account, and providersEmpty wins
+                // over every other state below — so fold "not yet hydrated"
+                // into both providersEmpty (force false — we don't know yet)
+                // and isLoading (force true) rather than letting it read as
+                // unconfigured.
+                let state = Self.rootPlaceholderState(
+                    providersEmpty: providerManager.didHydrateProviders && providerManager.providers.isEmpty,
+                    isLoading: providerManager.isLoading || !providerManager.didHydrateProviders,
+                    // uxf: channelLoadError (not the shared `error` field) so an
+                    // unrelated background write (favorite/group-order save,
+                    // EPG warning) can't make a healthy channel list read as
+                    // failed. It's set/cleared inside the same loadChannels()
+                    // run that flips `isLoading`, so the existing $isLoading
+                    // subscription above already re-evaluates this on change —
+                    // no separate subscription needed.
+                    hasError: providerManager.channelLoadError != nil
+                )
+                let placeholder = CPListItem(text: state.text, detailText: state.detailText)
+                placeholder.handler = { _, completion in completion() }
+                items.append(placeholder)
+            }
+            return [CPListSection(items: items)]
+        }
+
+        // Secondary source present: split into ordered, labeled sections. Now
+        // Playing is pulled out into its own leading section so it stays pinned
+        // at the top regardless of the streaming/music order.
+        var sections: [CPListSection] = []
+        if let firstNowPlaying = nowPlayingItem, items.first === firstNowPlaying {
+            items.removeFirst()
+            sections.append(CPListSection(items: [firstNowPlaying]))
+        }
+
+        let streamingSection = items.isEmpty
+            ? nil
+            : CPListSection(items: items, header: "Channels", sectionIndexTitle: nil)
+        let musicSection = musicItems.isEmpty
+            ? nil
+            : CPListSection(items: musicItems, header: "Music", sectionIndexTitle: nil)
+
+        switch providerManager.carPlaySourceOrder {
+        case .streamingFirst:
+            if let streamingSection { sections.append(streamingSection) }
+            if let musicSection { sections.append(musicSection) }
+        case .navidromeFirst:
+            if let musicSection { sections.append(musicSection) }
+            if let streamingSection { sections.append(streamingSection) }
+        }
+        // Audiobooks always trail the streaming/music ordering (they're not part
+        // of the carPlaySourceOrder toggle, which only covers streaming↔Navidrome).
+        if !audiobookItems.isEmpty {
+            sections.append(CPListSection(items: audiobookItems, header: "Audiobooks", sectionIndexTitle: nil))
+        }
+        // Podcasts trails Audiobooks for the same reason (not part of the
+        // streaming↔Navidrome ordering toggle).
+        if !podcastItems.isEmpty {
+            sections.append(CPListSection(items: podcastItems, header: "Podcasts", sectionIndexTitle: nil))
+        }
+        return sections
     }
 
     private func setRootTemplate() {
@@ -276,24 +957,40 @@ class CarPlayTemplateManager {
         }
     }
 
-    private func pushNowPlaying() {
+    func pushNowPlaying() {
         let nowPlaying = CPNowPlayingTemplate.shared
+        let context = nowPlayingContext()
         if interfaceController.topTemplate is CPNowPlayingTemplate {
-            log.log("pushNowPlaying: already on top, refreshing info", category: .carplay)
+            log.log("pushNowPlaying: already on top, refreshing info — \(context)", category: .carplay)
             audioPlayer.refreshNowPlayingInfo()
             return
         }
         if interfaceController.templates.contains(where: { $0 === nowPlaying }) {
-            log.log("pushNowPlaying: popping back to existing template", category: .carplay)
+            log.log("pushNowPlaying: popping back to existing template — \(context)", category: .carplay)
             interfaceController.pop(to: nowPlaying, animated: true) { [weak self] _, _ in
                 Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
             }
         } else {
-            log.log("pushNowPlaying: pushing new template", category: .carplay)
+            log.log("pushNowPlaying: pushing new template — \(context)", category: .carplay)
             interfaceController.pushTemplate(nowPlaying, animated: true) { [weak self] _, _ in
                 Task { @MainActor in self?.audioPlayer.refreshNowPlayingInfo() }
             }
         }
+    }
+
+    /// Snapshot of MPNowPlayingInfoCenter at the moment a CPNowPlayingTemplate
+    /// push is initiated.  The template itself draws from
+    /// MPNowPlayingInfoCenter.default(), so if the values here are nil at
+    /// push time the user sees a blank Now-Playing surface even though the
+    /// SXM matcher may set them moments later.  Logged to diagnose the
+    /// cold-launch metadata gap (bd 651.1).
+    private func nowPlayingContext() -> String {
+        let channelName = audioPlayer.currentChannel?.name ?? "nil"
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo
+        let title = info?[MPMediaItemPropertyTitle] as? String ?? "nil"
+        let artist = info?[MPMediaItemPropertyArtist] as? String ?? "nil"
+        let hasArtwork = info?[MPMediaItemPropertyArtwork] != nil
+        return "channel=\"\(channelName)\", MPNowPlayingInfo: title=\"\(title)\", artist=\"\(artist)\", hasArtwork=\(hasArtwork)"
     }
 
     private func playChannelAndShowNowPlaying(_ channel: Channel, within channels: [Channel]) {
@@ -302,26 +999,29 @@ class CarPlayTemplateManager {
         audioPlayer.play(channel: channel)
         pushNowPlaying()
 
-        // Re-publish now playing info after a delay to handle CarPlay head units
-        // that don't pick up metadata set before the app becomes "now playing"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-            guard self?.audioPlayer.currentChannel?.id == channel.id else { return }
-            self?.audioPlayer.refreshNowPlayingInfo()
+        // Re-publish now playing info at several delays.  Some CarPlay head
+        // units don't pick up metadata set before the app becomes "now
+        // playing"; the cold-launch path additionally races the audio
+        // session activation against the first MPNowPlayingInfoCenter
+        // write, so a single 1 s refresh can miss the late SXM track
+        // resolve.  Ladder: 1 s catches warm path, 3 s catches the typical
+        // SXM matcher hop, 5 s catches CarPlay head units that don't
+        // observe MPNowPlayingInfoCenter until well after push.  Each
+        // refresh logs a NowPlaying snapshot via updateNowPlayingInfo so
+        // bd 651.1 has visible per-attempt evidence.
+        let refreshDelays: [TimeInterval] = [1.0, 3.0, 5.0]
+        for delay in refreshDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self,
+                      self.audioPlayer.currentChannel?.id == channel.id else { return }
+                self.log.log("CarPlay refresh attempt: t+\(delay)s for \"\(channel.name)\"", category: .carplay)
+                self.audioPlayer.refreshNowPlayingInfo()
+            }
         }
     }
 
     private func trackDetailText(for channel: Channel) -> String? {
-        if let track = SXMMetadataService.shared.feedTracks[channel.id] {
-            return "\(track.artistDisplay) — \(track.title)"
-        }
-        if let game = ESPNScoreService.shared.gamesByChannel[channel.id] {
-            return game.displayText
-        }
-        if let epgID = channel.epgChannelID,
-           let program = providerManager.epgData[epgID]?.first(where: \.isCurrentlyAiring) {
-            return program.title
-        }
-        return nil
+        trackDetailTextByID(channel.id)
     }
 
     private func pushFavorites() {
@@ -352,15 +1052,6 @@ class CarPlayTemplateManager {
             }
             item.setImage(scaled)
         }
-    }
-
-    private func sortableName(_ name: String) -> String {
-        for prefix in sortPrefixes {
-            if name.hasPrefix(prefix) {
-                return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        return name
     }
 
     private func refreshChannelListDetailText() {
@@ -430,9 +1121,27 @@ class CarPlayTemplateManager {
         }
     }
 
-    private func pushChannelList(title: String, channels: [Channel]) {
-        let grouped = Dictionary(grouping: channels) { channel -> String in
-            let first = sortableName(channel.name).prefix(1).uppercased()
+    /// Assigns each name to its CarPlay alphabetic-index bucket ("A".."Z", or
+    /// "#" for anything that doesn't start with a letter after `sortPrefixes`
+    /// stripping) and returns the buckets in section display order — "#"
+    /// first, then A→Z. Indices into the input array (not the items
+    /// themselves) so this stays framework-free and unit-testable without
+    /// constructing any CarPlay types (uxa kickback finding 5).
+    ///
+    /// Diacritics get their own bucket rather than folding into the base
+    /// letter's (e.g. "É" and "E" sort as distinct buckets) — pinned as
+    /// current behavior, not necessarily ideal, by the truth-table tests.
+    nonisolated static func letterIndexBuckets(for names: [String], sortPrefixes: [String]) -> [(letter: String, indices: [Int])] {
+        func sortableName(_ name: String) -> String {
+            for prefix in sortPrefixes {
+                if name.hasPrefix(prefix) {
+                    return String(name.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+                }
+            }
+            return name
+        }
+        let grouped = Dictionary(grouping: Array(names.enumerated())) { entry -> String in
+            let first = sortableName(entry.element).prefix(1).uppercased()
             return first.first?.isLetter == true ? first : "#"
         }
         let sortedKeys = grouped.keys.sorted { a, b in
@@ -440,22 +1149,285 @@ class CarPlayTemplateManager {
             if b == "#" { return false }
             return a < b
         }
+        return sortedKeys.map { letter in (letter, grouped[letter]!.map(\.offset)) }
+    }
 
-        let sections = sortedKeys.map { letter in
-            let items = grouped[letter]!.map { channel in
-                let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel))
-                itemChannelMap[ObjectIdentifier(item)] = channel.id
-                item.handler = { [weak self] _, completion in
-                    self?.playChannelAndShowNowPlaying(channel, within: channels)
-                    completion()
-                }
-                loadChannelIcon(for: channel, into: item)
-                return item
+    /// Groups (name, item) pairs into first-letter CPListSections with a
+    /// `sectionIndexTitle`, so CarPlay shows its alphabetic jump-list index
+    /// instead of one flat unindexed scroll — the distraction failure mode
+    /// the index API exists to prevent on lists with hundreds of rows.
+    /// Shared by `pushChannelList` (channels, here) and CarPlayMusicBrowser's
+    /// Artists/Playlists lists (uxa.4) — same grouping, different item
+    /// source. Promoted from `private` to `internal` and parameterized on
+    /// `sortPrefixes` (beads_mobilemusic-zgi) so CarPlayMusicBrowser can call
+    /// it without duplicating this wrapper: the alternative was either a
+    /// duplicate 4-line wrapper in the new type, or a back-reference from
+    /// CarPlayMusicBrowser to this manager just to read one property. Given
+    /// `letterIndexBuckets` above is already `internal static` for the
+    /// same reason (testability), this is the same small, justified
+    /// promotion, not a new precedent. Thin wrapper around the static,
+    /// testable `letterIndexBuckets(for:sortPrefixes:)`.
+    static func letterIndexedSections(_ pairs: [(name: String, item: CPListItem)], sortPrefixes: [String]) -> [CPListSection] {
+        let buckets = Self.letterIndexBuckets(for: pairs.map(\.name), sortPrefixes: sortPrefixes)
+        return buckets.map { letter, indices in
+            CPListSection(items: indices.map { pairs[$0].item }, header: letter, sectionIndexTitle: letter)
+        }
+    }
+
+    private func pushChannelList(title: String, channels: [Channel]) {
+        let pairs = channels.map { channel -> (name: String, item: CPListItem) in
+            let item = CPListItem(text: channel.name, detailText: trackDetailText(for: channel))
+            itemChannelMap[ObjectIdentifier(item)] = channel.id
+            item.handler = { [weak self] _, completion in
+                self?.playChannelAndShowNowPlaying(channel, within: channels)
+                completion()
             }
-            return CPListSection(items: items, header: letter, sectionIndexTitle: letter)
+            loadChannelIcon(for: channel, into: item)
+            return (channel.name, item)
         }
 
-        let template = CPListTemplate(title: title, sections: sections)
+        let template = CPListTemplate(title: title, sections: Self.letterIndexedSections(pairs, sortPrefixes: sortPrefixes))
         interfaceController.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    // MARK: - Music Library Browse (8rg.1)
+
+    /// Builds the four Navidrome category root items (Artists / Albums / Songs
+    /// / Playlists). Hoisted to the CarPlay root (fnv.12) instead of nesting
+    /// behind a single "Music" entry: removing that intermediate level keeps
+    /// the deepest browse path within CarPlay's 5-template push limit while
+    /// preserving per-track selection.
+    ///
+    /// Depth budgets (NowPlaying is a pushed template):
+    ///   Artists(1) → artist albums(2) → album tracks(3) → NowPlaying(4)
+    ///   Albums(1)  → album tracks(2)  → NowPlaying(3)
+    ///   Songs(1)   → NowPlaying(2)
+    ///   Playlists(1) → playlist tracks(2) → NowPlaying(3)
+    /// Each is counted from the root list (push depth 1) → all ≤ 5.
+    private func makeMusicCategoryItems() -> [CPListItem] {
+        [
+            musicCategoryItem(title: "Artists",   subtitle: "Browse by artist")   { $0.pushArtistsList(api: $1) },
+            musicCategoryItem(title: "Albums",    subtitle: "Browse albums")      { $0.pushAlbumsList(api: $1) },
+            musicCategoryItem(title: "Songs",     subtitle: "Random songs")       { $0.pushSongsList(api: $1) },
+            musicCategoryItem(title: "Playlists", subtitle: "Browse playlists")   { $0.pushPlaylistsList(api: $1) },
+        ]
+    }
+
+    /// Makes one Navidrome category root item. The Subsonic API is resolved at
+    /// tap time (not capture time) so the item survives provider changes, and
+    /// the list it pushes fetches lazily — a transient failure shows an empty
+    /// list rather than hiding the whole category.
+    private func musicCategoryItem(
+        title: String,
+        subtitle: String,
+        action: @escaping (CarPlayMusicBrowser, NavidromeAPI) -> Void
+    ) -> CPListItem {
+        let item = CPListItem(text: title, detailText: subtitle)
+        item.accessoryType = .disclosureIndicator
+        item.setImage(Self.musicNoteImage())
+        item.handler = { [weak self] _, completion in
+            guard let self, let api = self.providerManager.subsonicAPI else { completion(); return }
+            action(self.musicBrowser, api)
+            completion()
+        }
+        return item
+    }
+
+    /// Discoverability row shown in place of the real Music section when no
+    /// Subsonic/Navidrome provider is configured (beads_mobilemusic-iqt).
+    /// CarPlay has no account-setup flow of its own, so tapping presents an
+    /// alert pointing the user back to the phone rather than attempting any
+    /// in-car configuration.
+    private func makeMusicSetupHintItem() -> CPListItem {
+        let item = CPListItem(text: "Music", detailText: "Set Up on iPhone")
+        item.setImage(Self.musicNoteImage())
+        item.handler = { [weak self] _, completion in
+            self?.presentMusicSetupHintAlert()
+            completion()
+        }
+        return item
+    }
+
+    /// Single-button informational alert for the Music setup hint. `titleVariants`
+    /// is `CPAlertTemplate`'s only text field (no separate title/body) — ordered
+    /// longest to shortest so CarPlay can drop down on a smaller screen.
+    private func presentMusicSetupHintAlert() {
+        // Reentrancy guard: bail if the alert is already up rather than
+        // stacking a second presentTemplate call on top of it (CarPlay's
+        // behavior for concurrent presents is undocumented, and modal-stack
+        // errors are a known crash class).
+        guard !isPresentingMusicSetupHintAlert else { return }
+        isPresentingMusicSetupHintAlert = true
+        let ok = CPAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+            self?.isPresentingMusicSetupHintAlert = false
+        }
+        let alert = CPAlertTemplate(
+            titleVariants: [
+                "Add a Navidrome account in AdagioStream on your iPhone to browse music here.",
+                "Set Up Music",
+            ],
+            actions: [ok]
+        )
+        interfaceController.presentTemplate(alert, animated: true) { [weak self] success, _ in
+            // Use the completion variant (not nil) so a failed present can't
+            // wedge the flag with no dismiss action to clear it.
+            if !success {
+                self?.isPresentingMusicSetupHintAlert = false
+            }
+        }
+    }
+
+    // beads_mobilemusic-zgi: makeMusicLoadingTemplate, pushArtistsList,
+    // pushAlbumsList, pushPlaylistsList, pushSongsList, fetchSongItems,
+    // fetchArtistItems, fetchAlbumItems, fetchPlaylistItems, pushArtistAlbums,
+    // pushAlbumTracks, pushPlaylistTracks, and loadMusicCoverArt moved
+    // verbatim to CarPlayMusicBrowser.swift (CarPlay/CarPlayMusicBrowser.swift).
+    // Zero radio-side stored-property references; the only things they used
+    // from this manager were interfaceController/audioPlayer/providerManager
+    // (handed to the new type directly), pushNowPlaying (handed in as a
+    // closure), and the static helpers below (formatDuration, musicNoteImage,
+    // emptyMusicItem, letterIndexedSections — called via
+    // CarPlayTemplateManager.<name>, no injection needed since those are
+    // already/now internal static members).
+
+    /// A small music note SF Symbol used as a placeholder for music library items
+    /// that have no cover art ID. Promoted from `private` to `static` — shared by
+    /// the root-menu Music/hint icons here and CarPlayMusicBrowser's cover-art
+    /// fallback (beads_mobilemusic-zgi). Kept here as the single source rather
+    /// than duplicated in the new type.
+    static func musicNoteImage() -> UIImage {
+        let size = CGSize(width: 40, height: 40)
+        return renderSFSymbol("music.note", size: size)
+    }
+
+    /// A non-tappable placeholder item for empty or failed list states.
+    /// Promoted to `static` (was already internal) — shared by
+    /// CarPlayMusicBrowser and the Audiobooks/Podcasts extensions
+    /// (beads_mobilemusic-zgi). Kept here as the single source rather than
+    /// duplicated in the new type.
+    static func emptyMusicItem(_ text: String) -> CPListItem {
+        let item = CPListItem(text: text, detailText: nil)
+        item.handler = { _, completion in completion() }
+        return item
+    }
+
+    // MARK: Duration Formatting
+
+    /// Formats a track duration in seconds as `m:ss` or `h:mm:ss`.
+    nonisolated static func formatDuration(_ seconds: Int) -> String {
+        seconds.durationString
+    }
+
+    // MARK: - Root Placeholder State (uxa.2)
+
+    /// The three states the CarPlay root's empty-channel-list placeholder can
+    /// be in. Previously all three collapsed into one "No Channels — Add an
+    /// account on your phone" message, even while a provider was still
+    /// loading (cold-launch race, up to ~75s of background retry) or had
+    /// genuinely failed to load.
+    enum RootPlaceholder: Equatable {
+        case unconfigured
+        case loading
+        case failed
+        /// uxa kickback (finding 3): configured + loaded + genuinely zero
+        /// channels (e.g. every group disabled) is NOT a failure — distinct
+        /// copy from both `.unconfigured` and `.failed` so the guidance
+        /// matches reality instead of telling a working setup to "check your
+        /// connection".
+        case empty
+
+        var text: String {
+            switch self {
+            case .unconfigured: return "No Channels"
+            case .loading: return "Loading channels…"
+            case .failed: return "Couldn't load channels"
+            case .empty: return "No Channels Available"
+            }
+        }
+
+        var detailText: String? {
+            switch self {
+            case .unconfigured: return "Add an account on your phone"
+            case .loading: return nil
+            case .failed: return "Check your connection"
+            case .empty: return nil
+            }
+        }
+    }
+
+    /// Pure decision logic for the Music setup-hint row (beads_mobilemusic-iqt).
+    /// Extracted mirroring `rootPlaceholderState` below: the hint should only
+    /// appear when the root has other real content, so it doesn't double up
+    /// with the uxa.2 unconfigured placeholder when nothing is configured at
+    /// all (that placeholder already tells the user to add an account).
+    nonisolated static func shouldShowMusicSetupHint(hasChannels: Bool, hasAudiobooks: Bool, hasPodcasts: Bool) -> Bool {
+        hasChannels || hasAudiobooks || hasPodcasts
+    }
+
+    /// Pure decision logic for which placeholder to show. Extracted as a
+    /// static helper so unit tests can verify the state selection without
+    /// instantiating a live `CarPlayTemplateManager`/`ProviderManager`.
+    ///
+    /// `hasError` (uxa kickback finding 3) distinguishes a genuine load
+    /// failure from a configured-and-loaded-but-empty account — previously
+    /// every configured+non-loading+empty state collapsed into `.failed`
+    /// regardless of `ProviderManager.error`.
+    nonisolated static func rootPlaceholderState(providersEmpty: Bool, isLoading: Bool, hasError: Bool) -> RootPlaceholder {
+        if providersEmpty { return .unconfigured }
+        if isLoading { return .loading }
+        if hasError { return .failed }
+        return .empty
+    }
+
+    // MARK: - Now Playing Button State Helpers (8rg.2)
+
+    /// Returns whether the CarPlay shuffle button should appear selected (highlighted).
+    ///
+    /// `true` when shuffle is enabled; `false` otherwise.
+    /// Extracted as a static helper so unit tests can verify the mapping
+    /// without instantiating a live `CarPlayTemplateManager`.
+    nonisolated static func shuffleButtonSelected(shuffleEnabled: Bool) -> Bool {
+        shuffleEnabled
+    }
+
+    /// Returns whether the CarPlay repeat button should appear selected (highlighted).
+    ///
+    /// `true` when any repeat mode is active (`.all` or `.one`); `false` when `.off`.
+    /// CarPlay's `CPNowPlayingRepeatButton` is a single-tap cycle button — it
+    /// does not visually distinguish `.all` from `.one`.  The selection state
+    /// simply reflects "something is repeating" vs "nothing is repeating".
+    ///
+    /// The full cycle driven by `cycleRepeatMode()` is: `.off → .all → .one → .off`.
+    nonisolated static func repeatButtonSelected(repeatMode: RepeatMode) -> Bool {
+        repeatMode != .off
+    }
+
+    // MARK: - Up Next Queue (j7d.3)
+    //
+    // beads_mobilemusic-zgi: nowPlayingTemplateUpNextButtonTapped(_:) and
+    // pushUpNextQueue() moved verbatim to CarPlayMusicBrowser.swift, along
+    // with this manager's CPNowPlayingTemplateObserver conformance (see
+    // configure()'s CPNowPlayingTemplate.shared.add(musicBrowser)).
+    // upNextRowDetail below stays: it is not actually called by
+    // pushUpNextQueue's body (which inlines the same logic) and exists only
+    // for the unit tests in CarPlayMusicBrowseTests.swift, which reference it
+    // as CarPlayTemplateManager.upNextRowDetail — moving it would force a
+    // test-file update for no functional benefit.
+
+    /// Returns the detail text that should appear on an Up Next queue row.
+    ///
+    /// - If the row is the currently-playing track, returns `"Now Playing"`.
+    /// - Otherwise, returns the formatted duration string (if available) or `nil`.
+    ///
+    /// Extracted as a static helper so unit tests can verify the row-label
+    /// logic without instantiating a live `CarPlayTemplateManager`.
+    nonisolated static func upNextRowDetail(
+        index: Int,
+        currentIndex: Int?,
+        duration: Int?
+    ) -> String? {
+        if index == currentIndex { return "Now Playing" }
+        return duration.map { formatDuration($0) }
     }
 }

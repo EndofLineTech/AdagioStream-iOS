@@ -1,0 +1,114 @@
+# SwiftLint Baseline Configuration
+#
+# PURPOSE: Locks the current codebase style without generating violations.
+# This is a gate, not a style guide. The goal is zero violations on existing
+# code so that new violations are caught immediately.
+#
+# Rules are disabled only when the existing codebase already violates them
+# at a scale that makes enabling them impractical without a source refactor.
+# Each disable is annotated with the violation count observed at baseline.
+# Stricter rules can be opted in incrementally as the code is cleaned up.
+#
+# Baseline established: 2026-06-24 against SwiftLint 0.64.1
+
+included:
+  - AdagioStream
+  - AdagioStreamTests
+
+excluded:
+  - .build
+  - DerivedData
+  - Pods
+  - "**/*.generated.swift"
+  - "AdagioStream.xcodeproj"
+
+# ---------------------------------------------------------------------------
+# line_length — existing code has lines up to 542 chars (AudioPlayerService).
+# Warning threshold is raised to 400 (covers all long lines), error to 600
+# (above the 542 char max) so nothing trips at current lengths.
+# ---------------------------------------------------------------------------
+line_length:
+  warning: 400
+  error: 600
+  ignores_comments: true
+  ignores_urls: true
+
+# ---------------------------------------------------------------------------
+# Rules DISABLED for baseline — these have existing violations that would
+# require source changes to fix. Re-enable incrementally as code is cleaned.
+# ---------------------------------------------------------------------------
+disabled_rules:
+  # 190 violations — single-letter sort params (a/b/c/h/m/s/f) throughout
+  - identifier_name
+
+  # 92 violations — existing space-before-comma style in NavidromeModels
+  - comma
+
+  # 50 violations — existing trailing commas in collection literals
+  - trailing_comma
+
+  # 29 violations — deeply nested async/callback code
+  - nesting
+
+  # 29 violations — existing dictionary-literal colon spacing style
+  - colon
+
+  # 24 violations — AudioPlayerService has very large functions by design
+  - function_body_length
+
+  # 18 violations — existing = nil optional initialization pattern
+  - implicit_optional_initialization
+
+  # 17 violations — AudioPlayerService is 3563 lines
+  - file_length
+
+  # 14 violations — existing multiline closure brace style
+  - opening_brace
+
+  # 14 violations — AudioPlayerService has high cyclomatic complexity
+  - cyclomatic_complexity
+
+  # 13 violations — AudioPlayerService class body spans 2273 lines
+  - type_body_length
+
+  # 3 violations — existing force-try usage in ProviderManager and ESPNScoreService
+  - force_try
+
+  # 1 violation — existing force-cast in LocalFirstPlaybackTests
+  - force_cast
+
+  # 3 violations — large tuple in NavidromeAPI return types (3-member tuples)
+  - large_tuple
+
+  # 3 violations — existing vertical parameter alignment style in EPGParser
+  - vertical_parameter_alignment
+
+  # 5 violations — existing for-loop patterns without where clauses
+  - for_where
+
+  # 2 violations — existing static_over_final_class pattern in test helpers
+  - static_over_final_class
+
+  # 1 violation — existing multiple-trailing-closure call in AdvancedSettingsView
+  - multiple_closures_with_trailing_closure
+
+  # 1 violation — existing statement_position in ESPNScoreService
+  - statement_position
+
+  # 1 violation — non-optional String->Data conversion in test
+  - non_optional_string_data_conversion
+
+  # 1 violation — unneeded break in AudioPlayerService switch
+  - unneeded_break_in_switch
+
+  # 1 violation — ContentView.swift missing trailing newline
+  - trailing_newline
+
+# ---------------------------------------------------------------------------
+# Rules that PASS on the current codebase — kept enabled as the active gate.
+# These lock the style the code already follows so regressions are caught.
+# ---------------------------------------------------------------------------
+opt_in_rules:
+  - orphaned_doc_comment
+  - todo
+  - xctfail_message

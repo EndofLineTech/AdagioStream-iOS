@@ -1,6 +1,6 @@
 import Foundation
 
-struct M3UParser {
+public struct M3UParser {
     enum ParseError: Error, LocalizedError {
         case invalidFormat
         case networkError(Error)
@@ -13,7 +13,7 @@ struct M3UParser {
         }
     }
 
-    static func parse(from url: URL) async throws -> [Channel] {
+    public static func parse(from url: URL) async throws -> [Channel] {
         let data: Data
         if url.isFileURL {
             data = try Data(contentsOf: url)
@@ -29,7 +29,7 @@ struct M3UParser {
         return parse(content: content)
     }
 
-    static func parse(content: String) -> [Channel] {
+    public static func parse(content: String) -> [Channel] {
         let lines = content.components(separatedBy: .newlines)
         var channels: [Channel] = []
 

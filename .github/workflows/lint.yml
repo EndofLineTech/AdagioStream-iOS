@@ -1,0 +1,29 @@
+name: Lint
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  swiftlint:
+    name: SwiftLint
+    runs-on: macos-26
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Run SwiftLint
+        # Using plain `swiftlint lint` (without --strict) because --strict
+        # promotes all warnings to errors. The baseline config already
+        # passes with 0 violations at the warning level; --strict would
+        # require fixing warnings in existing code that are intentionally
+        # deferred. Switch to --strict when those rules are re-enabled.
+        run: swiftlint lint

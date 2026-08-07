@@ -7,12 +7,12 @@ import Foundation
 /// Each startCapture creates a new temp file. The caller owns returned URLs
 /// and is responsible for deleting them after use.
 @MainActor
-final class TimeShiftBufferService: NSObject, ObservableObject {
-    static let shared = TimeShiftBufferService()
+public final class TimeShiftBufferService: NSObject, ObservableObject {
+    public static let shared = TimeShiftBufferService()
 
-    @Published private(set) var isCapturing: Bool = false
-    @Published private(set) var isTimeShifted: Bool = false
-    @Published private(set) var capturedDuration: TimeInterval = 0
+    @Published public private(set) var isCapturing: Bool = false
+    @Published public private(set) var isTimeShifted: Bool = false
+    @Published public private(set) var capturedDuration: TimeInterval = 0
 
     private let log = DebugLogger.shared
     private let writeQueue = DispatchQueue(label: "com.adagiostream.timeshift.write")
@@ -35,7 +35,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
     /// Begin capturing stream data for the given channel's URL.
     /// Can be called while already capturing — stops the old capture first
     /// (without deleting its file, which the caller may still be using).
-    func startCapture(for channel: Channel, estimatedBitrateKbps: Double = 0) {
+    public func startCapture(for channel: Channel, estimatedBitrateKbps: Double = 0) {
         // If already capturing, tear down the old session but don't delete
         // the old file — the caller (AudioPlayerService) owns it.
         if isCapturing {
@@ -91,7 +91,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
 
     /// Stop capturing and return the buffer file URL if enough data was captured.
     /// Does NOT clear isTimeShifted — caller decides when time-shift mode ends.
-    func stopCapture() -> URL? {
+    public func stopCapture() -> URL? {
         guard isCapturing else {
             log.log("stopCapture ignored: not capturing", category: .timeShift)
             return nil
@@ -117,7 +117,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
 
     /// Skip buffered content and go straight to live. Cancels any active
     /// capture and clears time-shift state.
-    func goLive() {
+    public func goLive() {
         log.log("goLive: isCapturing=\(isCapturing)", category: .timeShift)
         stopSession()
         cleanupFile()
@@ -125,7 +125,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
     }
 
     /// Discard any captured data and return to idle.
-    func cancelAndCleanup() {
+    public func cancelAndCleanup() {
         log.log("cancelAndCleanup: isCapturing=\(isCapturing)", category: .timeShift)
         stopSession()
         cleanupFile()
@@ -133,7 +133,7 @@ final class TimeShiftBufferService: NSObject, ObservableObject {
     }
 
     /// Delete a buffer file that the caller is done with.
-    func deleteBufferFile(at url: URL) {
+    public func deleteBufferFile(at url: URL) {
         try? FileManager.default.removeItem(at: url)
     }
 
@@ -212,12 +212,12 @@ private final class DataDelegate: NSObject, URLSessionDataDelegate {
     private let fileHandle: FileHandle
     private weak var service: TimeShiftBufferService?
 
-    init(fileHandle: FileHandle, service: TimeShiftBufferService) {
+    public init(fileHandle: FileHandle, service: TimeShiftBufferService) {
         self.fileHandle = fileHandle
         self.service = service
     }
 
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         fileHandle.write(data)
         let count = data.count
         Task { @MainActor [weak service] in
@@ -225,7 +225,7 @@ private final class DataDelegate: NSObject, URLSessionDataDelegate {
         }
     }
 
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         Task { @MainActor [weak service] in
             service?.didCompleteDownload(error: error)
         }

@@ -1,28 +1,28 @@
 import Foundation
 
-struct DataExportService {
-    struct ExportedData: Codable {
-        let exportDate: Date
-        let appVersion: String
-        let providers: [ExportedProvider]
-        let favorites: [String]
-        let savedSongs: [SavedSong]
-        let customPlaylists: [CustomPlaylist]
-        let favoriteGroups: [String]
-        let enabledGroups: [String]?
-        let settings: AppSettings
+public struct DataExportService {
+    public struct ExportedData: Codable {
+        public let exportDate: Date
+        public let appVersion: String
+        public let providers: [ExportedProvider]
+        public let favorites: [String]
+        public let savedSongs: [SavedSong]
+        public let customPlaylists: [CustomPlaylist]
+        public let favoriteGroups: [String]
+        public let enabledGroups: [String]?
+        public let settings: AppSettings
     }
 
-    struct ExportedProvider: Codable {
-        let name: String
-        let type: String
-        let isEnabled: Bool
-        let serverURL: String?
-        let username: String?
+    public struct ExportedProvider: Codable {
+        public let name: String
+        public let type: String
+        public let isEnabled: Bool
+        public let serverURL: String?
+        public let username: String?
     }
 
     @MainActor
-    static func exportAll(providerManager: ProviderManager, persistence: PersistenceService) async -> ExportedData {
+    public static func exportAll(providerManager: ProviderManager, persistence: PersistenceService) async -> ExportedData {
         let providers = providerManager.providers.map { provider -> ExportedProvider in
             switch provider.type {
             case .m3u(let url, _):
@@ -37,6 +37,22 @@ struct DataExportService {
                 return ExportedProvider(
                     name: provider.name,
                     type: "Xtream Codes",
+                    isEnabled: provider.isEnabled,
+                    serverURL: host.absoluteString,
+                    username: username
+                )
+            case .subsonic(let host, let username, _):
+                return ExportedProvider(
+                    name: provider.name,
+                    type: "Subsonic",
+                    isEnabled: provider.isEnabled,
+                    serverURL: host.absoluteString,
+                    username: username
+                )
+            case .audiobookshelf(let host, let username, _):
+                return ExportedProvider(
+                    name: provider.name,
+                    type: "Audiobookshelf",
                     isEnabled: provider.isEnabled,
                     serverURL: host.absoluteString,
                     username: username
@@ -76,7 +92,7 @@ struct DataExportService {
         )
     }
 
-    static func writeExportFile(_ data: ExportedData) throws -> URL {
+    public static func writeExportFile(_ data: ExportedData) throws -> URL {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601

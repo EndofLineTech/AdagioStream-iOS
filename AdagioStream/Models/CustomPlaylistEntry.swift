@@ -1,13 +1,22 @@
 import Foundation
 
-struct CustomPlaylistEntry: Codable, Identifiable, Equatable {
-    let id: UUID
-    var name: String
-    var streamURL: URL
-    var logoURL: URL?
-    var sourceChannelID: String?
+/// A single entry inside a `CustomPlaylistGroup`. Carries enough data to
+/// reconstitute a `Channel` for browse/playback while remaining
+/// independent of the underlying provider.
+public struct CustomPlaylistEntry: Codable, Identifiable, Equatable {
+    public let id: UUID
+    public var name: String
+    public var streamURL: URL
+    public var logoURL: URL?
+    public var sourceChannelID: String?
 
-    init(id: UUID = UUID(), name: String, streamURL: URL, logoURL: URL? = nil, sourceChannelID: String? = nil) {
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        streamURL: URL,
+        logoURL: URL? = nil,
+        sourceChannelID: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.streamURL = streamURL
@@ -15,7 +24,9 @@ struct CustomPlaylistEntry: Codable, Identifiable, Equatable {
         self.sourceChannelID = sourceChannelID
     }
 
-    init(channel: Channel) {
+    /// Convenience initializer for capturing an existing channel into a
+    /// playlist entry — preserves stream + logo URLs.
+    public init(channel: Channel) {
         self.id = UUID()
         self.name = channel.name
         self.streamURL = channel.streamURL
@@ -23,11 +34,14 @@ struct CustomPlaylistEntry: Codable, Identifiable, Equatable {
         self.sourceChannelID = channel.id
     }
 
-    var asChannel: Channel {
+    /// Renders this entry as a `Channel` for display in the unified browse UI.
+    public var asChannel: Channel {
         asChannel(groupName: "Custom", playlistName: nil)
     }
 
-    func asChannel(groupName: String, playlistName: String?) -> Channel {
+    /// Renders this entry as a `Channel` with caller-specified group +
+    /// owning-playlist labels.
+    public func asChannel(groupName: String, playlistName: String?) -> Channel {
         Channel(
             id: id.uuidString,
             name: name,

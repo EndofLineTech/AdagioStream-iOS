@@ -25,6 +25,11 @@ struct SettingsView: View {
                     } label: {
                         Label("Playback", systemImage: "play.circle")
                     }
+                    NavigationLink {
+                        DownloadsView()
+                    } label: {
+                        Label("Downloads", systemImage: "arrow.down.circle")
+                    }
                 }
 
                 Section {
@@ -32,6 +37,11 @@ struct SettingsView: View {
                         AdvancedSettingsView()
                     } label: {
                         Label("Advanced", systemImage: "gearshape.2")
+                    }
+                    NavigationLink {
+                        DiagnosticsView()
+                    } label: {
+                        Label("Diagnostics", systemImage: "stethoscope")
                     }
                 }
 

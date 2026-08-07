@@ -1,22 +1,22 @@
 import Foundation
 
 @MainActor
-final class SavedSongsManager: ObservableObject {
-    static let shared = SavedSongsManager()
+public final class SavedSongsManager: ObservableObject {
+    public static let shared = SavedSongsManager()
 
-    @Published private(set) var songs: [SavedSong] = []
+    @Published public private(set) var songs: [SavedSong] = []
 
     private init() {
         Task { await loadSongs() }
     }
 
-    func isSaved(trackID: String) -> Bool {
+    public func isSaved(trackID: String) -> Bool {
         songs.contains { $0.trackID == trackID }
     }
 
     /// Toggles save state. Returns `true` if the song is now saved.
     @discardableResult
-    func toggleSave(track: SXMTrack, channel: Channel?) -> Bool {
+    public func toggleSave(track: SXMTrack, channel: Channel?) -> Bool {
         if let index = songs.firstIndex(where: { $0.trackID == track.id }) {
             songs.remove(at: index)
             persist()
@@ -29,12 +29,12 @@ final class SavedSongsManager: ObservableObject {
         }
     }
 
-    func removeSongs(at offsets: IndexSet) {
+    public func removeSongs(at offsets: IndexSet) {
         songs.remove(atOffsets: offsets)
         persist()
     }
 
-    func moveSong(from source: IndexSet, to destination: Int) {
+    public func moveSong(from source: IndexSet, to destination: Int) {
         songs.move(fromOffsets: source, toOffset: destination)
         persist()
     }

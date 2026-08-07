@@ -46,6 +46,9 @@ packages:
   VLCKitSPM:
     url: https://github.com/tylerjonesio/vlckit-spm
     exactVersion: "3.6.0"
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    exactVersion: "6.29.3"
 
 targets:
   AdagioStream:
@@ -55,6 +58,7 @@ targets:
       - AdagioStream
     dependencies:
       - package: VLCKitSPM
+      - package: GRDB
       - target: ShareExtension
     info:
       path: AdagioStream/Info.plist
@@ -65,14 +69,23 @@ targets:
         UILaunchStoryboardName: LaunchScreen
         LSApplicationQueriesSchemes:
           - spotify
+        # Custom scheme for the Audiobookshelf OpenID (SSO) callback:
+        # ASWebAuthenticationSession captures adagiostream://oauth?code=&state=.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.adagiostream.oauth
+            CFBundleURLSchemes:
+              - adagiostream
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: com.adagiostream.channel
             UTTypeDescription: Adagio Stream Channel
             UTTypeConformsTo:
               - public.data
             UTTypeTagSpecification: {}
+        # ATS NOTE: NSAllowsArbitraryLoads is required because user-supplied
+        # Navidrome/Subsonic hosts often run plain HTTP on a LAN (e.g.
+        # http://nas.local:4533). We cannot enumerate those hosts statically.
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoadsForMedia: true
+          NSAllowsArbitraryLoads: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
           UISceneConfigurations:
@@ -85,8 +98,16 @@ targets:
       base:
         CODE_SIGN_ENTITLEMENTS: AdagioStream/AdagioStream.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
-        MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "104"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "224"
+        SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          # MobileVLCKit ships the libvlc C headers under vlc/ inside its
+          # Headers directory.  They cross-reference each other via
+          # <vlc/libvlc.h>-style includes, which need vlc/ to be findable
+          # at the top of the search path.  See VLCAudioCallbackBridge.m.
+          - $(BUILT_PRODUCTS_DIR)/MobileVLCKit.framework/Headers
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: true
@@ -100,19 +121,23 @@ targets:
         com.apple.developer.carplay-audio: true
         com.apple.security.application-groups:
           - group.com.adagiostream.app
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.adagiostream.app
 
   ShareExtension:
     type: app-extension
     platform: iOS
     sources:
       - ShareExtension
+      - path: AdagioStream/Constants.swift
+      - path: AdagioStream/Services/ShareURLValidation.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app.share
         DEVELOPMENT_TEAM: EWT2X7Q9ZJ
         GENERATE_INFOPLIST_FILE: true
-        CURRENT_PROJECT_VERSION: "104"
-        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "224"
+        MARKETING_VERSION: "1.2"
         INFOPLIST_KEY_CFBundleDisplayName: Adagio Stream
         INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier: com.apple.share-services
     info:
@@ -130,6 +155,68 @@ targets:
         com.apple.security.application-groups:
           - group.com.adagiostream.app
 
+  AdagioStream-tvOS:
+    type: application
+    platform: tvOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: AdagioStream
+        excludes:
+          - AdagioStreamApp.swift
+          - CarPlay
+          - Views
+          - Assets.xcassets
+          - LaunchScreen.storyboard
+          - Info.plist
+          - AdagioStream.entitlements
+      - AdagioStream-tvOS
+    dependencies:
+      - package: VLCKitSPM
+      - package: GRDB
+    info:
+      path: AdagioStream-tvOS/Info.plist
+      properties:
+        ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes: [audio]
+        CFBundleDisplayName: Adagio Stream
+        # ATS NOTE: NSAllowsArbitraryLoads is required for user-supplied
+        # Navidrome hosts, which often run plain HTTP on a LAN.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.adagiostream.app
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "224"
+        TARGETED_DEVICE_FAMILY: "3"
+        SDKROOT: appletvos
+        SUPPORTED_PLATFORMS: "appletvos appletvsimulator"
+        SWIFT_OBJC_BRIDGING_HEADER: AdagioStream/AdagioStream-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - $(inherited)
+          # TVVLCKit ships the libvlc C headers under vlc/ inside its
+          # Headers directory, mirroring the MobileVLCKit layout.  See
+          # VLCAudioCallbackBridge.m for the TARGET_OS_TV switch.
+          - $(BUILT_PRODUCTS_DIR)/TVVLCKit.framework/Headers
+        DEVELOPMENT_TEAM: EWT2X7Q9ZJ
+        GENERATE_INFOPLIST_FILE: false
+        ASSETCATALOG_COMPILER_APPICON_NAME: App Icon & Top Shelf Image
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+        # TVVLCKit framework headers emit -Wdocumentation and
+        # -Wquoted-include-in-framework-header noise that the iOS-equivalent
+        # MobileVLCKit modulemap doesn't surface.  Override only on this
+        # target so iOS stays strict on our own code.
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+    entitlements:
+      path: AdagioStream-tvOS/AdagioStream-tvOS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.adagiostream.app
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.adagiostream.app
+
   AdagioStreamTests:
     type: bundle.unit-test
     platform: iOS
@@ -137,6 +224,7 @@ targets:
       - AdagioStreamTests
     dependencies:
       - target: AdagioStream
+      - package: GRDB
     settings:
       base:
         GENERATE_INFOPLIST_FILE: true
@@ -153,6 +241,19 @@ schemes:
       config: Debug
       targets:
         - AdagioStreamTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+
+  AdagioStream-tvOS:
+    build:
+      targets:
+        AdagioStream-tvOS: all
+    run:
+      config: Debug
     profile:
       config: Release
     analyze:

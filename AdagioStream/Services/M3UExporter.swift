@@ -1,7 +1,7 @@
 import Foundation
 
-struct M3UExporter {
-    static func export(_ playlist: CustomPlaylist) -> String {
+public struct M3UExporter {
+    public static func export(_ playlist: CustomPlaylist) -> String {
         var lines = ["#EXTM3U"]
 
         for group in playlist.groups {
@@ -19,7 +19,7 @@ struct M3UExporter {
         return lines.joined(separator: "\n")
     }
 
-    static func exportToFile(_ playlist: CustomPlaylist) throws -> URL {
+    public static func exportToFile(_ playlist: CustomPlaylist) throws -> URL {
         let content = export(playlist)
         let sanitized = playlist.name
             .replacingOccurrences(of: "/", with: "-")

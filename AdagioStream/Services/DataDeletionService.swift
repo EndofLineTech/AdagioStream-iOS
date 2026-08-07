@@ -33,10 +33,11 @@ struct DataDeletionService {
 
         // 5. UserDefaults — standard
         UserDefaults.standard.removeObject(forKey: "lastPlayedChannelID")
+        LastPlayedItem.clear()
 
         // 6. UserDefaults — app group
-        if let groupDefaults = UserDefaults(suiteName: "group.com.adagiostream.app") {
-            groupDefaults.removeObject(forKey: "pendingSharedURLs")
+        if let groupDefaults = UserDefaults(suiteName: Constants.AppGroup.identifier) {
+            groupDefaults.removeObject(forKey: Constants.AppGroup.pendingSharedURLsKey)
         }
 
         // 7. Time-shift temp files

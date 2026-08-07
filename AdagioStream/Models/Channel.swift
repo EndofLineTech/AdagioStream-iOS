@@ -2,18 +2,32 @@ import CoreTransferable
 import Foundation
 import UniformTypeIdentifiers
 
-struct Channel: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let streamURL: URL
-    let logoURL: URL?
-    let group: String
-    let epgChannelID: String?
-    var isFavorite: Bool
-    var providerName: String?
-    var isCustomPlaylist: Bool
+/// A single channel (radio or TV stream) belonging to a `Provider` or
+/// `CustomPlaylist`.
+public struct Channel: Codable, Identifiable, Hashable {
+    public let id: String
+    public let name: String
+    public let streamURL: URL
+    public let logoURL: URL?
+    public let group: String
+    public let epgChannelID: String?
+    public var isFavorite: Bool
+    public var providerName: String?
+    public var isCustomPlaylist: Bool
 
-    init(id: String, name: String, streamURL: URL, logoURL: URL? = nil, group: String = "Uncategorized", epgChannelID: String? = nil, isFavorite: Bool = false, providerName: String? = nil, isCustomPlaylist: Bool = false) {
+    /// Memberwise initializer. All defaults match pre-extraction iOS values
+    /// to preserve existing Codable shape.
+    public init(
+        id: String,
+        name: String,
+        streamURL: URL,
+        logoURL: URL? = nil,
+        group: String = "Uncategorized",
+        epgChannelID: String? = nil,
+        isFavorite: Bool = false,
+        providerName: String? = nil,
+        isCustomPlaylist: Bool = false
+    ) {
         self.id = id
         self.name = name
         self.streamURL = streamURL
@@ -25,7 +39,9 @@ struct Channel: Codable, Identifiable, Hashable {
         self.isCustomPlaylist = isCustomPlaylist
     }
 
-    init(from decoder: Decoder) throws {
+    /// Tolerant decoder — every recently-added field is `decodeIfPresent`
+    /// so older on-disk data still loads.
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
@@ -38,23 +54,27 @@ struct Channel: Codable, Identifiable, Hashable {
         isCustomPlaylist = try container.decodeIfPresent(Bool.self, forKey: .isCustomPlaylist) ?? false
     }
 
-    var providerGroupKey: String {
+    /// Group key used when grouping channels by provider.
+    public var providerGroupKey: String {
         providerName ?? "Unknown Provider"
     }
 
-    var sourceGroupKey: String {
+    /// Group key used when grouping channels by source (provider × group pair).
+    public var sourceGroupKey: String {
         let provider = providerName ?? "Unknown"
         return "\(provider) — \(group)"
     }
 }
 
 extension Channel: Transferable {
-    static var transferRepresentation: some TransferRepresentation {
+    public static var transferRepresentation: some TransferRepresentation {
         CodableRepresentation(contentType: .channel)
         ProxyRepresentation(exporting: \.name)
     }
 }
 
 extension UTType {
-    static let channel = UTType(exportedAs: "com.adagiostream.channel")
+    /// Adagio Stream's exported UTI for cross-process drag-and-drop /
+    /// share-sheet payloads.
+    public static let channel = UTType(exportedAs: "com.adagiostream.channel")
 }

@@ -1,46 +1,83 @@
 import SwiftUI
-import UIKit
 
-struct MaskedTextField: UIViewRepresentable {
+/// Password field with a reveal/hide toggle, backed by native `SecureField`/
+/// `TextField` rather than a custom UIKit bullet display.
+///
+/// beads_mobilemusic-uxb.2: the previous implementation was a `UITextField`
+/// whose visible text was ALWAYS a bullet mask — the real password lived only
+/// in the SwiftUI `Binding`. Giving that field `.password`/`.username`
+/// content type (git history: a35aaa9, "Suppress iOS password autofill on
+/// provider credential fields") would let iOS AutoFill try to save/suggest
+/// the bullet string itself as the credential, since AutoFill's save-password
+/// heuristic reads the field's displayed text, not the bound value. That's a
+/// correctness reason to keep AutoFill off *for that field's display model*
+/// — but it isn't a reason to go without AutoFill at all. Swapping to a
+/// native SecureField/TextField pair sidesteps the whole problem: the
+/// displayed text (in either mode) IS the real password, so `.password`
+/// content type is safe, AutoFill save/fill works normally, and self-hosted
+/// server passwords get a reveal toggle for free.
+struct MaskedTextField: View {
     let placeholder: String
     @Binding var text: String
-    private static let bullet = "\u{25CF}"
+    /// Accessibility label for the field itself — e.g. "Xtream Codes
+    /// password" — distinguishing it from the generic "Password"
+    /// placeholder. Taken as a parameter rather than left for the call site
+    /// to chain `.accessibilityLabel(...)` on the whole view: this view now
+    /// contains two controls (the field and the reveal button), each of
+    /// which needs its own label.
+    var accessibilityLabel: String
+    @State private var isRevealed = false
+    /// `Bool?` (not `Bool`) so `.focused(_:equals:)` can address either the
+    /// hidden or the visible field of the pair by which one is `true`/`false`;
+    /// `nil` means neither currently has focus.
+    @FocusState private var isFocused: Bool?
 
-    func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
-        field.placeholder = placeholder
-        field.textContentType = .init(rawValue: "")
-        field.autocorrectionType = .no
-        field.autocapitalizationType = .none
-        field.spellCheckingType = .no
-        field.delegate = context.coordinator
-        field.font = .preferredFont(forTextStyle: .body)
-        field.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        return field
-    }
+    var body: some View {
+        HStack(spacing: 4) {
+            // beads_mobilemusic-uxb kickback finding 3: an `if/else` swap
+            // between concrete SecureField/TextField types breaks SwiftUI view
+            // identity — toggling reveal mid-typing tore down and recreated
+            // the field, dropping keyboard focus. Both fields now stay in the
+            // hierarchy permanently, synced to the same `$text` binding, with
+            // only the hidden one's hit-testing/visibility/focus toggled off —
+            // so reveal never changes which view is "the" text field.
+            ZStack(alignment: .leading) {
+                SecureField(placeholder, text: $text)
+                    .opacity(isRevealed ? 0 : 1)
+                    .allowsHitTesting(!isRevealed)
+                    .focused($isFocused, equals: false)
+                    // uxd.4 (7): opacity+hit-testing hide the inactive field
+                    // visually but leave it in the accessibility tree — a
+                    // second VoiceOver stop for the same credential.
+                    .accessibilityHidden(isRevealed)
 
-    func updateUIView(_ field: UITextField, context: Context) {
-        let masked = String(repeating: Self.bullet, count: text.count)
-        if field.text != masked { field.text = masked }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var text: Binding<String>
-        init(text: Binding<String>) { self.text = text }
-
-        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
-            let current = text.wrappedValue
-            guard let r = Range(range, in: current) else { return false }
-            text.wrappedValue = current.replacingCharacters(in: r, with: string)
-            let newMasked = String(repeating: MaskedTextField.bullet, count: text.wrappedValue.count)
-            textField.text = newMasked
-            let cursorOffset = range.location + string.count
-            if let pos = textField.position(from: textField.beginningOfDocument, offset: cursorOffset) {
-                textField.selectedTextRange = textField.textRange(from: pos, to: pos)
+                TextField(placeholder, text: $text)
+                    .opacity(isRevealed ? 1 : 0)
+                    .allowsHitTesting(isRevealed)
+                    .focused($isFocused, equals: true)
+                    // Revealed plaintext credentials must not hit the
+                    // keyboard's learning cache.
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .accessibilityHidden(!isRevealed)
             }
-            return false
+            .textContentType(.password)
+            .accessibilityLabel(accessibilityLabel)
+
+            Button {
+                // beads_mobilemusic-uxg: isRevealed flips first, then focus is
+                // handed to whichever field just became visible — both happen
+                // in this same synchronous action, so the keyboard never drops
+                // between the two field identities regardless of the order.
+                let wasFocused = isFocused != nil
+                isRevealed.toggle()
+                if wasFocused { isFocused = isRevealed }
+            } label: {
+                Image(systemName: isRevealed ? "eye.slash" : "eye")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isRevealed ? "Hide password" : "Show password")
         }
     }
 }

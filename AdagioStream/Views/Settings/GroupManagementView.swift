@@ -66,8 +66,10 @@ struct GroupManagementView: View {
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .foregroundStyle(.red)
+                                    .frame(width: 44, height: 44)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Remove \(group.name) from favorites")
                             Toggle("", isOn: Binding(
                                 get: { providerManager.isGroupEnabled(group.name) },
                                 set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
@@ -75,6 +77,7 @@ struct GroupManagementView: View {
                             .toggleStyle(.switch)
                             .labelsHidden()
                             .fixedSize()
+                            .accessibilityLabel("Enable \(group.name)")
                         }
                     }
                     .onMove { source, destination in
@@ -97,8 +100,10 @@ struct GroupManagementView: View {
                         } label: {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(.green)
+                                .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Add \(group.name) to favorites")
                         Toggle("", isOn: Binding(
                             get: { providerManager.isGroupEnabled(group.name) },
                             set: { _ in Task { await providerManager.toggleGroupEnabled(group.name) } }
@@ -106,6 +111,7 @@ struct GroupManagementView: View {
                         .toggleStyle(.switch)
                         .labelsHidden()
                         .fixedSize()
+                        .accessibilityLabel("Enable \(group.name)")
                     }
                 }
             } header: {

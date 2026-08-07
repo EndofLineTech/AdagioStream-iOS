@@ -1,13 +1,22 @@
 import Foundation
 
-struct CustomPlaylist: Codable, Identifiable, Equatable {
-    let id: UUID
-    var name: String
-    var groups: [CustomPlaylistGroup]
-    let createdAt: Date
-    var updatedAt: Date
+/// A user-curated playlist of channels grouped into one or more
+/// `CustomPlaylistGroup`s. Persisted to disk under
+/// `Constants.StorageKeys.customPlaylists`.
+public struct CustomPlaylist: Codable, Identifiable, Equatable {
+    public let id: UUID
+    public var name: String
+    public var groups: [CustomPlaylistGroup]
+    public let createdAt: Date
+    public var updatedAt: Date
 
-    init(id: UUID = UUID(), name: String, groups: [CustomPlaylistGroup] = [], createdAt: Date = Date(), updatedAt: Date = Date()) {
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        groups: [CustomPlaylistGroup] = [],
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
         self.id = id
         self.name = name
         self.groups = groups

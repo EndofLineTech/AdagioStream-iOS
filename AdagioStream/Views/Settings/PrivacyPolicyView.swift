@@ -13,7 +13,7 @@ struct PrivacyPolicyView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     dataItem(
                         title: "Provider Credentials",
-                        detail: "Server URLs, usernames, and passwords you enter for Xtream Codes or M3U providers are stored securely in the iOS Keychain on your device."
+                        detail: "Server URLs, usernames, and passwords you enter for Xtream Codes, Navidrome/Subsonic, and Audiobookshelf accounts are stored securely in the iOS Keychain on your device. M3U accounts store only the playlist URL — no username or password."
                     )
                     dataItem(
                         title: "Favorites and Playlists",
@@ -52,6 +52,10 @@ struct PrivacyPolicyView: View {
                     dataItem(
                         title: "xmplaylist.com API",
                         detail: "Used to retrieve track metadata (song titles, artist names, artwork) for SiriusXM channels. Only channel identifiers are sent. No user data is included."
+                    )
+                    dataItem(
+                        title: "StellarTunerLog API",
+                        detail: "Optional alternative source for SiriusXM track metadata, used only when selected in Settings. Only channel identifiers are sent. No user data is included."
                     )
                 }
                 .padding(.vertical, 4)
