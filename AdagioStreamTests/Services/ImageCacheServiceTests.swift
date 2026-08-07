@@ -143,4 +143,56 @@ final class ImageCacheServiceTests: XCTestCase {
         XCTAssertNotNil(url1, "coverArtURL must return a non-nil URL")
         XCTAssertNotNil(url2, "coverArtURL must return a non-nil URL")
     }
+
+    // MARK: - Staleness revalidation (beads_mobilemusic-7dy)
+    //
+    // Dispatcharr serves logos at stable URLs, so disk hits are only trusted
+    // within a 24h TTL. isFresh is the extracted pure decision.
+
+    func testFreshJustUnderTTL() {
+        let now = Date()
+        let modified = now.addingTimeInterval(-(ImageCacheService.freshnessTTL - 1))
+        XCTAssertTrue(ImageCacheService.isFresh(modifiedAt: modified, now: now),
+            "A file modified 1s inside the TTL must be fresh")
+    }
+
+    func testStaleExactlyAtTTL() {
+        let now = Date()
+        let modified = now.addingTimeInterval(-ImageCacheService.freshnessTTL)
+        XCTAssertFalse(ImageCacheService.isFresh(modifiedAt: modified, now: now),
+            "A file modified exactly TTL ago must be stale (boundary is exclusive)")
+    }
+
+    func testStaleBeyondTTL() {
+        let now = Date()
+        let modified = now.addingTimeInterval(-(ImageCacheService.freshnessTTL + 3600))
+        XCTAssertFalse(ImageCacheService.isFresh(modifiedAt: modified, now: now),
+            "A file older than the TTL must be stale")
+    }
+
+    func testMissingModificationDateIsStale() {
+        XCTAssertFalse(ImageCacheService.isFresh(modifiedAt: nil),
+            "Missing mtime must count as stale, forcing a revalidation fetch")
+    }
+
+    func testDefaultTTLIs24Hours() {
+        XCTAssertEqual(ImageCacheService.freshnessTTL, 24 * 60 * 60)
+    }
+
+    // MARK: - clearAll
+
+    func testClearAllLeavesUsableEmptyCacheDir() async {
+        // clearAll only touches the test host's own Application Support
+        // image-cache directory — safe to run against the real actor.
+        await ImageCacheService.shared.clearAll()
+
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let cacheDir = appSupport.appendingPathComponent("AdagioStream/image-cache", isDirectory: true)
+        var isDir: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cacheDir.path, isDirectory: &isDir),
+            "clearAll must recreate the cache directory")
+        XCTAssertTrue(isDir.boolValue)
+        let contents = (try? FileManager.default.contentsOfDirectory(atPath: cacheDir.path)) ?? []
+        XCTAssertTrue(contents.isEmpty, "clearAll must leave the cache directory empty")
+    }
 }

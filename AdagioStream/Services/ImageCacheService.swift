@@ -18,6 +18,10 @@ public actor ImageCacheService {
     private let logger = DebugLogger.shared
     /// In-memory LRU cache to avoid repeated disk I/O.
     private let memoryCache = NSCache<NSString, UIImage>()
+    /// Bumped by `clearAll()` so in-flight fetches suspended at an await don't
+    /// resurrect a pre-clear `diskImage` via the offline fallback (actor
+    /// reentrancy race). (bead beads_mobilemusic-7dy)
+    private var clearGeneration = 0
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -35,37 +39,64 @@ public actor ImageCacheService {
         let key = cacheKey(for: url)
         let nsKey = key as NSString
 
-        // 1. In-memory hit — no disk I/O needed
+        // 1. In-memory hit — no disk I/O needed.
+        // ponytail: NSCache hits bypass the 24h TTL for the process lifetime —
+        // acceptable ceiling: the bug fixed was cross-launch permanence, and
+        // NSCache evicts under memory pressure anyway.
         if let memImage = memoryCache.object(forKey: nsKey) {
             return memImage
         }
 
-        // 2. Disk hit — the URL is the change detector: same URL = same image.
-        //    If a provider changes a logo, the URL changes → cache miss → fresh fetch.
+        // 2. Disk lookup — the URL is NOT a change detector: Dispatcharr serves
+        //    channel logos at stable URLs (/api/channels/logos/<id>/cache/), so
+        //    the image behind a URL can change while the URL stays the same.
+        //    A disk hit is only trusted while fresh (24h TTL); stale entries
+        //    are refetched, with the disk copy kept as an offline fallback.
+        //    (bead beads_mobilemusic-7dy)
         let fileURL = cacheDir.appendingPathComponent("\(key).dat")
-        if manifest.contains(key), let cachedImage = loadFromDisk(fileURL) {
-            memoryCache.setObject(cachedImage, forKey: nsKey)
+        let diskImage: UIImage? = manifest.contains(key) ? loadFromDisk(fileURL) : nil
+
+        if let diskImage, Self.isFresh(modifiedAt: modificationDate(of: fileURL)) {
+            memoryCache.setObject(diskImage, forKey: nsKey)
             logger.log("HIT \(url.lastPathComponent)", category: .imageCache)
-            return cachedImage
+            return diskImage
         }
 
-        // 3. Cache miss — fetch and store
+        // 3. Cache miss or stale — fetch and overwrite (saveToDisk refreshes mtime).
+        // The actor suspends at the await below; if clearAll() runs during that
+        // suspension, the captured diskImage is stale and must not be re-inserted
+        // by the fallback paths — the generation check guards that.
+        let generation = clearGeneration
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
 
             guard let img = UIImage(data: data) else {
                 logger.log("MISS (invalid data) \(url.lastPathComponent)", category: .imageCache)
-                return nil
+                return offlineFallback(diskImage, nsKey: nsKey, url: url, generation: generation)
             }
 
-            logger.log("MISS (fetched) \(url.lastPathComponent)", category: .imageCache)
+            logger.log(diskImage == nil
+                ? "MISS (fetched) \(url.lastPathComponent)"
+                : "STALE (refreshed) \(url.lastPathComponent)", category: .imageCache)
             memoryCache.setObject(img, forKey: nsKey)
             saveToDisk(data: data, fileURL: fileURL, key: key)
             return img
         } catch {
             logger.log("MISS (error) \(url.lastPathComponent): \(error.localizedDescription)", category: .imageCache)
-            return nil
+            return offlineFallback(diskImage, nsKey: nsKey, url: url, generation: generation)
         }
+    }
+
+    /// Wipes the entire image cache: memory, manifest, and the on-disk
+    /// directory (which contains the manifest file). Backs the
+    /// "Clear Image Cache" advanced setting. (bead beads_mobilemusic-7dy)
+    public func clearAll() {
+        clearGeneration += 1
+        memoryCache.removeAllObjects()
+        manifest.removeAll()
+        try? FileManager.default.removeItem(at: cacheDir)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        logger.log("Cleared image cache (user-initiated)", category: .imageCache)
     }
 
     /// Memory-only cache for ephemeral images like album art that rotate frequently.
@@ -163,6 +194,32 @@ public actor ImageCacheService {
             logger.log("MISS (coverArt error) \(stableKey.prefix(8))…: \(error.localizedDescription)", category: .imageCache)
             return nil
         }
+    }
+
+    // MARK: - Staleness (bead beads_mobilemusic-7dy)
+
+    /// How long a disk-cached stable-URL image is trusted before revalidation.
+    static let freshnessTTL: TimeInterval = 24 * 60 * 60
+
+    /// Pure freshness decision, extracted for testability.
+    /// A missing modification date counts as stale.
+    static func isFresh(modifiedAt: Date?, now: Date = Date(), ttl: TimeInterval = freshnessTTL) -> Bool {
+        guard let modifiedAt else { return false }
+        return now.timeIntervalSince(modifiedAt) < ttl
+    }
+
+    private func modificationDate(of fileURL: URL) -> Date? {
+        (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+    }
+
+    /// A stale logo beats a blank one: when a refetch fails, serve the disk copy.
+    /// `generation` was captured before the fetch await; a mismatch means
+    /// clearAll() ran mid-fetch and the disk copy must not be resurrected.
+    private func offlineFallback(_ diskImage: UIImage?, nsKey: NSString, url: URL, generation: Int) -> UIImage? {
+        guard let diskImage, generation == clearGeneration else { return nil }
+        memoryCache.setObject(diskImage, forKey: nsKey)
+        logger.log("STALE (offline fallback) \(url.lastPathComponent)", category: .imageCache)
+        return diskImage
     }
 
     // MARK: - Private
