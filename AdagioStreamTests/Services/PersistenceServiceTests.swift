@@ -105,3 +105,69 @@ final class PersistenceServiceTests: XCTestCase {
         await PersistenceService.shared.delete(testFilename)
     }
 }
+
+final class AppSettingsSXMGroupSelectionTests: XCTestCase {
+    func testExactRawGroupNamesRoundTripWithoutNormalization() throws {
+        var settings = AppSettings.default
+        settings.selectedSXMGroupNames = [
+            "SiriusXM",
+            "siriusxm",
+            " SiriusXM ",
+            "SiriusXM: Rock & Roll"
+        ]
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.selectedSXMGroupNames, settings.selectedSXMGroupNames)
+    }
+
+    func testSameExactGroupNameHasOneStoredIdentity() throws {
+        var settings = AppSettings.default
+        settings.selectedSXMGroupNames = Set(["SiriusXM", "SiriusXM"])
+
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.selectedSXMGroupNames, ["SiriusXM"])
+    }
+
+    func testExplicitEmptySelectionRoundTripsAsCompletedChoice() throws {
+        let settings = AppSettings.default
+
+        let data = try JSONEncoder().encode(settings)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertNotNil(object["selectedSXMGroupNames"])
+        XCTAssertEqual(decoded.selectedSXMGroupNames, [])
+        XCTAssertTrue(decoded.hasCompletedSXMGroupSelectionMigration)
+    }
+
+    func testMigrationCompletionStateRoundTrips() throws {
+        var settings = AppSettings.default
+        settings.hasCompletedSXMGroupSelectionMigration = false
+
+        let pendingData = try JSONEncoder().encode(settings)
+        let pending = try JSONDecoder().decode(AppSettings.self, from: pendingData)
+        XCTAssertFalse(pending.hasCompletedSXMGroupSelectionMigration)
+
+        settings.hasCompletedSXMGroupSelectionMigration = true
+        let completedData = try JSONEncoder().encode(settings)
+        let completed = try JSONDecoder().decode(AppSettings.self, from: completedData)
+        XCTAssertTrue(completed.hasCompletedSXMGroupSelectionMigration)
+    }
+
+    func testLegacySettingsWithoutSelectionStateDecodeAsMigrationPending() throws {
+        let encodedDefaults = try JSONEncoder().encode(AppSettings.default)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encodedDefaults) as? [String: Any])
+        object.removeValue(forKey: "selectedSXMGroupNames")
+        object.removeValue(forKey: "hasCompletedSXMGroupSelectionMigration")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: legacyData)
+
+        XCTAssertEqual(decoded.selectedSXMGroupNames, [])
+        XCTAssertFalse(decoded.hasCompletedSXMGroupSelectionMigration)
+    }
+}

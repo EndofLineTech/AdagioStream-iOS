@@ -23,6 +23,8 @@ large jumps that delay ASC processing.
 
 ### Added
 
+- **SiriusXM group selection** — Choose exact channel groups for now-playing
+  matching independently on iPhone, iPad, and Apple TV.
 - **Navidrome music library** — Connect a Navidrome (or any Subsonic-compatible)
   server as a music provider alongside existing M3U and Xtream Codes providers.
   - Browse artists, albums, and genres with cover art.

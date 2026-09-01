@@ -5,7 +5,12 @@ extension Notification.Name {
 }
 
 struct DataDeletionService {
-    static func deleteAllData() async {
+    @MainActor
+    static func deleteAllData(
+        settingsViewModel: SettingsViewModel,
+        providerManager: ProviderManager,
+        sxmMetadataService: SXMMetadataService? = nil
+    ) async {
         // 1. Keychain — provider credentials
         KeychainService.delete(for: Constants.StorageKeys.providers)
 
@@ -51,5 +56,22 @@ struct DataDeletionService {
         // 8. Export file
         let exportFile = tempDir.appendingPathComponent("adagiostream-export.json")
         try? FileManager.default.removeItem(at: exportFile)
+
+        resetRuntimeState(
+            settingsViewModel: settingsViewModel,
+            providerManager: providerManager,
+            sxmMetadataService: sxmMetadataService ?? .shared
+        )
+    }
+
+    @MainActor
+    static func resetRuntimeState(
+        settingsViewModel: SettingsViewModel,
+        providerManager: ProviderManager,
+        sxmMetadataService: SXMMetadataService
+    ) {
+        settingsViewModel.resetAfterDeletingAllData()
+        providerManager.setSXMGroupSelection([])
+        sxmMetadataService.stopPolling()
     }
 }

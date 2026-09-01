@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsTabView: View {
+    @EnvironmentObject private var providerManager: ProviderManager
     @EnvironmentObject private var settingsViewModel: SettingsViewModel
 
     var body: some View {
@@ -8,6 +9,18 @@ struct SettingsTabView: View {
             Form {
                 Section("Playback") {
                     bufferDurationRow
+                }
+                Section("SiriusXM") {
+                    NavigationLink {
+                        SiriusXMGroupSelectionTVView()
+                    } label: {
+                        HStack {
+                            Text(SiriusXMGroupSelectionState.settingsRowTitle)
+                            Spacer()
+                            Text(siriusXMGroupSelectionState.summary)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 Section("Diagnostics") {
                     Toggle("Debug Logging", isOn: debugLoggingBinding)
@@ -43,6 +56,14 @@ struct SettingsTabView: View {
             set: { newValue in
                 Task { await settingsViewModel.updateDebugLogging(newValue) }
             }
+        )
+    }
+
+    private var siriusXMGroupSelectionState: SiriusXMGroupSelectionState {
+        SiriusXMGroupSelectionState(
+            inventory: providerManager.availableRawChannelGroupCounts,
+            selectedNames: settingsViewModel.settings.selectedSXMGroupNames,
+            inventoryIsComplete: providerManager.hasLoadedCompleteRawChannelGroupInventory
         )
     }
 
