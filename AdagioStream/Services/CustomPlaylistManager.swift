@@ -3,11 +3,23 @@ import Foundation
 @MainActor
 public final class CustomPlaylistManager: ObservableObject {
     public static let shared = CustomPlaylistManager()
+    typealias PlaylistLoader = @MainActor () async -> [CustomPlaylist]
 
     @Published public private(set) var playlists: [CustomPlaylist] = []
 
-    private init() {
-        Task { await loadPlaylists() }
+    private let playlistLoader: PlaylistLoader
+    private var hydrationTask: Task<Void, Never>?
+
+    init(playlistLoader: PlaylistLoader? = nil) {
+        self.playlistLoader = playlistLoader ?? {
+            await PersistenceService.shared.loadOrDefault(
+                from: Constants.StorageKeys.customPlaylists,
+                default: []
+            )
+        }
+        hydrationTask = Task { @MainActor [weak self] in
+            await self?.loadPlaylists()
+        }
     }
 
     // MARK: - Playlist CRUD
@@ -105,10 +117,11 @@ public final class CustomPlaylistManager: ObservableObject {
     // MARK: - Persistence
 
     private func loadPlaylists() async {
-        playlists = await PersistenceService.shared.loadOrDefault(
-            from: Constants.StorageKeys.customPlaylists,
-            default: []
-        )
+        playlists = await playlistLoader()
+    }
+
+    func waitUntilHydrated() async {
+        await hydrationTask?.value
     }
 
     private func persist() {

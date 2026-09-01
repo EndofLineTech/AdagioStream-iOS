@@ -77,6 +77,7 @@ public final class ProviderManager: ObservableObject {
 
     private let persistence = PersistenceService.shared
     private let settingsFilename: String
+    private let customPlaylistManager: CustomPlaylistManager
 
     /// Test seam: overrides the Subsonic ping logic so unit tests can inject
     /// a mock validator without constructing a real NavidromeAPI.
@@ -95,11 +96,24 @@ public final class ProviderManager: ObservableObject {
         )
     }
 
-    init(
+    convenience init(
         automaticallyLoad: Bool,
         settingsFilename: String = Constants.StorageKeys.settings
     ) {
+        self.init(
+            automaticallyLoad: automaticallyLoad,
+            settingsFilename: settingsFilename,
+            customPlaylistManager: .shared
+        )
+    }
+
+    init(
+        automaticallyLoad: Bool,
+        settingsFilename: String = Constants.StorageKeys.settings,
+        customPlaylistManager: CustomPlaylistManager
+    ) {
         self.settingsFilename = settingsFilename
+        self.customPlaylistManager = customPlaylistManager
         // Migrate legacy Keychain items to iCloud-syncable attributes
         // BEFORE any keychain read in this init path. Idempotent; see
         // KeychainSyncMigrator and bead 9nl.2. Synchronous so subsequent
@@ -108,7 +122,7 @@ public final class ProviderManager: ObservableObject {
         KeychainSyncMigrator.runIfNeeded()
 
         // Re-merge custom playlist channels whenever playlists change
-        CustomPlaylistManager.shared.$playlists
+        customPlaylistManager.$playlists
             .dropFirst()
             .sink { [weak self] playlists in
                 Task { @MainActor [weak self] in
@@ -124,12 +138,7 @@ public final class ProviderManager: ObservableObject {
                 if !providers.isEmpty {
                     await loadChannels()
                 } else {
-                    // No providers — still merge custom playlist channels
-                    favoriteOrder = await loadFavoriteOrder()
-                    appendCustomPlaylistChannels(from: CustomPlaylistManager.shared.playlists)
-                    updateRawChannelGroupInventory(providerChannels: [], loadSucceeded: true)
-                    applyGroupFilter()
-                    refreshSXMChannelMatches()
+                    await loadChannelsWithoutProviders()
                 }
             }
         }
@@ -336,11 +345,7 @@ public final class ProviderManager: ObservableObject {
             epgData = [:]
             allGroupCounts = [:]
             error = nil
-            // Re-merge custom playlist channels even with no providers
-            appendCustomPlaylistChannels(from: CustomPlaylistManager.shared.playlists)
-            updateRawChannelGroupInventory(providerChannels: [], loadSucceeded: true)
-            applyGroupFilter()
-            refreshSXMChannelMatches()
+            await loadChannelsWithoutProviders()
         }
     }
 
@@ -533,8 +538,10 @@ public final class ProviderManager: ObservableObject {
             return c
         }
 
-        // Merge custom playlist channels into the pipeline
-        appendCustomPlaylistChannels(from: CustomPlaylistManager.shared.playlists)
+        // A complete inventory includes persisted custom playlists, even when
+        // their independent startup load finishes after provider hydration.
+        await customPlaylistManager.waitUntilHydrated()
+        appendCustomPlaylistChannels(from: customPlaylistManager.playlists)
         updateRawChannelGroupInventory(
             providerChannels: providerRawChannels,
             loadSucceeded: errors.isEmpty
@@ -549,6 +556,15 @@ public final class ProviderManager: ObservableObject {
 
         // Match sports channels to ESPN scoreboard for live scores
         ESPNScoreService.shared.matchChannels(channels)
+    }
+
+    func loadChannelsWithoutProviders() async {
+        await customPlaylistManager.waitUntilHydrated()
+        favoriteOrder = await loadFavoriteOrder()
+        appendCustomPlaylistChannels(from: customPlaylistManager.playlists)
+        updateRawChannelGroupInventory(providerChannels: [], loadSucceeded: true)
+        applyGroupFilter()
+        refreshSXMChannelMatches()
     }
 
     /// Publishes only inventories known to include every enabled provider.

@@ -18,6 +18,7 @@ public final class SettingsViewModel: ObservableObject {
     var settingsSaver: SettingsSaver
     private var hasLoadedSettings = false
     private var cancellables = Set<AnyCancellable>()
+    private var settingsPersistenceTail: Task<Void, Never>?
 
     public convenience init(audioPlayer: AudioPlayerService) {
         self.init(
@@ -79,12 +80,15 @@ public final class SettingsViewModel: ObservableObject {
             availableGroupNames: providerManager.availableRawChannelGroupNames,
             inventoryIsComplete: providerManager.hasLoadedCompleteRawChannelGroupInventory
         ) {
-            if await persistSXMSettings(migrated) {
-                loadedSettings = migrated
+            if let persisted = await persistSXMSettings({ migrated }) {
+                loadedSettings = persisted
                 migrationNote = migrationNote ?? "initialized explicit SiriusXM groups from legacy matching"
             }
         } else if migrationNote != nil {
-            try? await persistence.save(loadedSettings, to: settingsFilename)
+            let settingsToSave = loadedSettings
+            await performOrderedSettingsPersistence {
+                try? await self.settingsSaver(settingsToSave, self.settingsFilename)
+            }
         }
         settings = loadedSettings
         providerManager.setSXMGroupSelection(settings.selectedSXMGroupNames)
@@ -179,7 +183,10 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     public func saveSettings() async {
-        try? await persistence.save(settings, to: settingsFilename)
+        await performOrderedSettingsPersistence {
+            let settingsToSave = self.settings
+            try? await self.settingsSaver(settingsToSave, self.settingsFilename)
+        }
         audioPlayer.updateBufferDuration(settings.bufferDuration)
     }
 
@@ -191,9 +198,8 @@ public final class SettingsViewModel: ObservableObject {
                   inventoryIsComplete: providerManager.hasLoadedCompleteRawChannelGroupInventory
               ) else { return }
 
-        guard await persistSXMSettings(migrated) else { return }
-        settings = migrated
-        providerManager.setSXMGroupSelection(migrated.selectedSXMGroupNames)
+        guard let persisted = await persistSXMSettings({ migrated }) else { return }
+        providerManager.setSXMGroupSelection(persisted.selectedSXMGroupNames)
     }
 
     public func updateBufferDuration(_ duration: TimeInterval) async {
@@ -271,11 +277,12 @@ public final class SettingsViewModel: ObservableObject {
 
     @discardableResult
     public func updateSXMGroupSelection(_ groupNames: Set<String>) async -> Bool {
-        var candidate = settings
-        candidate.selectedSXMGroupNames = groupNames
-        candidate.hasCompletedSXMGroupSelectionMigration = true
-        guard await persistSXMSettings(candidate) else { return false }
-        settings = candidate
+        guard await persistSXMSettings({
+            var candidate = self.settings
+            candidate.selectedSXMGroupNames = groupNames
+            candidate.hasCompletedSXMGroupSelectionMigration = true
+            return candidate
+        }) != nil else { return false }
         providerManager.setSXMGroupSelection(groupNames)
         return true
     }
@@ -285,18 +292,38 @@ public final class SettingsViewModel: ObservableObject {
         settingsError = nil
     }
 
-    private func persistSXMSettings(_ candidate: AppSettings) async -> Bool {
-        guard !isSXMSelectionPersistenceInFlight else { return false }
+    private func persistSXMSettings(
+        _ candidateProvider: @escaping @MainActor () -> AppSettings
+    ) async -> AppSettings? {
+        guard !isSXMSelectionPersistenceInFlight else { return nil }
         isSXMSelectionPersistenceInFlight = true
         defer { isSXMSelectionPersistenceInFlight = false }
 
-        do {
-            try await settingsSaver(candidate, settingsFilename)
-            settingsError = nil
-            return true
-        } catch {
-            settingsError = "Failed to save settings: \(error.localizedDescription)"
-            return false
+        return await performOrderedSettingsPersistence {
+            let candidate = candidateProvider()
+            do {
+                try await self.settingsSaver(candidate, self.settingsFilename)
+                self.settings.selectedSXMGroupNames = candidate.selectedSXMGroupNames
+                self.settings.hasCompletedSXMGroupSelectionMigration =
+                    candidate.hasCompletedSXMGroupSelectionMigration
+                self.settingsError = nil
+                return candidate
+            } catch {
+                self.settingsError = "Failed to save settings: \(error.localizedDescription)"
+                return nil
+            }
+        }
+    }
+
+    private func performOrderedSettingsPersistence<Result>(
+        _ operation: @escaping @MainActor () async -> Result
+    ) async -> Result {
+        await withCheckedContinuation { continuation in
+            let predecessor = settingsPersistenceTail
+            settingsPersistenceTail = Task { @MainActor in
+                await predecessor?.value
+                continuation.resume(returning: await operation())
+            }
         }
     }
 

@@ -296,6 +296,7 @@ final class SXMRawChannelGroupInventoryTests: XCTestCase {
         if let settingsFilename {
             await PersistenceService.shared.delete(settingsFilename)
         }
+        await PersistenceService.shared.delete(Constants.StorageKeys.customPlaylists)
     }
 
     @MainActor
@@ -347,6 +348,82 @@ final class SXMRawChannelGroupInventoryTests: XCTestCase {
 
         XCTAssertEqual(manager.availableRawChannelGroupNames, ["SiriusXM Custom"])
         XCTAssertTrue(manager.hasLoadedCompleteRawChannelGroupInventory)
+    }
+
+    @MainActor
+    func testCustomOnlyLegacyStartupWaitsForHydrationBeforeMigrationAndObservesLaterUpdates() async throws {
+        let filename = "sxm-custom-startup-\(UUID().uuidString).json"
+        settingsFilename = filename
+        try await PersistenceService.shared.save(
+            AppSettings(hasCompletedSXMGroupSelectionMigration: false),
+            to: filename
+        )
+        var resumeHydration: CheckedContinuation<[CustomPlaylist], Never>?
+        let hydrationStarted = expectation(description: "custom playlist hydration started")
+        let customPlaylistManager = CustomPlaylistManager {
+            await withCheckedContinuation { continuation in
+                resumeHydration = continuation
+                hydrationStarted.fulfill()
+            }
+        }
+        let manager = ProviderManager(
+            automaticallyLoad: false,
+            customPlaylistManager: customPlaylistManager
+        )
+        let viewModel = SettingsViewModel(
+            audioPlayer: .shared,
+            providerManager: manager,
+            settingsFilename: filename,
+            automaticallyLoad: false
+        )
+        let playlist = playlist(group: "SiriusXM Persisted")
+        await viewModel.loadSettings()
+
+        let startup = Task { await manager.loadChannelsWithoutProviders() }
+        await fulfillment(of: [hydrationStarted], timeout: 1)
+
+        XCTAssertFalse(manager.hasLoadedCompleteRawChannelGroupInventory)
+        XCTAssertTrue(manager.availableRawChannelGroupNames.isEmpty)
+        XCTAssertFalse(viewModel.settings.hasCompletedSXMGroupSelectionMigration)
+
+        let migrated = expectation(description: "legacy selection migrates after hydration")
+        var migrationCancellable: AnyCancellable?
+        migrationCancellable = viewModel.$settings.sink { settings in
+            if settings.hasCompletedSXMGroupSelectionMigration {
+                migrated.fulfill()
+            }
+        }
+
+        resumeHydration?.resume(returning: [playlist])
+        await startup.value
+        await fulfillment(of: [migrated], timeout: 1)
+        _ = migrationCancellable
+
+        XCTAssertTrue(manager.hasLoadedCompleteRawChannelGroupInventory)
+        XCTAssertEqual(manager.availableRawChannelGroupNames, ["SiriusXM Persisted"])
+        XCTAssertEqual(viewModel.settings.selectedSXMGroupNames, ["SiriusXM Persisted"])
+        let persisted: AppSettings = try await PersistenceService.shared.load(from: filename)
+        XCTAssertTrue(persisted.hasCompletedSXMGroupSelectionMigration)
+        XCTAssertEqual(persisted.selectedSXMGroupNames, ["SiriusXM Persisted"])
+
+        let rebuilt = expectation(description: "later playlist update rebuilds inventory")
+        var didObserveRebuild = false
+        var cancellable: AnyCancellable?
+        cancellable = manager.$availableRawChannelGroupNames.dropFirst().sink { names in
+            if names == ["SiriusXM Renamed"], !didObserveRebuild {
+                didObserveRebuild = true
+                rebuilt.fulfill()
+            }
+        }
+        customPlaylistManager.renameGroup(
+            playlist.groups[0].id,
+            to: "SiriusXM Renamed",
+            in: playlist.id
+        )
+        await fulfillment(of: [rebuilt], timeout: 1)
+        _ = cancellable
+
+        XCTAssertEqual(manager.availableRawChannelGroupNames, ["SiriusXM Renamed"])
     }
 
     @MainActor
@@ -923,6 +1000,133 @@ final class SXMGroupSelectionMigrationTests: XCTestCase {
 
         XCTAssertEqual(viewModel.settings.selectedSXMGroupNames, ["SiriusXM Custom"])
         XCTAssertTrue(viewModel.settings.hasCompletedSXMGroupSelectionMigration)
+    }
+
+    func testSXMWriteStartedFirstCannotOverwriteOrdinarySettingThatFinishesFirst() async throws {
+        let prior = AppSettings(selectedSXMGroupNames: ["Prior Group"])
+        try await saveSettings(prior)
+        let manager = ProviderManager(automaticallyLoad: false)
+        var resumeFirstSave: CheckedContinuation<Void, Never>?
+        var saveAttempts = 0
+        let firstSaveStarted = expectation(description: "SXM save started")
+        let viewModel = makeViewModel(
+            providerManager: manager,
+            settingsSaver: { settings, filename in
+                saveAttempts += 1
+                if saveAttempts == 1 {
+                    firstSaveStarted.fulfill()
+                    await withCheckedContinuation { continuation in
+                        resumeFirstSave = continuation
+                    }
+                }
+                try await PersistenceService.shared.save(settings, to: filename)
+            }
+        )
+        await viewModel.loadSettings()
+
+        let sxmUpdate = Task {
+            await viewModel.updateSXMGroupSelection(["New Group"])
+        }
+        await fulfillment(of: [firstSaveStarted], timeout: 1)
+        let ordinaryUpdate = Task { await viewModel.updateAppearance(.dark) }
+        await Task.yield()
+
+        resumeFirstSave?.resume()
+        let sxmSaved = await sxmUpdate.value
+        XCTAssertTrue(sxmSaved)
+        await ordinaryUpdate.value
+
+        XCTAssertEqual(saveAttempts, 2)
+        XCTAssertEqual(viewModel.settings.appearanceMode, .dark)
+        XCTAssertEqual(viewModel.settings.selectedSXMGroupNames, ["New Group"])
+        let persisted: AppSettings = try await PersistenceService.shared.load(from: settingsFilename)
+        XCTAssertEqual(persisted.appearanceMode, .dark)
+        XCTAssertEqual(persisted.selectedSXMGroupNames, ["New Group"])
+    }
+
+    func testOrdinaryWriteStartedFirstCannotBeOverwrittenByQueuedSXMWrite() async throws {
+        let prior = AppSettings(selectedSXMGroupNames: ["Prior Group"])
+        try await saveSettings(prior)
+        let manager = ProviderManager(automaticallyLoad: false)
+        var resumeFirstSave: CheckedContinuation<Void, Never>?
+        var saveAttempts = 0
+        let firstSaveStarted = expectation(description: "ordinary save started")
+        let viewModel = makeViewModel(
+            providerManager: manager,
+            settingsSaver: { settings, filename in
+                saveAttempts += 1
+                if saveAttempts == 1 {
+                    firstSaveStarted.fulfill()
+                    await withCheckedContinuation { continuation in
+                        resumeFirstSave = continuation
+                    }
+                }
+                try await PersistenceService.shared.save(settings, to: filename)
+            }
+        )
+        await viewModel.loadSettings()
+
+        let ordinaryUpdate = Task { await viewModel.updateAppearance(.dark) }
+        await fulfillment(of: [firstSaveStarted], timeout: 1)
+        let sxmUpdate = Task {
+            await viewModel.updateSXMGroupSelection(["New Group"])
+        }
+        await Task.yield()
+
+        resumeFirstSave?.resume()
+        await ordinaryUpdate.value
+        let sxmSaved = await sxmUpdate.value
+        XCTAssertTrue(sxmSaved)
+
+        XCTAssertEqual(saveAttempts, 2)
+        XCTAssertEqual(viewModel.settings.appearanceMode, .dark)
+        XCTAssertEqual(viewModel.settings.selectedSXMGroupNames, ["New Group"])
+        let persisted: AppSettings = try await PersistenceService.shared.load(from: settingsFilename)
+        XCTAssertEqual(persisted.appearanceMode, .dark)
+        XCTAssertEqual(persisted.selectedSXMGroupNames, ["New Group"])
+    }
+
+    func testFailedSXMWriteDoesNotBlockQueuedOrdinarySettingPersistence() async throws {
+        let prior = AppSettings(selectedSXMGroupNames: ["Prior Group"])
+        try await saveSettings(prior)
+        let manager = ProviderManager(automaticallyLoad: false)
+        var resumeFirstSave: CheckedContinuation<Void, Never>?
+        var saveAttempts = 0
+        let firstSaveStarted = expectation(description: "SXM save started")
+        let viewModel = makeViewModel(
+            providerManager: manager,
+            settingsSaver: { settings, filename in
+                saveAttempts += 1
+                if saveAttempts == 1 {
+                    firstSaveStarted.fulfill()
+                    await withCheckedContinuation { continuation in
+                        resumeFirstSave = continuation
+                    }
+                    throw TestPersistenceError.writeFailed
+                }
+                try await PersistenceService.shared.save(settings, to: filename)
+            }
+        )
+        await viewModel.loadSettings()
+
+        let sxmUpdate = Task {
+            await viewModel.updateSXMGroupSelection(["Failed Group"])
+        }
+        await fulfillment(of: [firstSaveStarted], timeout: 1)
+        let ordinaryUpdate = Task { await viewModel.updateAppearance(.dark) }
+
+        resumeFirstSave?.resume()
+        let sxmSaved = await sxmUpdate.value
+        XCTAssertFalse(sxmSaved)
+        await ordinaryUpdate.value
+
+        XCTAssertEqual(saveAttempts, 2)
+        XCTAssertEqual(viewModel.settings.appearanceMode, .dark)
+        XCTAssertEqual(viewModel.settings.selectedSXMGroupNames, ["Prior Group"])
+        XCTAssertNotNil(viewModel.settingsError)
+        let persisted: AppSettings = try await PersistenceService.shared.load(from: settingsFilename)
+        XCTAssertEqual(persisted.appearanceMode, .dark)
+        XCTAssertEqual(persisted.selectedSXMGroupNames, ["Prior Group"])
     }
 
     func testSelectionPersistenceFailureLeavesDiskViewModelAndRuntimeAtPriorSelection() async throws {
