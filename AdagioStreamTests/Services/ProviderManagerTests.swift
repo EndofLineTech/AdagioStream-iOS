@@ -351,6 +351,57 @@ final class SXMRawChannelGroupInventoryTests: XCTestCase {
     }
 
     @MainActor
+    func testCustomPlaylistPersistenceCompletionWaitsForMutationSave() async {
+        let playlist = playlist(group: "SiriusXM Original")
+        var persistedPlaylistSnapshots: [[CustomPlaylist]] = []
+        var didFinishPersistence = false
+        var resumeSave: CheckedContinuation<Void, Never>?
+        let saveStarted = expectation(description: "custom playlist save started")
+        let customPlaylistManager = CustomPlaylistManager(
+            playlistLoader: { [playlist] },
+            playlistSaver: { playlists in
+                persistedPlaylistSnapshots.append(playlists)
+                if persistedPlaylistSnapshots.count == 1 {
+                    await withCheckedContinuation { continuation in
+                        resumeSave = continuation
+                        saveStarted.fulfill()
+                    }
+                }
+            }
+        )
+        await customPlaylistManager.waitUntilHydrated()
+
+        customPlaylistManager.renameGroup(
+            playlist.groups[0].id,
+            to: "SiriusXM Renamed",
+            in: playlist.id
+        )
+        await fulfillment(of: [saveStarted], timeout: 1)
+
+        customPlaylistManager.renameGroup(
+            playlist.groups[0].id,
+            to: "SiriusXM Final",
+            in: playlist.id
+        )
+        let persistenceCompletion = Task {
+            await customPlaylistManager.waitUntilPersisted()
+            didFinishPersistence = true
+        }
+        await Task.yield()
+
+        XCTAssertEqual(persistedPlaylistSnapshots[0][0].groups[0].name, "SiriusXM Renamed")
+        XCTAssertFalse(didFinishPersistence)
+
+        resumeSave?.resume()
+        await persistenceCompletion.value
+        XCTAssertTrue(didFinishPersistence)
+        XCTAssertEqual(
+            persistedPlaylistSnapshots.map { $0[0].groups[0].name },
+            ["SiriusXM Renamed", "SiriusXM Final"]
+        )
+    }
+
+    @MainActor
     func testCustomOnlyLegacyStartupWaitsForHydrationBeforeMigrationAndObservesLaterUpdates() async throws {
         let filename = "sxm-custom-startup-\(UUID().uuidString).json"
         settingsFilename = filename
@@ -359,13 +410,19 @@ final class SXMRawChannelGroupInventoryTests: XCTestCase {
             to: filename
         )
         var resumeHydration: CheckedContinuation<[CustomPlaylist], Never>?
+        var persistedPlaylists: [CustomPlaylist] = []
         let hydrationStarted = expectation(description: "custom playlist hydration started")
-        let customPlaylistManager = CustomPlaylistManager {
-            await withCheckedContinuation { continuation in
-                resumeHydration = continuation
-                hydrationStarted.fulfill()
+        let customPlaylistManager = CustomPlaylistManager(
+            playlistLoader: {
+                await withCheckedContinuation { continuation in
+                    resumeHydration = continuation
+                    hydrationStarted.fulfill()
+                }
+            },
+            playlistSaver: { playlists in
+                persistedPlaylists = playlists
             }
-        }
+        )
         let manager = ProviderManager(
             automaticallyLoad: false,
             customPlaylistManager: customPlaylistManager
@@ -421,9 +478,11 @@ final class SXMRawChannelGroupInventoryTests: XCTestCase {
             in: playlist.id
         )
         await fulfillment(of: [rebuilt], timeout: 1)
+        await customPlaylistManager.waitUntilPersisted()
         _ = cancellable
 
         XCTAssertEqual(manager.availableRawChannelGroupNames, ["SiriusXM Renamed"])
+        XCTAssertEqual(persistedPlaylists[0].groups[0].name, "SiriusXM Renamed")
     }
 
     @MainActor

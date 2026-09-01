@@ -4,18 +4,24 @@ import Foundation
 public final class CustomPlaylistManager: ObservableObject {
     public static let shared = CustomPlaylistManager()
     typealias PlaylistLoader = @MainActor () async -> [CustomPlaylist]
+    typealias PlaylistSaver = @MainActor ([CustomPlaylist]) async -> Void
 
     @Published public private(set) var playlists: [CustomPlaylist] = []
 
     private let playlistLoader: PlaylistLoader
+    private let playlistSaver: PlaylistSaver
     private var hydrationTask: Task<Void, Never>?
+    private var persistenceTask: Task<Void, Never>?
 
-    init(playlistLoader: PlaylistLoader? = nil) {
+    init(playlistLoader: PlaylistLoader? = nil, playlistSaver: PlaylistSaver? = nil) {
         self.playlistLoader = playlistLoader ?? {
             await PersistenceService.shared.loadOrDefault(
                 from: Constants.StorageKeys.customPlaylists,
                 default: []
             )
+        }
+        self.playlistSaver = playlistSaver ?? { playlists in
+            try? await PersistenceService.shared.save(playlists, to: Constants.StorageKeys.customPlaylists)
         }
         hydrationTask = Task { @MainActor [weak self] in
             await self?.loadPlaylists()
@@ -124,9 +130,16 @@ public final class CustomPlaylistManager: ObservableObject {
         await hydrationTask?.value
     }
 
+    func waitUntilPersisted() async {
+        await persistenceTask?.value
+    }
+
     private func persist() {
-        Task {
-            try? await PersistenceService.shared.save(playlists, to: Constants.StorageKeys.customPlaylists)
+        let playlists = playlists
+        let precedingTask = persistenceTask
+        persistenceTask = Task { @MainActor [playlistSaver] in
+            await precedingTask?.value
+            await playlistSaver(playlists)
         }
     }
 }
