@@ -51,6 +51,15 @@ public final class ProviderManager: ObservableObject {
     @Published public private(set) var channelCountByProvider: [UUID: Int] = [:]
     @Published public private(set) var sortedVisibleGroups: [ChannelGroup] = []
     @Published public private(set) var allGroupCounts: [String: Int] = [:]
+    /// Exact group names from the last complete provider + custom playlist
+    /// channel inventory. Set identity preserves case and whitespace.
+    @Published public private(set) var availableRawChannelGroupNames: Set<String> = []
+    /// Channel counts for the same complete, pre-display-filter inventory.
+    @Published public private(set) var availableRawChannelGroupCounts: [String: Int] = [:]
+    /// Distinguishes the initial empty inventory from an error-free load.
+    @Published public private(set) var hasLoadedCompleteRawChannelGroupInventory = false
+    /// Runtime copy of the persisted exact raw-name selection used for matching.
+    @Published public private(set) var selectedSXMGroupNames: Set<String> = []
     @Published public var channelSortOrder: ChannelSortOrder = .providerOrder
     @Published public var groupSortOrder: ChannelSortOrder = .providerOrder
     @Published public var channelGroupingMode: ChannelGroupingMode = .allGroups
@@ -60,18 +69,51 @@ public final class ProviderManager: ObservableObject {
     @Published public var carPlaySourceOrder: CarPlaySourceOrder = .streamingFirst
     private var rawChannels: [Channel] = []
     private var providerRawChannels: [Channel] = []
+    /// Nil means the current provider load is incomplete. The last published
+    /// complete inventory remains visible, but custom changes cannot refresh it.
+    private var currentCompleteProviderRawGroupCounts: [String: Int]?
     private var isLoadingChannels = false
     private var cancellables = Set<AnyCancellable>()
 
     private let persistence = PersistenceService.shared
+    private let settingsFilename: String
+    private let customPlaylistManager: CustomPlaylistManager
 
     /// Test seam: overrides the Subsonic ping logic so unit tests can inject
     /// a mock validator without constructing a real NavidromeAPI.
     /// Production code leaves this nil; ProviderManager then uses NavidromeAPI directly.
     /// Tests set this to a closure that throws on failure or returns on success.
     var subsonicPingValidator: ((URL, String, String) async throws -> Void)?
+    /// Test seam for holding a full provider rebuild at a deterministic point.
+    var providerChannelLoader: (@MainActor (Provider) async throws -> [Channel])?
+    /// Test seam for observing the exact candidates and selection sent to SXM.
+    var sxmChannelMatcher: (([Channel], Set<String>) -> Void)?
 
-    public init() {
+    public convenience init() {
+        self.init(
+            automaticallyLoad: true,
+            settingsFilename: Constants.StorageKeys.settings
+        )
+    }
+
+    convenience init(
+        automaticallyLoad: Bool,
+        settingsFilename: String = Constants.StorageKeys.settings
+    ) {
+        self.init(
+            automaticallyLoad: automaticallyLoad,
+            settingsFilename: settingsFilename,
+            customPlaylistManager: .shared
+        )
+    }
+
+    init(
+        automaticallyLoad: Bool,
+        settingsFilename: String = Constants.StorageKeys.settings,
+        customPlaylistManager: CustomPlaylistManager
+    ) {
+        self.settingsFilename = settingsFilename
+        self.customPlaylistManager = customPlaylistManager
         // Migrate legacy Keychain items to iCloud-syncable attributes
         // BEFORE any keychain read in this init path. Idempotent; see
         // KeychainSyncMigrator and bead 9nl.2. Synchronous so subsequent
@@ -80,32 +122,53 @@ public final class ProviderManager: ObservableObject {
         KeychainSyncMigrator.runIfNeeded()
 
         // Re-merge custom playlist channels whenever playlists change
-        CustomPlaylistManager.shared.$playlists
+        customPlaylistManager.$playlists
             .dropFirst()
-            .sink { [weak self] _ in
+            .sink { [weak self] playlists in
                 Task { @MainActor [weak self] in
-                    self?.rebuildWithCustomPlaylists()
+                    self?.rebuildWithCustomPlaylists(from: playlists)
                 }
             }
             .store(in: &cancellables)
 
-        Task {
-            let settings: AppSettings = await persistence.loadOrDefault(
-                from: Constants.StorageKeys.settings, default: .default
-            )
-            channelSortOrder = settings.channelSortOrder
-            groupSortOrder = settings.groupSortOrder
-            channelGroupingMode = settings.channelGroupingMode
-            carPlaySourceOrder = settings.carPlaySourceOrder
-            await loadProviders()
-            if !providers.isEmpty {
-                await loadChannels()
-            } else {
-                // No providers — still merge custom playlist channels
-                favoriteOrder = await loadFavoriteOrder()
-                appendCustomPlaylistChannels()
-                applyGroupFilter()
+        if automaticallyLoad {
+            Task {
+                await loadPersistedSettings()
+                await loadProviders()
+                if !providers.isEmpty {
+                    await loadChannels()
+                } else {
+                    await loadChannelsWithoutProviders()
+                }
             }
+        }
+    }
+
+    func loadPersistedSettings() async {
+        let settings: AppSettings = await persistence.loadOrDefault(
+            from: settingsFilename, default: .default
+        )
+        channelSortOrder = settings.channelSortOrder
+        groupSortOrder = settings.groupSortOrder
+        channelGroupingMode = settings.channelGroupingMode
+        carPlaySourceOrder = settings.carPlaySourceOrder
+        selectedSXMGroupNames = settings.selectedSXMGroupNames
+    }
+
+    func setSXMGroupSelection(_ groupNames: Set<String>) {
+        guard groupNames != selectedSXMGroupNames else { return }
+        selectedSXMGroupNames = groupNames
+        refreshSXMChannelMatches()
+    }
+
+    func refreshSXMChannelMatches() {
+        if let sxmChannelMatcher {
+            sxmChannelMatcher(rawChannels, selectedSXMGroupNames)
+        } else {
+            SXMMetadataService.shared.matchChannels(
+                rawChannels,
+                selectedGroupNames: selectedSXMGroupNames
+            )
         }
     }
 
@@ -282,8 +345,7 @@ public final class ProviderManager: ObservableObject {
             epgData = [:]
             allGroupCounts = [:]
             error = nil
-            // Re-merge custom playlist channels even with no providers
-            rebuildWithCustomPlaylists()
+            await loadChannelsWithoutProviders()
         }
     }
 
@@ -476,18 +538,80 @@ public final class ProviderManager: ObservableObject {
             return c
         }
 
-        // Merge custom playlist channels into the pipeline
-        appendCustomPlaylistChannels()
+        // A complete inventory includes persisted custom playlists, even when
+        // their independent startup load finishes after provider hydration.
+        await customPlaylistManager.waitUntilHydrated()
+        appendCustomPlaylistChannels(from: customPlaylistManager.playlists)
+        updateRawChannelGroupInventory(
+            providerChannels: providerRawChannels,
+            loadSucceeded: errors.isEmpty
+        )
 
         await reconcileGroupPreferences()
         applyGroupFilter()
         isLoading = false
 
-        // Match SiriusXM channels to xmplaylist stations for track metadata
-        SXMMetadataService.shared.matchChannels(channels)
+        // Match every raw candidate, including groups hidden from display.
+        refreshSXMChannelMatches()
 
         // Match sports channels to ESPN scoreboard for live scores
         ESPNScoreService.shared.matchChannels(channels)
+    }
+
+    func loadChannelsWithoutProviders() async {
+        await customPlaylistManager.waitUntilHydrated()
+        favoriteOrder = await loadFavoriteOrder()
+        appendCustomPlaylistChannels(from: customPlaylistManager.playlists)
+        updateRawChannelGroupInventory(providerChannels: [], loadSucceeded: true)
+        applyGroupFilter()
+        refreshSXMChannelMatches()
+    }
+
+    /// Publishes only inventories known to include every enabled provider.
+    /// Failed loads retain the last complete inventory rather than exposing a
+    /// partial list as settings data.
+    func recordRawChannelGroupInventory(from loadedChannels: [Channel], loadSucceeded: Bool) {
+        guard loadSucceeded else { return }
+        publishRawChannelGroupInventory(Self.rawGroupCounts(for: loadedChannels))
+    }
+
+    /// Combines a complete provider result with the currently materialized
+    /// custom channels. A provider failure invalidates this refresh baseline
+    /// without replacing the last complete published inventory.
+    func updateRawChannelGroupInventory(providerChannels: [Channel], loadSucceeded: Bool) {
+        guard loadSucceeded else {
+            currentCompleteProviderRawGroupCounts = nil
+            return
+        }
+
+        let providerGroupCounts = Self.rawGroupCounts(for: providerChannels)
+        currentCompleteProviderRawGroupCounts = providerGroupCounts
+        publishRawChannelGroupInventory(merging: providerGroupCounts, with: customRawChannelGroupCounts)
+    }
+
+    private var customRawChannelGroupCounts: [String: Int] {
+        Self.rawGroupCounts(for: rawChannels.filter(\.isCustomPlaylist))
+    }
+
+    private static func rawGroupCounts(for channels: [Channel]) -> [String: Int] {
+        Dictionary(grouping: channels, by: \.group).mapValues(\.count)
+    }
+
+    private func publishRawChannelGroupInventory(
+        merging providerCounts: [String: Int],
+        with customCounts: [String: Int]
+    ) {
+        var counts = providerCounts
+        for (name, count) in customCounts {
+            counts[name, default: 0] += count
+        }
+        publishRawChannelGroupInventory(counts)
+    }
+
+    private func publishRawChannelGroupInventory(_ groupCounts: [String: Int]) {
+        availableRawChannelGroupCounts = groupCounts
+        availableRawChannelGroupNames = Set(groupCounts.keys)
+        hasLoadedCompleteRawChannelGroupInventory = true
     }
 
     /// Wraps `loadChannels(from:)` with a bounded retry. Cold CarPlay
@@ -500,6 +624,9 @@ public final class ProviderManager: ObservableObject {
         var lastError: Error?
         for attempt in 1...attempts {
             do {
+                if let providerChannelLoader {
+                    return try await providerChannelLoader(provider)
+                }
                 return try await loadChannels(from: provider)
             } catch {
                 lastError = error
@@ -582,12 +709,12 @@ public final class ProviderManager: ObservableObject {
 
     // MARK: - Custom Playlist Integration
 
-    private func appendCustomPlaylistChannels() {
+    private func appendCustomPlaylistChannels(from playlists: [CustomPlaylist]) {
         let favoriteSet = Set(favoriteOrder)
         var seenIDs = Set(providerRawChannels.map(\.id))
         var customChannels: [Channel] = []
 
-        for playlist in CustomPlaylistManager.shared.playlists {
+        for playlist in playlists {
             for group in playlist.groups {
                 for entry in group.entries {
                     let channel = entry.asChannel(groupName: group.name, playlistName: playlist.name)
@@ -614,9 +741,13 @@ public final class ProviderManager: ObservableObject {
         }
     }
 
-    private func rebuildWithCustomPlaylists() {
-        appendCustomPlaylistChannels()
+    func rebuildWithCustomPlaylists(from playlists: [CustomPlaylist]) {
+        appendCustomPlaylistChannels(from: playlists)
+        if let providerGroupCounts = currentCompleteProviderRawGroupCounts {
+            publishRawChannelGroupInventory(merging: providerGroupCounts, with: customRawChannelGroupCounts)
+        }
         applyGroupFilter()
+        refreshSXMChannelMatches()
     }
 
     // MARK: - Favorites

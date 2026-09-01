@@ -119,6 +119,16 @@ struct PlaybackSettingsView: View {
                 .onChange(of: sxmPollIntervalSeconds) { _, _ in
                     SXMMetadataService.shared.pollIntervalChanged()
                 }
+                NavigationLink {
+                    SiriusXMGroupSelectionView()
+                } label: {
+                    HStack {
+                        Text(SiriusXMGroupSelectionState.settingsRowTitle)
+                        Spacer()
+                        Text(siriusXMGroupSelectionState.summary)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             } header: {
                 Text("Live Data")
             } footer: {
@@ -214,5 +224,191 @@ struct PlaybackSettingsView: View {
                 Task { await viewModel.updateAutoDeleteEpisodeAfterPlayed(newValue) }
             }
         )
+    }
+
+    private var siriusXMGroupSelectionState: SiriusXMGroupSelectionState {
+        SiriusXMGroupSelectionState(
+            inventory: providerManager.availableRawChannelGroupCounts,
+            selectedNames: viewModel.settings.selectedSXMGroupNames,
+            inventoryIsComplete: providerManager.hasLoadedCompleteRawChannelGroupInventory
+        )
+    }
+}
+
+private struct SiriusXMGroupSelectionView: View {
+    @EnvironmentObject private var providerManager: ProviderManager
+    @EnvironmentObject private var viewModel: SettingsViewModel
+    @State private var searchText = ""
+    @State private var isSavingSelection = false
+
+    private var state: SiriusXMGroupSelectionState {
+        SiriusXMGroupSelectionState(
+            inventory: providerManager.availableRawChannelGroupCounts,
+            selectedNames: viewModel.settings.selectedSXMGroupNames,
+            inventoryIsComplete: providerManager.hasLoadedCompleteRawChannelGroupInventory,
+            searchText: searchText
+        )
+    }
+
+    var body: some View {
+        List {
+            Section {
+            } footer: {
+                Text("Choose groups whose channels should be matched with SiriusXM now-playing data. A match is not guaranteed.")
+            }
+
+            if !state.availableRows.isEmpty {
+                Section("Groups") {
+                    ForEach(state.availableRows) { row in
+                        selectionRow(row)
+                    }
+                }
+            }
+
+            if !state.unavailableRows.isEmpty {
+                Section {
+                    ForEach(state.unavailableRows) { row in
+                        selectionRow(row)
+                    }
+                } header: {
+                    Text("Unavailable")
+                } footer: {
+                    Text("These selected groups are not in the current channel inventory. Deselect them if they are no longer needed.")
+                }
+            }
+
+            if state.availableRows.isEmpty && state.unavailableRows.isEmpty {
+                emptyContent
+            }
+
+            if providerManager.channelLoadError != nil && state.hasUnfilteredRows {
+                Section {
+                    Label("Group inventory may be out of date", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.secondary)
+                } footer: {
+                    Text(providerManager.channelLoadError ?? "")
+                }
+            }
+
+            Section {
+            } footer: {
+                Text("This selection only controls SiriusXM now-playing matching. It does not change which channels or groups are visible.")
+            }
+        }
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search groups"
+        )
+        .navigationTitle(SiriusXMGroupSelectionState.navigationTitle)
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Couldn't Save Selection", isPresented: settingsErrorIsPresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.settingsError ?? "The selection could not be saved.")
+        }
+    }
+
+    @ViewBuilder
+    private var emptyContent: some View {
+        if !searchText.isEmpty && state.hasUnfilteredRows {
+            EmptyStateView(
+                title: "No Matching Groups",
+                systemImage: "magnifyingglass",
+                description: "No groups match \"\(searchText)\"."
+            )
+        } else if providerManager.isLoading
+                    || !providerManager.didHydrateProviders
+                    || (!providerManager.hasLoadedCompleteRawChannelGroupInventory
+                        && providerManager.channelLoadError == nil) {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text("Loading groups...")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 88)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .accessibilityElement(children: .combine)
+        } else if let error = providerManager.channelLoadError {
+            EmptyStateView(
+                title: "Couldn't Load Groups",
+                systemImage: "exclamationmark.triangle",
+                description: error,
+                actionLabel: "Retry"
+            ) {
+                Task { await providerManager.loadChannels() }
+            }
+        } else if providerManager.providers.isEmpty {
+            EmptyStateView(
+                title: "No Accounts",
+                systemImage: "server.rack",
+                description: "Add an account in Settings > Accounts & Channels to load channel groups."
+            )
+        } else {
+            EmptyStateView(
+                title: "No Groups",
+                systemImage: "rectangle.3.group",
+                description: "No channel groups were found in the current account inventory."
+            )
+        }
+    }
+
+    private func selectionRow(_ row: SiriusXMGroupSelectionState.Row) -> some View {
+        Button {
+            guard !isSavingSelection,
+                  !viewModel.isSXMSelectionPersistenceInFlight else { return }
+            isSavingSelection = true
+            let candidate = state.selection(toggling: row.name)
+            Task {
+                await viewModel.updateSXMGroupSelection(candidate)
+                isSavingSelection = false
+            }
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.name)
+                        .foregroundStyle(.primary)
+                    if let channelCount = row.channelCount {
+                        Text("\(channelCount) \(channelCount == 1 ? "channel" : "channels")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Unavailable")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                if row.isSelected {
+                    Image(systemName: "checkmark")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
+                }
+            }
+            .contentShape(Rectangle())
+            .frame(minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .disabled(isSavingSelection || viewModel.isSXMSelectionPersistenceInFlight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: row))
+        .accessibilityValue(row.isSelected ? "Selected" : "Unselected")
+        .accessibilityHint(row.isSelected ? "Double tap to deselect" : "Double tap to select")
+    }
+
+    private var settingsErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.settingsError != nil },
+            set: { if !$0 { viewModel.settingsError = nil } }
+        )
+    }
+
+    private func accessibilityLabel(for row: SiriusXMGroupSelectionState.Row) -> String {
+        if let channelCount = row.channelCount {
+            return "\(row.name), \(channelCount) \(channelCount == 1 ? "channel" : "channels")"
+        }
+        return "\(row.name), unavailable"
     }
 }

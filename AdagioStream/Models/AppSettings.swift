@@ -288,6 +288,12 @@ public struct AppSettings: Codable {
     /// The user's chosen "Specific station" CarPlay-resume target. Only
     /// meaningful when `carPlayReconnectResume == .specific`; nil otherwise.
     public var carPlayReconnectSpecificChannel: CarPlayResumeChannel?
+    /// Exact raw provider group names selected as SiriusXM-eligible. A set
+    /// gives the same exact name one identity across provider accounts.
+    public var selectedSXMGroupNames: Set<String>
+    /// Separates a completed selection, including an intentional empty one,
+    /// from settings that still require the one-time legacy migration.
+    public var hasCompletedSXMGroupSelectionMigration: Bool
 
     public init(
         bufferDuration: TimeInterval = Constants.defaultBufferDuration,
@@ -311,7 +317,9 @@ public struct AppSettings: Codable {
         podcastEpisodeEndBehavior: PodcastEpisodeEndBehavior = .nextUnplayed,
         autoDeleteEpisodeAfterPlayed: Bool = false,
         carPlayReconnectResume: CarPlayReconnectResume = .off,
-        carPlayReconnectSpecificChannel: CarPlayResumeChannel? = nil
+        carPlayReconnectSpecificChannel: CarPlayResumeChannel? = nil,
+        selectedSXMGroupNames: Set<String> = [],
+        hasCompletedSXMGroupSelectionMigration: Bool = true
     ) {
         self.bufferDuration = bufferDuration
         self.appearanceMode = appearanceMode
@@ -335,6 +343,8 @@ public struct AppSettings: Codable {
         self.autoDeleteEpisodeAfterPlayed = autoDeleteEpisodeAfterPlayed
         self.carPlayReconnectResume = carPlayReconnectResume
         self.carPlayReconnectSpecificChannel = carPlayReconnectSpecificChannel
+        self.selectedSXMGroupNames = selectedSXMGroupNames
+        self.hasCompletedSXMGroupSelectionMigration = hasCompletedSXMGroupSelectionMigration
     }
 
     /// Default settings used on first launch and after data deletion.
@@ -364,6 +374,8 @@ public struct AppSettings: Codable {
         autoDeleteEpisodeAfterPlayed = try container.decodeIfPresent(Bool.self, forKey: .autoDeleteEpisodeAfterPlayed) ?? false
         carPlayReconnectResume = try container.decodeIfPresent(CarPlayReconnectResume.self, forKey: .carPlayReconnectResume) ?? .off
         carPlayReconnectSpecificChannel = try container.decodeIfPresent(CarPlayResumeChannel.self, forKey: .carPlayReconnectSpecificChannel)
+        selectedSXMGroupNames = try container.decodeIfPresent(Set<String>.self, forKey: .selectedSXMGroupNames) ?? []
+        hasCompletedSXMGroupSelectionMigration = try container.decodeIfPresent(Bool.self, forKey: .hasCompletedSXMGroupSelectionMigration) ?? false
     }
 }
 

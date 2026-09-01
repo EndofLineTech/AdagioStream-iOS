@@ -13,15 +13,17 @@ public final class SXMMetadataService: ObservableObject {
     // channelID -> station identifier (xmplaylist deeplink, or stellartunerlog channel id)
     // Getter internal for tests (beads_mobilemusic-t3s); setter stays private.
     private(set) var channelDeeplinkMap: [String: String] = [:]
+    private var mappedChannelIdentities: [String: ChannelIdentity] = [:]
+    private var eligibleChannelIdentities: [String: ChannelIdentity] = [:]
     private var currentDeeplink: String?
     private var pollTimer: Timer?
-    private var inFlightTask: Task<Void, Never>?
+    var trackTask: Task<Void, Never>?
     // User-chosen foreground per-channel poll interval (clamped 10...45s, default 30s),
     // shared across both sources. Read live so a change applies on the next tick.
     private var pollInterval: TimeInterval { SXMPollInterval.current }
     private let backgroundPollInterval: TimeInterval = 45
     private var feedTimer: Timer?
-    private var feedTask: Task<Void, Never>?
+    var feedTask: Task<Void, Never>?
     private let feedPollInterval: TimeInterval = 30
     private var isInBackground = false
 
@@ -29,6 +31,7 @@ public final class SXMMetadataService: ObservableObject {
     private var source = SXMMetadataSource.current
     /// Channels from the last matchChannels() call, retained so sourceChanged() can re-match.
     private var lastMatchedChannels: [Channel] = []
+    private var lastSelectedGroupNames: Set<String> = []
     private var lastSortPrefixes: [String] = []
     /// Channel currently playing (mapped or not), retained so sourceChanged()
     /// and a late station-list success can (re)start its poll.
@@ -46,7 +49,7 @@ public final class SXMMetadataService: ObservableObject {
     /// When true, polls continue but currentTrack is driven by showTrack(at:) instead of live data.
     private var isDisplaySuspended = false
 
-    private var session: URLSession {
+    private func session(for source: SXMMetadataSource) -> URLSession {
         source == .stellartunerlog ? APISession.stellartunerlog : APISession.xmplaylist
     }
 
@@ -58,39 +61,106 @@ public final class SXMMetadataService: ObservableObject {
 
     /// When set, consulted instead of the real network fetch in the retry loop.
     var stationListFetcher: (@MainActor () async -> [MatchableStation]?)?
+    /// Optional identifier-keyed fetch seams for deterministic lifecycle tests.
+    var feedFetcher: (@MainActor () async -> [String: SXMTrack]?)?
+    var trackFetcher: (@MainActor (String) async -> [SXMTrack]?)?
     /// Backoff sleep for the retry loop. Returns true when the sleep was
     /// cancelled — the loop must exit instead of hot-looping with zero delay.
     var retrySleep: @MainActor (TimeInterval) async -> Bool = { delay in
         (try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))) == nil
     }
-    /// Retained so tests can await loop completion; production never cancels
-    /// it — the generation guard supersedes stale loops. The task body retains
-    /// self while a loop is in flight (harmless on the singleton, keeps
-    /// non-singleton test instances alive until their loop exits).
+    /// Retained so tests can await loop completion. Superseded work is cancelled
+    /// and still guarded by generation because not every async source cooperates
+    /// with cancellation.
     var matchTask: Task<Void, Never>?
+
+    private struct ChannelIdentity: Hashable {
+        let id: String
+        let name: String
+        let streamURL: URL
+        let group: String
+        let providerName: String?
+        let isCustomPlaylist: Bool
+
+        init(_ channel: Channel) {
+            id = channel.id
+            name = channel.name
+            streamURL = channel.streamURL
+            group = channel.group
+            providerName = channel.providerName
+            isCustomPlaylist = channel.isCustomPlaylist
+        }
+    }
 
     // MARK: - Channel Matching
 
     /// Build a lookup table mapping app channel IDs to source station identifiers.
     /// Call after channels are loaded from providers.
-    public func matchChannels(_ channels: [Channel], sortPrefixes: [String] = ["Radio: ", "TV: "]) {
+    public func matchChannels(
+        _ channels: [Channel],
+        selectedGroupNames: Set<String>,
+        sortPrefixes: [String] = ["Radio: ", "TV: "]
+    ) {
         matchGeneration += 1
+        let generation = matchGeneration
+        let matchSource = source
+        matchTask?.cancel()
+        matchTask = nil
         stopFeedPolling()
-        feedTracks = [:]
         pendingResumeChannel = nil
         lastMatchedChannels = channels
+        lastSelectedGroupNames = selectedGroupNames
         lastSortPrefixes = sortPrefixes
-        let sxmPattern = #"(?i)\b(siriusxm|sirius\s*xm|sxm|sirius|xm)\b"#
-        let sxmChannels = channels.filter {
-            $0.group.range(of: sxmPattern, options: .regularExpression) != nil
+        let sxmChannels = channels.filter { selectedGroupNames.contains($0.group) }
+        let newEligibleIdentities = Dictionary(
+            sxmChannels.map { ($0.id, ChannelIdentity($0)) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let oldMap = channelDeeplinkMap
+        channelDeeplinkMap = channelDeeplinkMap.filter { id, _ in
+            mappedChannelIdentities[id] == newEligibleIdentities[id]
         }
+        mappedChannelIdentities = mappedChannelIdentities.filter { id, identity in
+            newEligibleIdentities[id] == identity && channelDeeplinkMap[id] != nil
+        }
+        feedTracks = feedTracks.filter { id, _ in
+            channelDeeplinkMap[id] != nil && channelDeeplinkMap[id] == oldMap[id]
+        }
+        eligibleChannelIdentities = newEligibleIdentities
+
+        if let channel = currentChannel,
+           newEligibleIdentities[channel.id] != ChannelIdentity(channel) {
+            stopPollingForEligibilityChange()
+        } else if let channel = currentChannel,
+                  let activeDeeplink = currentDeeplink,
+                  channelDeeplinkMap[channel.id] != activeDeeplink {
+            channelChanged(to: channel)
+        } else if let deeplink = currentDeeplink {
+            // Any request from the previous selection generation is stale, even
+            // when this channel remains eligible. Keep displayed metadata and
+            // replace only the request.
+            fetchCurrentTrack(deeplink: deeplink)
+        }
+
         guard !sxmChannels.isEmpty else {
-            log.log("No SiriusXM channels found in \(channels.count) total channels", category: .sxm)
+            channelDeeplinkMap = [:]
+            mappedChannelIdentities = [:]
+            eligibleChannelIdentities = [:]
+            feedTracks = [:]
+            hasSXMChannels = false
+            if currentChannel != nil || currentDeeplink != nil || currentTrack != nil || isSXMChannel {
+                stopPollingForEligibilityChange()
+            }
+            log.log("No channels found in selected SiriusXM groups", category: .sxm)
             return
         }
-        log.log("Found \(sxmChannels.count) SiriusXM channels, fetching station list...", category: .sxm)
+        hasSXMChannels = !channelDeeplinkMap.isEmpty
+        if feedWanted && hasSXMChannels && !isInBackground {
+            startFeedPolling()
+        }
+        log.log("Found \(sxmChannels.count) channels in selected SiriusXM groups, fetching station list...", category: .sxm)
 
-        let generation = matchGeneration
         matchTask = Task {
             // Retry until the list loads or a newer matchChannels() supersedes
             // this loop — a single failed fetch at launch must not disable SXM
@@ -101,11 +171,22 @@ public final class SXMMetadataService: ObservableObject {
                 if let fetcher = stationListFetcher {
                     stations = await fetcher()
                 } else {
-                    stations = await fetchStationList()
+                    stations = await fetchStationList(source: matchSource)
                 }
-                guard generation == matchGeneration else { return }
+                guard isMatchCurrent(
+                    generation: generation,
+                    source: matchSource,
+                    eligibleIdentities: newEligibleIdentities
+                ) else { return }
                 if let stations {
-                    buildMatchingTable(appChannels: sxmChannels, stations: stations, sortPrefixes: sortPrefixes)
+                    publishMatchingTable(
+                        appChannels: sxmChannels,
+                        eligibleIdentities: newEligibleIdentities,
+                        stations: stations,
+                        sortPrefixes: sortPrefixes,
+                        generation: generation,
+                        source: matchSource
+                    )
                     return
                 }
                 // First failure only (pendingResumeChannel is consumed): don't
@@ -120,7 +201,11 @@ public final class SXMMetadataService: ObservableObject {
                 // Cancelled sleep = exit; otherwise a cancelled Task would spin
                 // a zero-delay hot retry loop (beads_mobilemusic-t3s).
                 if await retrySleep(delay) { return }
-                guard generation == matchGeneration else { return }
+                guard isMatchCurrent(
+                    generation: generation,
+                    source: matchSource,
+                    eligibleIdentities: newEligibleIdentities
+                ) else { return }
                 delay = min(delay * 2, 60)
             }
         }
@@ -130,12 +215,12 @@ public final class SXMMetadataService: ObservableObject {
     /// identifier stored in channelDeeplinkMap (deeplink or channel id).
     typealias MatchableStation = (name: String, identifier: String)
 
-    private func fetchStationList() async -> [MatchableStation]? {
+    private func fetchStationList(source: SXMMetadataSource) async -> [MatchableStation]? {
         switch source {
         case .xmplaylist:
             guard let url = URL(string: "https://xmplaylist.com/api/station") else { return nil }
             do {
-                let (data, _) = try await session.data(from: url)
+                let (data, _) = try await session(for: source).data(from: url)
                 let response = try JSONDecoder().decode(SXMStationListResponse.self, from: data)
                 log.log("Fetched \(response.results.count) stations from xmplaylist", category: .sxm)
                 return response.results.map { ($0.name, $0.deeplink) }
@@ -146,7 +231,7 @@ public final class SXMMetadataService: ObservableObject {
         case .stellartunerlog:
             guard let url = URL(string: "https://api.stellartunerlog.com/v1/channels") else { return nil }
             do {
-                let (data, _) = try await session.data(from: url)
+                let (data, _) = try await session(for: source).data(from: url)
                 let response = try JSONDecoder().decode(STLChannelListResponse.self, from: data)
                 log.log("Fetched \(response.channels.count) channels from stellartunerlog", category: .sxm)
                 // Dictionary iteration order is nondeterministic — sort so
@@ -159,27 +244,58 @@ public final class SXMMetadataService: ObservableObject {
         }
     }
 
-    private func buildMatchingTable(appChannels: [Channel], stations: [MatchableStation], sortPrefixes: [String]) {
-        // Build into a fresh map and assign only on success — the live map is
-        // never left cleared or half-built by a failed/stale fetch.
-        channelDeeplinkMap = Self.buildDeeplinkMap(
+    private func publishMatchingTable(
+        appChannels: [Channel],
+        eligibleIdentities: [String: ChannelIdentity],
+        stations: [MatchableStation],
+        sortPrefixes: [String],
+        generation: Int,
+        source: SXMMetadataSource
+    ) {
+        let newMap = Self.buildDeeplinkMap(
             appChannels: appChannels, stations: stations, sortPrefixes: sortPrefixes)
+        guard isMatchCurrent(
+            generation: generation,
+            source: source,
+            eligibleIdentities: eligibleIdentities
+        ) else { return }
 
-        hasSXMChannels = true
+        let oldMap = channelDeeplinkMap
+        let oldIdentities = mappedChannelIdentities
+        channelDeeplinkMap = newMap
+        mappedChannelIdentities = eligibleIdentities.filter { newMap[$0.key] != nil }
+        feedTracks = feedTracks.filter { id, _ in
+            newMap[id] == oldMap[id] && eligibleIdentities[id] == oldIdentities[id]
+        }
+
+        hasSXMChannels = !newMap.isEmpty
         if feedWanted {
-            startFeedPolling()
+            if hasSXMChannels && !isInBackground {
+                startFeedPolling()
+            } else {
+                stopFeedPolling()
+            }
         }
 
         // Resume polling for the channel that was live before a source switch
         if let channel = pendingResumeChannel {
             pendingResumeChannel = nil
             channelChanged(to: channel)
-        } else if let channel = currentChannel, currentDeeplink == nil {
-            // Late station-list success: this channel started playing while the
-            // map was empty and was treated as non-SXM — re-run it so the
-            // now-available mapping starts polling (beads_mobilemusic-k7m).
+        } else if let channel = currentChannel,
+                  currentDeeplink != channelDeeplinkMap[channel.id] {
             channelChanged(to: channel)
         }
+    }
+
+    private func isMatchCurrent(
+        generation: Int,
+        source: SXMMetadataSource,
+        eligibleIdentities: [String: ChannelIdentity]
+    ) -> Bool {
+        !Task.isCancelled
+            && generation == matchGeneration
+            && source == self.source
+            && eligibleIdentities == self.eligibleChannelIdentities
     }
 
     /// Pure matching core (internal for tests): app channel ID -> station identifier.
@@ -260,8 +376,18 @@ public final class SXMMetadataService: ObservableObject {
         // Old-source identifiers mean nothing to the new source; clear now so a
         // failed re-match leaves lookups missing (non-SXM) rather than mixed.
         channelDeeplinkMap = [:]
-        matchChannels(lastMatchedChannels, sortPrefixes: lastSortPrefixes)
-        pendingResumeChannel = resumeChannel
+        mappedChannelIdentities = [:]
+        eligibleChannelIdentities = [:]
+        feedTracks = [:]
+        hasSXMChannels = false
+        matchChannels(
+            lastMatchedChannels,
+            selectedGroupNames: lastSelectedGroupNames,
+            sortPrefixes: lastSortPrefixes
+        )
+        if let resumeChannel, lastSelectedGroupNames.contains(resumeChannel.group) {
+            pendingResumeChannel = resumeChannel
+        }
     }
 
     /// Apply a changed foreground poll interval immediately by restarting the
@@ -273,15 +399,6 @@ public final class SXMMetadataService: ObservableObject {
     }
 
     // MARK: - Feed Polling
-
-    /// Reverse lookup: deeplink -> [app channel IDs]
-    private var deeplinkToChannelIDs: [String: [String]] {
-        var map: [String: [String]] = [:]
-        for (channelID, deeplink) in channelDeeplinkMap {
-            map[deeplink, default: []].append(channelID)
-        }
-        return map
-    }
 
     /// Whether the channel list UI is currently visible and wants feed updates.
     private var feedWanted = false
@@ -347,22 +464,70 @@ public final class SXMMetadataService: ObservableObject {
 
     private func fetchFeed() {
         feedTask?.cancel()
+        let generation = matchGeneration
+        let feedSource = source
+        let mapping = channelDeeplinkMap
+        let identities = mappedChannelIdentities
+        guard !mapping.isEmpty else {
+            feedTask = nil
+            return
+        }
         feedTask = Task {
-            switch source {
-            case .xmplaylist: await fetchXMPlaylistFeed()
-            case .stellartunerlog: await fetchStellarTunerLogFeed()
+            let snapshot: (tracks: [String: SXMTrack], sourceCount: Int)?
+            if let feedFetcher {
+                snapshot = await feedFetcher().map { ($0, $0.count) }
+            } else {
+                switch feedSource {
+                case .xmplaylist:
+                    snapshot = await fetchXMPlaylistFeed(source: feedSource)
+                case .stellartunerlog:
+                    snapshot = await fetchStellarTunerLogFeed(source: feedSource)
+                }
+            }
+            guard let snapshot,
+                  isFeedCurrent(
+                    generation: generation,
+                    source: feedSource,
+                    mapping: mapping,
+                    identities: identities
+                  ) else { return }
+
+            var newFeedTracks: [String: SXMTrack] = [:]
+            for (channelID, identifier) in mapping {
+                if let track = snapshot.tracks[identifier] {
+                    newFeedTracks[channelID] = track
+                }
+            }
+            if feedTracks != newFeedTracks { feedTracks = newFeedTracks }
+            let feedLogLine = "Feed updated: \(newFeedTracks.count) channels with tracks (from \(snapshot.sourceCount) entries)"
+            if feedLogLine != lastFeedLogLine {
+                lastFeedLogLine = feedLogLine
+                log.log(feedLogLine, category: .sxm)
             }
         }
     }
 
-    private func fetchXMPlaylistFeed() async {
-        guard let url = URL(string: "https://xmplaylist.com/api/feed") else { return }
-        do {
-            let (data, _) = try await session.data(from: url)
-            guard !Task.isCancelled else { return }
-            let response = try JSONDecoder().decode(SXMFeedResponse.self, from: data)
+    private func isFeedCurrent(
+        generation: Int,
+        source: SXMMetadataSource,
+        mapping: [String: String],
+        identities: [String: ChannelIdentity]
+    ) -> Bool {
+        !Task.isCancelled
+            && generation == matchGeneration
+            && source == self.source
+            && mapping == channelDeeplinkMap
+            && identities == mappedChannelIdentities
+    }
 
-            let lookup = deeplinkToChannelIDs
+    private func fetchXMPlaylistFeed(
+        source: SXMMetadataSource
+    ) async -> (tracks: [String: SXMTrack], sourceCount: Int)? {
+        guard let url = URL(string: "https://xmplaylist.com/api/feed") else { return nil }
+        do {
+            let (data, _) = try await session(for: source).data(from: url)
+            guard !Task.isCancelled else { return nil }
+            let response = try JSONDecoder().decode(SXMFeedResponse.self, from: data)
 
             // Group by channelId (deeplink), pick newest per channel
             var newestByDeeplink: [String: SXMFeedEntry] = [:]
@@ -378,54 +543,36 @@ public final class SXMMetadataService: ObservableObject {
                 }
             }
 
-            // Map deeplinks to app channel IDs
-            var newFeedTracks: [String: SXMTrack] = [:]
-            for (deeplink, entry) in newestByDeeplink {
-                guard let channelIDs = lookup[deeplink] else { continue }
-                let track = entry.toSXMTrack()
-                for id in channelIDs {
-                    newFeedTracks[id] = track
-                }
-            }
-
-            if feedTracks != newFeedTracks { feedTracks = newFeedTracks }
-            let feedLogLine = "Feed updated: \(newFeedTracks.count) channels with tracks (from \(response.results.count) entries)"
-            if feedLogLine != lastFeedLogLine {
-                lastFeedLogLine = feedLogLine
-                log.log(feedLogLine, category: .sxm)
-            }
+            return (
+                newestByDeeplink.mapValues { $0.toSXMTrack() },
+                response.results.count
+            )
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             log.log("Feed fetch failed: \(error.localizedDescription)", category: .sxm)
+            return nil
         }
     }
 
-    private func fetchStellarTunerLogFeed() async {
-        guard let url = URL(string: "https://api.stellartunerlog.com/v1/nowplaying") else { return }
+    private func fetchStellarTunerLogFeed(
+        source: SXMMetadataSource
+    ) async -> (tracks: [String: SXMTrack], sourceCount: Int)? {
+        guard let url = URL(string: "https://api.stellartunerlog.com/v1/nowplaying") else { return nil }
         do {
-            let (data, _) = try await session.data(from: url)
-            guard !Task.isCancelled else { return }
+            let (data, _) = try await session(for: source).data(from: url)
+            guard !Task.isCancelled else { return nil }
             let response = try JSONDecoder().decode(STLNowPlayingResponse.self, from: data)
 
-            let lookup = deeplinkToChannelIDs
-            var newFeedTracks: [String: SXMTrack] = [:]
+            var tracks: [String: SXMTrack] = [:]
             for (stationID, station) in response.stations {
-                guard let channelIDs = lookup[stationID],
-                      let track = station.toSXMTrack(startedAt: nil) else { continue }
-                for id in channelIDs {
-                    newFeedTracks[id] = track
-                }
+                guard let track = station.toSXMTrack(startedAt: nil) else { continue }
+                tracks[stationID] = track
             }
-
-            if feedTracks != newFeedTracks { feedTracks = newFeedTracks }
-            let feedLogLine = "Feed updated: \(newFeedTracks.count) channels with tracks (from \(response.stations.count) stations)"
-            if feedLogLine != lastFeedLogLine {
-                lastFeedLogLine = feedLogLine
-                log.log(feedLogLine, category: .sxm)
-            }
+            return (tracks, response.stations.count)
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             log.log("Feed fetch failed: \(error.localizedDescription)", category: .sxm)
+            return nil
         }
     }
 
@@ -463,12 +610,24 @@ public final class SXMMetadataService: ObservableObject {
 
     /// Full stop — clears everything including history. Use for explicit user stop/pause.
     public func stopPolling() {
+        clearTrackPolling(retainCurrentChannel: false)
+    }
+
+    /// Eligibility changes clear metadata immediately but playback may continue.
+    /// Retaining the channel lets a later rematch resume polling without another
+    /// audio-player channel-change callback.
+    private func stopPollingForEligibilityChange() {
+        clearTrackPolling(retainCurrentChannel: true)
+    }
+
+    private func clearTrackPolling(retainCurrentChannel: Bool) {
+        let retainedChannel = retainCurrentChannel ? currentChannel : nil
         pollTimer?.invalidate()
         pollTimer = nil
-        inFlightTask?.cancel()
-        inFlightTask = nil
+        trackTask?.cancel()
+        trackTask = nil
         currentDeeplink = nil
-        currentChannel = nil
+        currentChannel = retainedChannel
         currentTrack = nil
         isSXMChannel = false
         isDisplaySuspended = false
@@ -505,79 +664,96 @@ public final class SXMMetadataService: ObservableObject {
     }
 
     private func fetchCurrentTrack(deeplink: String) {
-        inFlightTask?.cancel()
-        inFlightTask = Task {
-            switch source {
-            case .xmplaylist: await fetchXMPlaylistTrack(deeplink: deeplink)
-            case .stellartunerlog: await fetchStellarTunerLogTrack(channelID: deeplink)
-            }
+        trackTask?.cancel()
+        guard let channel = currentChannel else {
+            trackTask = nil
+            return
         }
-    }
+        let generation = matchGeneration
+        let trackSource = source
+        let identity = ChannelIdentity(channel)
+        let history = trackHistory
+        trackTask = Task {
+            let tracks: [SXMTrack]?
+            if let trackFetcher {
+                tracks = await trackFetcher(deeplink)
+            } else {
+                tracks = await fetchTracks(
+                    source: trackSource,
+                    identifier: deeplink,
+                    history: history
+                )
+            }
+            guard let tracks,
+                  isTrackCurrent(
+                    generation: generation,
+                    source: trackSource,
+                    deeplink: deeplink,
+                    identity: identity
+                  ) else { return }
 
-    private func fetchXMPlaylistTrack(deeplink: String) async {
-        guard let encoded = deeplink.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "https://xmplaylist.com/api/station/\(encoded)") else { return }
-        do {
-            let (data, _) = try await session.data(from: url)
-            guard !Task.isCancelled else { return }
-            let response = try JSONDecoder().decode(SXMStationTracksResponse.self, from: data)
-
-            // Update history from all tracks in the response
-            let tracks = response.results.map { $0.toSXMTrack() }
             mergeIntoHistory(tracks)
-
-            // Only update live display if not suspended for time-shift
             guard !isDisplaySuspended else { return }
-
             if let latest = tracks.first {
                 if currentTrack?.id != latest.id {
                     log.log("Now playing: \"\(latest.title)\" by \(latest.artistDisplay)", category: .sxm)
                     currentTrack = latest
                 }
-            } else {
-                if currentTrack != nil {
-                    log.log("Track cleared (commercial break?)", category: .sxm)
-                    currentTrack = nil
-                }
+            } else if currentTrack != nil {
+                log.log("Track cleared (commercial break?)", category: .sxm)
+                currentTrack = nil
             }
-        } catch {
-            guard !Task.isCancelled else { return }
-            log.log("Track fetch failed: \(error.localizedDescription)", category: .sxm)
         }
     }
 
-    private func fetchStellarTunerLogTrack(channelID: String) async {
-        guard let encoded = channelID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "https://api.stellartunerlog.com/v1/nowplaying/\(encoded)") else { return }
+    private func isTrackCurrent(
+        generation: Int,
+        source: SXMMetadataSource,
+        deeplink: String,
+        identity: ChannelIdentity
+    ) -> Bool {
+        !Task.isCancelled
+            && generation == matchGeneration
+            && source == self.source
+            && currentDeeplink == deeplink
+            && currentChannel.map(ChannelIdentity.init) == identity
+            && eligibleChannelIdentities[identity.id] == identity
+            && mappedChannelIdentities[identity.id] == identity
+            && channelDeeplinkMap[identity.id] == deeplink
+    }
+
+    private func fetchTracks(
+        source: SXMMetadataSource,
+        identifier: String,
+        history: [SXMTrack]
+    ) async -> [SXMTrack]? {
+        guard let encoded = identifier.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return nil
+        }
+        let urlString: String
+        switch source {
+        case .xmplaylist:
+            urlString = "https://xmplaylist.com/api/station/\(encoded)"
+        case .stellartunerlog:
+            urlString = "https://api.stellartunerlog.com/v1/nowplaying/\(encoded)"
+        }
+        guard let url = URL(string: urlString) else { return nil }
+
         do {
-            let (data, _) = try await session.data(from: url)
-            guard !Task.isCancelled else { return }
-            let response = try JSONDecoder().decode(STLStationResponse.self, from: data)
-
-            // No per-track timestamp from this API: stamp first observation,
-            // reusing the startedAt already in history for the same track id.
-            let track = Self.stlTrack(from: response.station, history: trackHistory)
-            if let track {
-                mergeIntoHistory([track])
-            }
-
-            // Only update live display if not suspended for time-shift
-            guard !isDisplaySuspended else { return }
-
-            if let track {
-                if currentTrack?.id != track.id {
-                    log.log("Now playing: \"\(track.title)\" by \(track.artistDisplay)", category: .sxm)
-                    currentTrack = track
-                }
-            } else {
-                if currentTrack != nil {
-                    log.log("Track cleared (non-displayable cut: \(response.station.cutType))", category: .sxm)
-                    currentTrack = nil
-                }
+            let (data, _) = try await session(for: source).data(from: url)
+            guard !Task.isCancelled else { return nil }
+            switch source {
+            case .xmplaylist:
+                let response = try JSONDecoder().decode(SXMStationTracksResponse.self, from: data)
+                return response.results.map { $0.toSXMTrack() }
+            case .stellartunerlog:
+                let response = try JSONDecoder().decode(STLStationResponse.self, from: data)
+                return Self.stlTrack(from: response.station, history: history).map { [$0] } ?? []
             }
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return nil }
             log.log("Track fetch failed: \(error.localizedDescription)", category: .sxm)
+            return nil
         }
     }
 

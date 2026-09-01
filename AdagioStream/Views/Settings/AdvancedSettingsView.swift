@@ -135,10 +135,12 @@ struct AdvancedSettingsView: View {
         .alert("Are you sure?", isPresented: $showDeleteConfirmation) {
             Button("Delete Everything", role: .destructive) {
                 Task {
-                    await DataDeletionService.deleteAllData()
+                    await DataDeletionService.deleteAllData(
+                        settingsViewModel: viewModel,
+                        providerManager: providerManager
+                    )
                     await providerManager.loadProviders()
                     await providerManager.loadChannels()
-                    viewModel.settings = .default
                     NotificationCenter.default.post(name: .didDeleteAllData, object: nil)
                 }
             }

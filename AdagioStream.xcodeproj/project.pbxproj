@@ -122,6 +122,7 @@
 		6604B148618C8B3AEB21D9EA /* AudioPlayerService+NowPlayingInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0AE0DE53F32FA8F7F9BDE3C /* AudioPlayerService+NowPlayingInfo.swift */; };
 		685E7125385C34690017EF17 /* NavidromeLibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC5AB186073582799E48A039 /* NavidromeLibraryViewModel.swift */; };
 		68793F4B1C104F6CFE875053 /* MockURLProtocolHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CFCCBCFDD95C526D43C1208 /* MockURLProtocolHandler.swift */; };
+		6921138213548795D80937D1 /* SiriusXMGroupSelectionTVView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3349C97636EA584DB4395E06 /* SiriusXMGroupSelectionTVView.swift */; };
 		694351B24146B906309C2780 /* Scrobbler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FC54664D9F017B59C920FEC /* Scrobbler.swift */; };
 		698645C7A3048384C96A5AFD /* NavidromeAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ECB22BD835A4AA43C7B0A3C /* NavidromeAPI.swift */; };
 		69F087A3002E8C7101C7BF2D /* NavidromeStarButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C6905FDB2A2F989371478D9 /* NavidromeStarButton.swift */; };
@@ -182,6 +183,7 @@
 		91C28A7782F5EDF3A12B72C3 /* NavidromeLibraryViewModel+Genres.swift in Sources */ = {isa = PBXBuildFile; fileRef = 019AFC28ED7E44357781A7E9 /* NavidromeLibraryViewModel+Genres.swift */; };
 		920F4B631797780DB832A8A9 /* CarPlayMusicBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6687DC08B250C948D56319CB /* CarPlayMusicBrowser.swift */; };
 		931E7C0E398797081F1C7C4A /* WelcomeSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2311F8C124F6DE377BF44ED6 /* WelcomeSetupView.swift */; };
+		940B3DC04040310F9793DEFD /* SiriusXMGroupSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A089664C0D97BADD1833CB53 /* SiriusXMGroupSelectionState.swift */; };
 		9534A3E749C1D88199513E42 /* PodcastShowDetailTVView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30D92A3B147DA442B283BFD5 /* PodcastShowDetailTVView.swift */; };
 		9623E67CA7985B8FA11275FB /* VLCAudioCallbackBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = A6C56F8D5285FA0AC580150F /* VLCAudioCallbackBridge.m */; };
 		964624A11AF757074CD84111 /* PlaybackRateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08A6AA53BFBE8800CC897000 /* PlaybackRateTests.swift */; };
@@ -292,6 +294,7 @@
 		F21F52D715EF0882BE8B8E6C /* AudioPlayerService+Audiobook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F89BA147173C2D30E2B97FE /* AudioPlayerService+Audiobook.swift */; };
 		F22EC7EEB33BD50D037EBC95 /* ShuffleRepeatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4729A79B034622C234D80D6 /* ShuffleRepeatTests.swift */; };
 		F294663A66963983AEDBDDE2 /* M3UExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B01D06453BA69E1FEA46DBC /* M3UExporter.swift */; };
+		F3A22F809E20630D0380D649 /* SiriusXMGroupSelectionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A089664C0D97BADD1833CB53 /* SiriusXMGroupSelectionState.swift */; };
 		F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC2F86D6999704A5F51CFB50 /* TimeShiftBufferService.swift */; };
 		F5719F3D7283A8E94C64ADD5 /* PlaylistBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE96835620663FA74C6AE74D /* PlaylistBrowseView.swift */; };
 		F878993AAE17A48306CFE215 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B96C68FE93EDF032AE8CA5B1 /* KeychainService.swift */; };
@@ -395,6 +398,7 @@
 		300058C4A834232B92D00C97 /* PodcastPlaybackContextTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastPlaybackContextTests.swift; sourceTree = "<group>"; };
 		30D92A3B147DA442B283BFD5 /* PodcastShowDetailTVView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PodcastShowDetailTVView.swift; sourceTree = "<group>"; };
 		310F900A75D0B606DEB7F49F /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
+		3349C97636EA584DB4395E06 /* SiriusXMGroupSelectionTVView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusXMGroupSelectionTVView.swift; sourceTree = "<group>"; };
 		359F69C917B24F53D4E3FAA3 /* NavidromeLibraryViewModel+BrowseAlbums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NavidromeLibraryViewModel+BrowseAlbums.swift"; sourceTree = "<group>"; };
 		36F822DC34A3741ED891FBF8 /* CarPlayResumeChannelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlayResumeChannelPickerView.swift; sourceTree = "<group>"; };
 		3704114C58850907659FFAD3 /* MigrationDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MigrationDiagnostics.swift; sourceTree = "<group>"; };
@@ -478,6 +482,7 @@
 		9DCB0C46B512BF4D2919E11A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
 		9F0B5B96D1BAC2865F5B524D /* XtreamCodesAPITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XtreamCodesAPITests.swift; sourceTree = "<group>"; };
+		A089664C0D97BADD1833CB53 /* SiriusXMGroupSelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriusXMGroupSelectionState.swift; sourceTree = "<group>"; };
 		A1CF4778448EC75225E98912 /* EPGParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EPGParserTests.swift; sourceTree = "<group>"; };
 		A2013365DBCBEF09EA300767 /* LocalFirstPlaybackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalFirstPlaybackTests.swift; sourceTree = "<group>"; };
 		A307E5EA37C9E962AF478812 /* AudioOutputRestartPredicateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioOutputRestartPredicateTests.swift; sourceTree = "<group>"; };
@@ -654,6 +659,7 @@
 			isa = PBXGroup;
 			children = (
 				63DAC15D313E0DBD1A3DA2D3 /* SettingsTabView.swift */,
+				3349C97636EA584DB4395E06 /* SiriusXMGroupSelectionTVView.swift */,
 			);
 			path = Settings;
 			sourceTree = "<group>";
@@ -677,6 +683,7 @@
 				9EC85F4830893AAB69811C83 /* PlayerViewModel.swift */,
 				E27443BF9C86A1DFBA09CEE9 /* ProviderListViewModel.swift */,
 				B785664AF5E9481E580421E3 /* SettingsViewModel.swift */,
+				A089664C0D97BADD1833CB53 /* SiriusXMGroupSelectionState.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1465,6 +1472,7 @@
 				75B1F28D1D83608220D3B79F /* ShareSheet.swift in Sources */,
 				D6D7AD84162E1E6B36618280 /* ShareURLValidation.swift in Sources */,
 				FED5CDA6EF22B52859A0F0A1 /* SharedURLSheet.swift in Sources */,
+				940B3DC04040310F9793DEFD /* SiriusXMGroupSelectionState.swift in Sources */,
 				FEAA16B8A3ABF58137633631 /* SubsonicAuth.swift in Sources */,
 				75E055AF356DEFAA6A090CF9 /* SubsonicCoverArt.swift in Sources */,
 				F3DDFD95554A7240FDAB961B /* TimeShiftBufferService.swift in Sources */,
@@ -1568,6 +1576,8 @@
 				6E1002B73E53AD77F5B7ED25 /* SettingsViewModel.swift in Sources */,
 				2EE1DEE0837F88B97D9BE1A5 /* ShareSheet.swift in Sources */,
 				ADC48D51F2425A8AA0B80C4C /* ShareURLValidation.swift in Sources */,
+				F3A22F809E20630D0380D649 /* SiriusXMGroupSelectionState.swift in Sources */,
+				6921138213548795D80937D1 /* SiriusXMGroupSelectionTVView.swift in Sources */,
 				00839B13F7A96D6BBF96DF26 /* SubsonicAuth.swift in Sources */,
 				317E2E1B94776EC672A84A01 /* TimeShiftBufferService.swift in Sources */,
 				9623E67CA7985B8FA11275FB /* VLCAudioCallbackBridge.m in Sources */,
@@ -1616,7 +1626,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 224;
+				CURRENT_PROJECT_VERSION = 227;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1647,7 +1657,7 @@
 				CLANG_WARN_DOCUMENTATION_COMMENTS = NO;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = NO;
 				CODE_SIGN_ENTITLEMENTS = "AdagioStream-tvOS/AdagioStream-tvOS.entitlements";
-				CURRENT_PROJECT_VERSION = 224;
+				CURRENT_PROJECT_VERSION = 227;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -1745,7 +1755,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 224;
+				CURRENT_PROJECT_VERSION = 227;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1775,7 +1785,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = AdagioStream/AdagioStream.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 224;
+				CURRENT_PROJECT_VERSION = 227;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
@@ -1803,7 +1813,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 224;
+				CURRENT_PROJECT_VERSION = 227;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
@@ -1825,7 +1835,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 224;
+				CURRENT_PROJECT_VERSION = 227;
 				DEVELOPMENT_TEAM = EWT2X7Q9ZJ;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
